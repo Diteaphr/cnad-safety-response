@@ -1,0 +1,922 @@
+\documentclass[12pt]{article}
+
+% Packages
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xeCJK} 
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{tabularx}
+\usepackage{amsmath}
+
+
+\setstretch{1.2}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+
+
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.5em}{}
+
+
+
+\title{Employee Safety \& Response System\\
+Application \& System Architecture Design}
+\author{ 潘芊寧 \quad 花紫晏 \quad 陳奕蓁 \quad 徐郁翔 \quad 張容嫣}
+\date{}
+
+\begin{document}
+
+
+\maketitle
+\tableofcontents
+\newpage
+
+%--------------------------------------------------
+\section{Introduction}
+\subsection{Purpose}
+The purpose of this document is to define the architecture for the Employee Safety \& Response System, a mission-critical platform designed to ensure personnel safety during emergency events (e.g., natural disasters, fires, or industrial incidents). The system provides a real-time communication bridge between the enterprise and its global workforce, enabling rapid status reporting and data-driven disaster management.
+
+\subsection{Scope}
+The system encompasses a Progressive Web App (PWA) for employees, a management dashboard for supervisors and admins, and a serverless backend capable of handling massive traffic bursts. The scope covers:
+\begin{itemize}
+    \item \textbf{Reporting:} Simplified safety status submission for all employees.
+    \item \textbf{Monitoring:} Real-time dashboards for management to track reporting progress and identify employees in need of assistance.
+    \item \textbf{Notifications:} Multi-tiered alerts utilizing Firebase Cloud Messaging (FCM) and SMS fallbacks.
+    \item \textbf{Infrastructure:} A GCP-based architecture designed to scale from local factory sites to a 100k-employee global presence.
+\end{itemize}
+
+\subsection{Assumptions and Constraints}
+\begin{itemize}
+    \item \textbf{Global Scalability:} The system must support a phased expansion:
+        \begin{enumerate}
+            \item Phase 1: Taiwan frontline factories (Primary focus).
+            \item Phase 2: Regional expansion (Asia-Pacific including Japan and China).
+            \item Phase 3: Global deployment (Approx. 100,000 employees).
+        \end{enumerate}
+    \item \textbf{PWA Dependency:} It is assumed all employees will install the PWA to their mobile home screens to ensure reliable receipt of FCM Push Notifications.
+    \item \textbf{Network Constraints:} During major disasters, cellular networks may be congested; therefore, the application must be lightweight and prioritize minimal data transfer for reporting.
+    \item \textbf{Third-Party Services:} The system relies on Google Cloud Platform (GCP) and external SMS gateways for delivery reliability.
+\end{itemize}
+
+%--------------------------------------------------
+\section{Requirements Summary}
+\subsection{Functional Requirements}
+\begin{itemize}
+    \item \textbf{Event Management:} Administrators can create, categorize, and activate emergency events for specific departments or geographic regions.
+    \item \textbf{Push Notification Delivery:} The system automatically dispatches FCM Push Notifications to all target employees immediately upon event activation.
+    \item \textbf{Automated Reminders:} A background scheduler identifies non-respondents and triggers periodic reminder alerts.
+    \item \textbf{Safety Reporting:} A "one-click" interface for employees to report status (Safe / Need Help) and provide optional location or text comments.
+    \item \textbf{Hierarchical Reporting:} Supervisors can view statistics for their specific subordinates, while Admins maintain a global view of all reporting data.
+    \item \textbf{On-Demand Email Archiving:} A non-MVP/secondary feature allowing admins to manually trigger the delivery of status reports to specific email addresses for administrative record-keeping.
+\end{itemize}
+
+\subsection{Non-Functional Requirements / Quality Attributes}
+\begin{itemize}
+    \item \textbf{Performance (Burst Handling):} The system must handle high-concurrency traffic (up to 100k users) within minutes of a disaster event without service degradation.
+    \item \textbf{Reliability:} Achievement of "Zero Downtime" during deployments and high availability via GCP's multi-zone infrastructure.
+    \item \textbf{Notification Fallback:} If an FCM notification fails to deliver, the system must automatically fall back to SMS for critical alerts.
+    \item \textbf{Data Consistency:} Ensure strong consistency for individual safety reports while allowing eventual consistency for large-scale dashboard aggregations.
+    \item \textbf{Security:} Implementation of Role-Based Access Control (RBAC) to ensure employee privacy and data integrity across different organizational levels.
+\end{itemize}
+
+
+% --- Section 3: Scale Assumptions & Capacity Estimation ---
+\section{Scale Assumptions \& Capacity Estimation}
+
+\subsection{User Behavior Model}
+To provide a logical basis for our estimations, we define "Usage Behavior" based on a 24-hour window during an emergency event or a global safety drill:
+\begin{itemize}
+    \item \textbf{Status Reports:} 2 submissions (Initial report upon notification + 1 status update).
+    \item \textbf{Read Requests:} 5--10 interactions (Checking safety guidelines, viewing team status, or dashboard refreshes).
+    \item \textbf{Data Footprint:} 
+    \begin{itemize}
+        \item \textbf{Payload ($P$):} $\approx 5$ KB (JSON data including user ID, timestamp, status, and coordinates).
+        \item \textbf{Observability Logs ($L$):} $\approx 10$ KB (Structured logs for audit trails and notification delivery tracking).
+    \end{itemize}
+\end{itemize}
+
+\subsection{Three-Phase Growth Projections}
+The system is designed to scale from a local pilot to a global corporate presence. The following table estimates the load based on peak Daily Active Users (DAU) during a crisis event.
+\\
+The usage behavior increases across phases as new features may be introduced in later phases 
+(e.g., HR system integration in Phase 2, enhanced dashboard capabilities in Phase 3), 
+and the proportion of supervisors and admins is expected to grow with organizational scale.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.6}
+\small
+\begin{tabularx}{\textwidth}{|>{\hsize=0.8\hsize\bfseries}X|>{\centering\arraybackslash\hsize=1.06\hsize}X|>{\centering\arraybackslash\hsize=1.06\hsize}X|>{\centering\arraybackslash\hsize=1.08\hsize}X|}
+\hline
+Metric & Phase 1: Initial & Phase 2: Growth & Phase 3: Global \\ \hline
+Context & Taiwan Factories (30,000 employees) & APAC Region (75,000 employees) & Global Deployment (100,000 employees) \\ \hline
+DAU (Peak Event) & 30,000 & 75,000 & 100,000 \\ \hline
+Usage Behavior & 5 ops / user / day & 10 ops / user / day & 15 ops / user / day \\ \hline
+Total Daily Req. & 150,000 & 750,000 & 1,500,000 \\ \hline
+Peak Throughput & $\approx$ 50 RPS & $\approx$ 125 RPS & $\approx$ 200--300 RPS \\ \hline
+Total Data / Day & $\approx$ 2.25 GB & $\approx$ 11.25 GB & $\approx$ 22.5 GB \\ \hline
+\end{tabularx}
+\caption{System capacity estimation across growth phases.}
+\end{table}
+
+\subsection{Data Volume Calculation Logic}
+The storage requirements are calculated based on the maximum expected burst during an event to ensure system observability:
+\begin{equation*}
+S = DAU \times \text{Ops/User} \times (P + L)
+\end{equation*}
+
+\noindent For the \textbf{Phase 3 (Global)} scenario:
+\begin{align*}
+S_{Phase3} &= 100,000 \text{ users} \times 15 \text{ ops} \times (5\text{ KB} + 10\text{ KB}) \\
+&= 1,500,000 \times 15\text{ KB} \\
+&= 22,500,000\text{ KB} \approx 22.5\text{ GB per event day}
+\end{align*}
+
+\begin{quote}
+\textit{Consistency Note: The estimated peak of 200--300 RPS aligns with our decision to use Cloud Run and Cloud SQL (PostgreSQL). A single high-availability instance can comfortably handle this write-heavy load, while the serverless architecture provides horizontal scaling to manage the 1.5M requests during burst windows.}
+\end{quote}
+
+%--------------------------------------------------
+\section{Architecture Drivers \& Design Principles}
+
+\subsection{Key Drivers}
+
+The following factors drive the architectural decisions of this system:
+
+\textbf{Burst Traffic Patterns (Write-heavy)} \\
+The system operates at very low traffic under normal conditions. However, once an event is triggered, up to \textbf{30,000 employees} may simultaneously receive notifications and submit safety reports within a short time window(based on Phase 1 Taiwan deployment scale). This creates a highly concentrated \textbf{write burst}, rather than sustained traffic. The architecture must handle sudden spikes in concurrent writes without maintaining costly always-on resources.
+
+\textbf{Minimal Friction for Employees} \\
+User interviews emphasize that employees are unlikely to report if the process is complicated. During emergencies, the reporting flow must be completed in minimal steps. This requirement directly influences API design, frontend interaction, and notification delivery (push-to-open, single-tap reporting).
+
+\textbf{Role-Based Data Visibility} \\
+The system supports Employee, Supervisor, and Admin roles with possible overlap. Each role has strict data visibility constraints, which require a consistent Role-Based Access Control (RBAC) model enforced at the API and data access layer.
+
+\textbf{Simplified Notification Strategy (Single Primary Channel)} \\
+The system adopts \textbf{FCM (Firebase Cloud Messaging)} as the \textbf{single primary push channel} via PWA. SMS is only used as a fallback when push delivery fails, and Email is used as an on-demand feature rather than a scheduled channel. This significantly reduces architectural complexity compared to multi-channel primary routing.
+
+\subsection{Design Principles}
+
+\textbf{Stateless Application, Stateful Data Layer} \\
+The application layer (Cloud Run) remains stateless. All persistent state is stored in Cloud SQL, while Redis (Memorystore) is used for caching and fast aggregation. This allows horizontal scaling without session affinity.
+
+\textbf{Asynchronous Processing for Scalability} \\
+The system leverages \textbf{Google Cloud Pub/Sub} to decouple request handling from downstream processing. Asynchronous processing is applied in two key scenarios:
+
+\begin{itemize}
+    \item \textbf{Notification fan-out}: Event creation publishes messages to Pub/Sub, enabling scalable distribution of push notifications without blocking the API.
+    \item \textbf{Write-path buffering}: Employee report submissions are accepted immediately, while database writes are processed asynchronously through Pub/Sub subscribers. This prevents database overload during peak reporting bursts.
+\end{itemize}
+
+\textbf{Design for Graceful Degradation} \\
+The notification system follows a simple fallback strategy: \textbf{FCM push $\rightarrow$ SMS fallback}. If push delivery fails, SMS ensures message delivery. Email is excluded from automatic flows and used only for manual or archival purposes.
+
+\textbf{Modular Monolith First} \\
+Given the system scale (30,000 users, extensible to 100,000), a modular monolith provides the best trade-off between simplicity and maintainability. All components run within a single FastAPI service, while maintaining clear internal module boundaries to support future decomposition.
+
+\textbf{API-First Integration} \\
+All interactions occur through RESTful APIs. External integrations (HR systems, notification providers) are handled via APIs or asynchronous messaging, ensuring loose coupling between components.
+
+\textbf{Scheduled Background Processing} \\
+Periodic tasks such as reminder scans are handled by \textbf{APScheduler}, which triggers background jobs to identify unreported users and initiate follow-up notifications.
+
+\subsection{Major Trade-offs}
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{|p{2.5cm}|p{2.8cm}|p{2.8cm}|X|}
+\hline
+\textbf{Decision} & \textbf{Chosen Approach} & \textbf{Alternative} & \textbf{Rationale} \\
+\hline
+Deployment Architecture & Modular Monolith on Cloud Run & Microservices / Kubernetes & The system scale does not justify microservice complexity; modular design allows future evolution. \\
+\hline
+Notification Design & FCM as single primary channel + SMS fallback & Multi-primary channels (LINE, Email, etc.) & Simplifies architecture and reduces routing complexity while maintaining reliability. \\
+\hline
+Queue Mechanism & Google Cloud Pub/Sub & Cloud Tasks / synchronous calls & Pub/Sub provides scalable, decoupled messaging suitable for both fan-out and asynchronous processing. \\
+\hline
+Queue Usage (Fan-out) & Pub/Sub for notification dispatch & Synchronous API fan-out & Sending tens of thousands of push requests synchronously would cause API timeout. Asynchronous messaging ensures scalability. \\
+\hline
+Queue Usage (Write Path) & Pub/Sub for async DB writes & Direct synchronous writes to DB & High-concurrency report submissions would overload PostgreSQL; asynchronous processing smooths write pressure and improves user experience. \\
+\hline
+Dashboard Consistency & Eventual Consistency (Redis cache) & Strong consistency & Reduces database load under peak traffic; slight delay is acceptable for monitoring. \\
+\hline
+Cold Start Strategy & Min instances = 0 & Always-on instances & Low baseline usage makes cold start acceptable; avoids unnecessary cost. \\
+\hline
+Frontend Architecture & React PWA & Native Mobile App & Cross-platform, no app store dependency, supports push notifications via FCM. \\
+\hline
+Backend Language & Python (FastAPI) & Node.js (NestJS) & FastAPI provides high performance with simpler development overhead and strong ecosystem support for asynchronous processing. \\
+\hline
+Database Choice & PostgreSQL (single primary DB) & NoSQL / distributed DB & Strong relational requirements and moderate scale make a single relational database sufficient. \\
+\hline
+\end{tabularx}
+\end{table}
+%--------------------------------------------------
+\section{Application Architecture}
+
+\subsection{System Context}
+
+The system serves three primary user roles: \textbf{Employee}, \textbf{Supervisor}, and \textbf{Admin}. These roles are not mutually exclusive and may overlap for a single user.
+
+All users interact with the system through a web-based interface, implemented as a \textbf{React Progressive Web App (PWA)}. The frontend is served directly from the \textbf{Cloud Run service} together with the backend, eliminating the need for a separate static hosting service or CDN. This simplifies the deployment architecture while still providing a consistent user experience without requiring native application distribution.
+
+The backend is deployed on \textbf{Google Cloud Platform (asia-east1)} as a single \textbf{Cloud Run service}, implemented using \textbf{FastAPI (Python)} and packaged as a Docker container.
+
+The system integrates with several external services:
+
+\begin{itemize}
+    \item \textbf{Firebase Cloud Messaging (FCM)}: Primary push notification channel (via PWA)
+    \item \textbf{Twilio SMS}: Fallback notification channel when push delivery fails
+    \item \textbf{SendGrid}: On-demand email notification (non-MVP)
+    \item \textbf{HR System}: External source of employee and organizational data (Phase 2 integration)
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.5\textwidth]{system.png}
+\caption{System Context Diagram}
+\end{figure}
+
+\subsection{Logical Components / Service Decomposition}
+
+The backend adopts a \textbf{Modular Monolith} architecture implemented with FastAPI. All components are deployed within a single Cloud Run service, while being logically separated into internal modules.
+
+Module interactions are handled through direct Python function calls within the same process, maintaining simplicity while preserving clear boundaries.
+
+The system consists of the following core modules:
+
+\begin{itemize}
+    \item \textbf{Auth Module}: Handles authentication and authorization using JWT and dependency-based guards.
+    \item \textbf{Event Module}: Manages event lifecycle and publishes notification tasks to Pub/Sub.
+    \item \textbf{Report Module}: Consumes report messages from Pub/Sub and persists them to the database. It is also responsible for aggregating response data for supervisor and admin dashboards. Summary statistics (e.g., safe / need help / no response counts) are maintained in Redis for fast access, while detailed records are stored in PostgreSQL for query-based retrieval.
+    \item \textbf{Notification Module}: Dispatches push notifications via FCM and handles SMS fallback logic.
+    \item \textbf{User Module}: Manages employee profiles, department hierarchy, role assignments, and FCM device tokens. In Phase 1, employee data is maintained directly by administrators within the system. Phase 2 will introduce automated synchronization with the external HR system.
+\end{itemize}
+
+Data persistence and infrastructure components:
+
+\begin{itemize}
+    \item \textbf{Cloud SQL (PostgreSQL)}: Primary persistent data store
+    \item \textbf{Cloud Memorystore (Redis)}: Cache for dashboard aggregation
+    \item \textbf{Cloud Pub/Sub}: Asynchronous messaging for both fan-out and write buffering
+    \item \textbf{APScheduler}: In-process scheduler for periodic tasks (e.g., reminder scans)
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{components.png}
+\caption{Logical Component Architecture}
+\end{figure}
+
+\subsection{Key Application Flows}
+
+\subsubsection{Flow A: Event Creation and Notification Dispatch}
+
+When an admin creates an event via the frontend, the request is first validated through authentication and role-based authorization.
+
+The \textbf{Event Module} persists the event data to PostgreSQL using a transactional operation. After the transaction commits, the system publishes a message to a \textbf{Pub/Sub notification topic}.
+
+This message acts as a \textbf{trigger for asynchronous fan-out}, rather than containing per-recipient payloads. The \textbf{Notification Module}, acting as a subscriber, receives the message, queries the target employee list, and dispatches push notifications via \textbf{FCM}.
+
+If push delivery fails, the system falls back to \textbf{SMS} via Twilio for those specific recipients.
+
+The use of Pub/Sub is critical: directly sending push notifications to tens of thousands of users synchronously would cause API timeouts. By decoupling event creation from notification delivery, the system ensures scalability and responsiveness.
+
+\textbf{APScheduler} periodically scans for users who have not responded and republishes reminder notifications through the same notification topic.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{flowA.png}
+\caption{Flow A: Event Creation and Notification Dispatch}
+\end{figure}
+
+\subsubsection{Flow B: Employee Safety Reporting}
+
+This workflow represents the most critical high-load write path of the system.
+
+After receiving a notification, an employee submits a safety report via the frontend. The API immediately returns \textbf{202 Accepted}, ensuring a responsive user experience.
+
+Instead of writing directly to the database, the request is published to a \textbf{Pub/Sub report topic}. The \textbf{Report Module}, acting as a subscriber, processes these messages asynchronously and persists them to PostgreSQL.
+
+This design serves as a \textbf{write buffer}, smoothing the surge of concurrent writes when thousands of users submit reports simultaneously, and preventing database overload.
+
+After persistence:
+
+\begin{itemize}
+    \item Redis is updated asynchronously for dashboard aggregation
+    \item If assistance is required, a message is published to the notification topic to trigger supervisor alerts via FCM
+\end{itemize}
+
+Supervisors access dashboards through dedicated APIs. Aggregated statistics (e.g., response counts) are retrieved from Redis to ensure low-latency queries, while detailed lists (such as unreported employees or those requiring assistance) are queried from PostgreSQL.
+
+All responses are filtered based on role-based access control (RBAC), ensuring that supervisors can only access data within their organizational scope.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{flowB.png}
+\caption{Flow B: Employee Safety Reporting}
+\end{figure}
+%--------------------------------------------------
+\section{Data Architecture}
+
+\subsection{Core Data Model}
+
+\subsubsection{User (Employee)}
+\begin{longtable}{>{\raggedright\arraybackslash}p{3cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+user\_id & UUID & Unique identifier of the user \\
+employee\_no & VARCHAR & Employee number \\
+name & VARCHAR & Employee name \\
+email & VARCHAR & Email address \\
+phone & VARCHAR & Contact number \\
+department\_id & UUID & Associated department \\
+status & VARCHAR & Employment status \\
+created\_at & TIMESTAMP & Record creation time \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{Role}
+\begin{longtable}{p{3cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+role\_id & UUID & Role identifier \\
+role\_name & VARCHAR & Employee / Supervisor / Admin \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{UserRole}
+\begin{longtable}{p{3cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+user\_id & UUID & Reference to user \\
+role\_id & UUID & Reference to role \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{Department}
+\begin{longtable}{p{5cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+department\_id & UUID & Department identifier \\
+department\_name & VARCHAR & Department name \\
+parent\_department\_id & UUID & Parent department \\
+manager\_id & UUID & Department manager \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{Event}
+\begin{longtable}{p{3cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+event\_id & UUID & Event identifier \\
+title & VARCHAR & Event title \\
+event\_type & VARCHAR & Earthquake, Typhoon, Fire, etc. \\
+description & TEXT & Event description \\
+status & VARCHAR & Draft / Active / Closed \\
+created\_by & UUID & Creator of the event \\
+start\_time & TIMESTAMP & Event start time \\
+created\_at & TIMESTAMP & Creation timestamp \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{EventDepartment}
+\begin{longtable}{p{5cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+event\_department\_id & UUID & Unique identifier \\
+event\_id & UUID & Associated event \\
+department\_id & UUID & Target department \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{SafetyResponse}
+\begin{longtable}{p{3cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+response\_id & UUID & Response identifier \\
+event\_id & UUID & Associated event \\
+user\_id & UUID & Responding employee \\
+status & VARCHAR & Safe / Need Help \\
+comment & TEXT & Additional notes \\
+location & VARCHAR & Optional location information \\
+responded\_at & TIMESTAMP & Response timestamp \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{Notification}
+\begin{longtable}{p{3cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+notification\_id & UUID & Notification identifier \\
+event\_id & UUID & Associated event \\
+user\_id & UUID & Recipient \\
+channel & VARCHAR & Email / SMS / Push \\
+status & VARCHAR & Sent / Failed \\
+sent\_at & TIMESTAMP & Time sent \\
+\bottomrule
+\end{longtable}
+
+%--------------------------------------------------
+\subsection{Data Stores}
+
+\begin{longtable}{p{3.5cm}p{4cm}p{6.5cm}}
+\toprule
+\textbf{Data Type} & \textbf{Technology} & \textbf{Purpose} \\
+\midrule
+Transactional Data & Cloud SQL for PostgreSQL & Core system data storage \\
+Cache & Memorystore (Redis) & Dashboard statistics and performance optimization \\
+Message Queue & Cloud Pub/Sub & Asynchronous notification processing and event-driven messaging \\
+Object Storage & Google Cloud Storage (GCS) & Logs, report exports, backup files \\
+\bottomrule
+\end{longtable}
+
+%--------------------------------------------------
+\subsection{Data Flow and Consistency}
+
+\subsubsection{Event Creation and Notification Flow}
+\begin{enumerate}
+    \item An administrator creates an event.
+    \item The system records the event and target departments.
+    \item Employees in affected departments are identified.
+    \item Notifications are sent asynchronously.
+\end{enumerate}
+
+\textbf{Consistency Strategy:}
+\begin{itemize}
+    \item Event data: Strong consistency.
+    \item Notification delivery: Eventual consistency.
+\end{itemize}
+
+\subsubsection{Safety Response Flow}
+\begin{enumerate}
+    \item Employees submit their safety status.
+    \item The system records responses in the database.
+    \item Dashboard statistics are updated via Redis.
+\end{enumerate}
+
+\textbf{Consistency Strategy:}
+\begin{itemize}
+    \item Safety responses: Strong consistency.
+    \item Dashboard data: Eventual consistency.
+\end{itemize}
+
+\subsubsection{Organization Data Synchronization}
+This flow describes the Phase 2 HR integration. In Phase 1, employee and department data is maintained directly by administrators within the system without external HR system connectivity.
+\begin{enumerate}
+    \item The system retrieves employee data from the HR system.
+    \item User and department records are updated periodically.
+\end{enumerate}
+
+%--------------------------------------------------
+\subsection{Data Consistency Strategy}
+
+\begin{longtable}{p{4cm}p{6cm}p{6cm}}
+\toprule
+\textbf{Data Type} & \textbf{Consistency Requirement} & \textbf{Strategy} \\
+\midrule
+Event Data & Strong Consistency & ACID Transactions \\
+Safety Responses & Strong Consistency & Relational Database \\
+Notification Records & Eventual Consistency & Asynchronous Processing \\
+Dashboard Statistics & Eventual Consistency & Redis Cache \\
+HR Synchronization & Eventual Consistency & Scheduled Updates \\
+\bottomrule
+\end{longtable}
+
+%--------------------------------------------------
+\subsection{Data Retention Policy}
+
+\begin{longtable}{p{6cm}p{6cm}}
+\toprule
+\textbf{Data Type} & \textbf{Retention Period} \\
+\midrule
+Events and Responses & 5--7 Years \\
+Notification Records & 1--3 Years \\
+System Logs & 6--12 Months \\
+Cache Data & Temporary \\
+Backup Data & Based on organizational policies \\
+\bottomrule
+\end{longtable}
+
+%--------------------------------------------------
+\subsection{ER Diagram}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.98\linewidth]{erd.png}
+    \caption{ER Diagram}
+    \label{fig:placeholder}
+\end{figure}
+
+%--------------------------------------------------
+\section{Infrastructure / Deployment Architecture}
+% \subsection{Deployment Topology}
+\subsection{Deployment Topology}
+\subsubsection{Deployment Diagram}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{deployment_diagram_final.png}
+    \caption{Deployment Diagram}
+    \label{fig:placeholder2}
+\end{figure}
+
+\subsubsection{Overview}
+
+The system is deployed entirely on Google Cloud Platform in the asia-east1 region (Taiwan). The backend runs as a single containerized modular monolith on Cloud Run. The architecture is divided into four layers: client, backend application, messaging, and data layer. External notification services sit outside the GCP boundary and are called outbound from the backend.
+
+\subsubsection{Request Flow}
+
+Users access the system through a PWA installed on their mobile browser. All API requests travel over HTTPS directly to the Cloud Run service. The Cloud Run service connects to Cloud SQL via the Cloud SQL Connector over a private VPC network, and to Cloud Memorystore via a VPC Connector. When an event is created, the event module publishes a message to Cloud Pub/Sub. The notification module, acting as a subscriber, receives the message and calls external notification services. The reminder workflow is handled by APScheduler, which runs as a background scheduler embedded within the Cloud Run application. Every 15 minutes, it queries Cloud SQL to identify employees who have not submitted a report within the active event window, and publishes reminder tasks to Cloud Pub/Sub for delivery. All outbound calls to external services are initiated from within Cloud Run over HTTPS.
+
+\subsubsection{Component Roles}
+
+\begin{itemize}
+    \item Client (PWA on Mobile Browser): The entry point for all users. Employees, supervisors, and admins access the system through a PWA added to their mobile home screen. No native app installation is required.
+    \item Cloud Run (Modular Monolith): The single containerized backend service. Contains five internal modules — auth, event, report, notification, and user — running in the same process. The API Router Layer handles all incoming requests before routing them to the appropriate module. Modules communicate via internal function calls, not HTTP.
+    \item APScheduler (built-in background scheduler): A lightweight scheduling library running within the Cloud Run application process. Every 15 minutes it scans Cloud SQL for unreported employees and publishes reminder messages to Cloud Pub/Sub. No external scheduling service is required.
+    \item Cloud Pub/Sub: Managed asynchronous messaging service. Receives notification tasks published by the event module and delivers them to the notification module subscriber. Also used to deliver reminder messages published by APScheduler, and to trigger asynchronous statistics cache updates when new reports are submitted. Also receives report submissions published by the report module and delivers them asynchronously for database persistence.
+    \item Cloud SQL (PostgreSQL): Managed relational database deployed inside the private VPC. Connected to Cloud Run via the Cloud SQL Connector using a Unix socket. Stores all persistent data.
+    \item Cloud Memorystore (Redis): Managed in-memory cache deployed inside the private VPC. Connected to Cloud Run via a VPC Connector. Used as a cache layer to reduce database query load and to store session-related data including JWT blacklists.
+    \item Cloud Monitoring / Cloud Logging / Cloud Alerting: Automatically collects metrics and logs from all Cloud Run instances. No additional configuration is required.
+    \item Firebase FCM: Primary push notification service. Sends push notifications directly to PWA instances on employee devices.
+    \item Twilio SMS: Fallback notification channel. Triggered automatically only when FCM delivery fails.
+    \item SendGrid: Email service used for on-demand report delivery. Not triggered automatically — activated only when a supervisor or admin manually requests a report to be sent to their email address from within the PWA.
+\end{itemize}
+
+
+\subsubsection{How Components Are Connected}
+
+Cloud Run connects to Cloud SQL via the Cloud SQL Connector, which injects a Unix socket into the container without exposing a public IP. Cloud Run connects to Cloud Memorystore via a Serverless VPC Access Connector using a private IP within the VPC. Cloud Pub/Sub delivers messages to the notification module via push subscription over HTTPS with OIDC authentication. All outbound calls to FCM, Twilio, and SendGrid are initiated from Cloud Run over HTTPS.
+
+% \subsection{Cloud Components}
+\subsection{Cloud Components \& Infrastructure Services}
+
+\textbf{Cloud Provider: Google Cloud Platform (GCP)}
+\\
+GCP is selected because it operates a data center in Taiwan (asia-east1 region). Deploying in the same region as the primary user base minimizes network latency. All backend components — Cloud Run, Cloud SQL, Cloud Memorystore, and Cloud Pub/Sub — are co-located within this region and communicate over GCP's internal network, eliminating the need for cross-platform integration.
+\\
+\\
+\textbf{Compute Layer: Google Cloud Run}
+\\
+Cloud Run is a fully managed serverless container platform. The backend application is packaged as a single Docker image and deployed to Cloud Run. The platform automatically handles scaling, health checks, and zero-downtime deployments without additional configuration. Cloud Run is chosen over Kubernetes because the system's peak load does not justify the operational complexity of a self-managed cluster — approximately 100 RPS at Phase 1 scale (30,000 users), scaling to 200+ RPS at Phase 3 (100,000 users). Auto-scaling from zero to multiple instances handles the system's characteristic traffic pattern of near-zero normal load and sudden high peaks during disaster events. Should the system grow beyond Phase 3 scale or require finer-grained resource control, migration to Kubernetes can be evaluated at that point.
+\\
+\\
+\textbf{Database: Cloud SQL for PostgreSQL}
+\\
+Cloud SQL is GCP's fully managed relational database service. PostgreSQL is used as the primary data store. Cloud SQL handles automated backups, security patches, and high-availability configuration. It is deployed within the private VPC and accessed via the Cloud SQL Connector, which provides encrypted connectivity without exposing a public database endpoint. PostgreSQL is chosen for its ACID transaction guarantees and relational data model, which suits the strongly relational nature of the system's core data.
+\\
+\\
+\textbf{Cache: Cloud Memorystore for Redis}
+\\
+Cloud Memorystore is GCP's fully managed Redis service. It serves as a cache layer to reduce repeated database queries for frequently read data such as dashboard statistics. It also stores session-related data including JWT blacklists. Deployed within the private VPC and accessible only from Cloud Run via a VPC Connector.
+\\
+\\
+\textbf{Asynchronous Messaging: Cloud Pub/Sub}
+\\
+Cloud Pub/Sub is GCP's fully managed publish-subscribe messaging service. It is used to decouple the event creation flow from the notification delivery flow, allowing the backend to return a response immediately without waiting for notifications to be sent. It also carries reminder messages published by APScheduler and triggers asynchronous statistics cache updates. Cloud Pub/Sub is chosen over Kafka because the system does not require Kafka-specific features such as message replay or per-partition ordering, and Cloud Pub/Sub requires no broker infrastructure management.
+\\
+\\
+\textbf{Background Scheduler: APScheduler}
+\\
+APScheduler is a Python scheduling library that runs within the Cloud Run application process. It is used to periodically scan for unreported employees and trigger reminder notifications via Cloud Pub/Sub. APScheduler is chosen over Cloud Tasks for this use case because it requires no external GCP service configuration, no IAM setup, and is significantly simpler to implement. A 15-minute scan interval aligns with the reminder trigger threshold defined in the system requirements.
+\\
+\\
+\textbf{Push Notifications: Firebase FCM}
+\\
+Firebase Cloud Messaging is the primary notification channel. FCM delivers push notifications directly to PWA instances on employee mobile devices. It is chosen because it natively supports both Android and iOS when the PWA is installed to the home screen, and is completely free with no usage limits.
+\\
+\\
+\textbf{SMS Fallback: Twilio}
+\\
+Twilio is used as a fallback notification channel, triggered automatically only when FCM delivery fails. Expected usage is extremely low given that all employees are required to install the PWA.
+\\
+\\
+\textbf{On-demand Email: SendGrid}
+\\
+SendGrid is used for email delivery. Email is not triggered automatically. Supervisors and admins can manually request a report to be sent to a configured email address from within the PWA. This is used for post-event record keeping and archiving. The free plan provides 100 emails per day, which is sufficient given the on-demand nature of this feature.
+\\
+\\
+\textbf{CI/CD: GitHub Actions + GCP Artifact Registry}
+\\
+GitHub Actions automates the build and deployment pipeline. On each push to the main branch, it runs tests, builds the Docker image, pushes it to Artifact Registry, and deploys the new revision to Cloud Run. Artifact Registry is GCP's managed container image registry, co-located with Cloud Run for fast image pulls.
+
+% \subsection{Environment Design}
+\subsection{Deployment Decisions & Environment Design}
+
+\subsubsection{Deployment Model}
+
+The system is deployed on Google Cloud Platform using a serverless container architecture. The backend application runs inside a single Docker container on Cloud Run. No virtual machines or Kubernetes clusters are used. The frontend is a PWA served directly from the Cloud Run service, eliminating the need for a separate static hosting service or CDN. The system's primary user base is located in Taiwan, and GCP asia-east1 provides sufficient proximity without requiring CDN distribution.
+
+\subsubsection{Region and Network Design}
+The system is deployed in a single GCP region: asia-east1 (Taiwan). All backend components are co-located in this region to minimize inter-component latency. This deployment is scoped to Phase 1 (Taiwan). For Phase 2 and Phase 3 expansion, GCP operates regional nodes globally, allowing direct deployment to additional regions without platform migration.
+\\
+Network boundaries are divided into two zones. The public zone exposes only the Cloud Run service endpoint, protected by automatic HTTPS. No other service is directly accessible from the public internet. The private zone contains Cloud SQL and Cloud Memorystore, deployed inside a VPC subnet. These services are accessible only from Cloud Run via private IP connections through the Cloud SQL Connector and VPC Connector respectively.
+
+\subsubsection{API Exposure}
+The Cloud Run service provides a single public HTTPS endpoint serving all API routes. Internal endpoints used by Cloud Pub/Sub subscriptions are protected by OIDC token authentication, ensuring that only authorized GCP services can invoke them.
+
+\subsubsection{Secrets Management}
+All sensitive configuration values — including database credentials, FCM service account key, Twilio API key, SendGrid API key, and JWT secret — are stored in GCP Secret Manager. The Cloud Run service retrieves these values at startup via Workload Identity, injected as environment variables. No secrets are stored in source code or version control. Secret Manager is not shown in the deployment diagram as it is a supporting service rather than part of the request flow; its integration is described in this section.
+
+\subsubsection{Environment Separation}
+
+Two environments are maintained.
+The development environment runs entirely on local machines. Docker Compose provisions PostgreSQL and Redis locally. The FastAPI application runs locally without any GCP connection. FCM and Twilio operate in sandbox or test mode to prevent unintended real notifications during development.
+The production environment is deployed on GCP asia-east1 and connects to all live external services. Each deployment must pass automated tests in GitHub Actions before the new revision is promoted on Cloud Run. Cloud Run's built-in traffic-splitting mechanism ensures zero downtime during deployments.
+
+\subsubsection{CDN}
+
+No CDN is used in the current deployment. The system's users are concentrated in Taiwan, and GCP asia-east1 provides sufficient proximity. CDN adoption is planned for Phase 3 when the system expands to international deployment regions.
+
+\subsubsection{Phase-based Infrastructure Evolution}
+
+The following table summarizes the key infrastructure differences 
+at each phase based on the scaling and reliability strategies 
+described in this document.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|l|l|l|p{3cm}|}
+\hline
+\textbf{Phase} & \textbf{Min Instances} & \textbf{DB Config} & \textbf{Redis} & \textbf{CDN} & \textbf{Region} \\
+\hline
+Phase 1 & 0 & Single primary & Single node & None & asia-east1 \\
+\hline
+Phase 2 & 1 & HA + read replica & Replicated & None & asia-east1, asia-northeast1 \\
+\hline
+Phase 3 & 1 per region & Multi-region reads & HA mode & Yes & Global \\
+\hline
+\end{tabular}
+\caption{Infrastructure Configuration by Deployment Phase}
+\end{table}
+
+
+%--------------------------------------------------
+\section{Scalability, Reliability, and Operations}
+ 
+This chapter describes how the system achieves the quality attributes defined in Section~2. Where Section~2 states the target (e.g., high availability, burst handling), this chapter explains the concrete mechanisms that fulfil each requirement.
+ 
+%--------------------------------------------------
+\subsection{Scaling Strategy}
+ 
+\subsubsection{Horizontal Scaling with Cloud Run}
+ 
+The application layer is stateless by design. All session state is stored in Cloud Memorystore (Redis), and all persistent data is stored in Cloud SQL. Because no local state exists within the Cloud Run container, the platform can scale horizontally by spinning up additional instances without session affinity or coordination overhead.
+ 
+Cloud Run scales automatically in response to incoming request concurrency. Each instance handles a configured maximum number of concurrent requests. When aggregate concurrency exceeds the per-instance limit, Cloud Run provisions additional instances within seconds. This behaviour directly addresses the system's primary traffic pattern: near-zero load during normal operations, followed by a sudden write burst when a disaster event is activated.
+ 
+\subsubsection{Stateless Service Design}
+ 
+Statelessness is enforced at the application layer through two mechanisms:
+ 
+\begin{itemize}
+    \item \textbf{JWT-based authentication:} No server-side session store is required. Each request carries a self-contained signed token. The JWT blacklist (for logout invalidation) is stored in Redis, not in-process memory, ensuring that any instance can validate any token.
+    \item \textbf{No in-process shared state:} APScheduler runs within the application process but its internal job state is not shared across instances. Only one Cloud Run instance should execute the scheduler job at any given time; this is enforced via a Redis distributed lock (see Section~8.2.5).
+\end{itemize}
+ 
+\subsubsection{Asynchronous Queue and Backpressure}
+ 
+The most critical scaling mechanism is the decoupling of the write path from the notification fan-out path via Cloud Pub/Sub.
+ 
+When an admin activates an event, the EventModule persists the event record and immediately publishes a single fan-out trigger message to Cloud Pub/Sub. The API returns a \texttt{201 Created} response without waiting for any notifications to be sent. The NotificationModule, acting as a Pub/Sub push subscriber, then processes the fan-out asynchronously: it queries the target employee list, batches FCM push requests, and dispatches them to Firebase.
+ 
+This design provides two scaling benefits:
+ 
+\begin{itemize}
+    \item \textbf{API responsiveness:} The event creation endpoint remains fast and predictable regardless of the number of target employees. Sending notifications to 100,000 users synchronously would exceed Cloud Run's request timeout.
+    \item \textbf{Natural backpressure:} Pub/Sub acts as a buffer. If the NotificationModule is temporarily overloaded, unacknowledged messages remain in the subscription queue and are redelivered. This prevents notification tasks from being lost during a traffic spike. The \texttt{oldest\_unacked\_message\_age} metric (see Section~8.3.1) is the earliest observable signal that fan-out throughput is falling behind.
+\end{itemize}
+ 
+The same pattern is applied to the reminder workflow: APScheduler publishes reminder tasks to Pub/Sub rather than calling the notification service directly, ensuring that a scheduler execution delay does not block the main request path.
+ 
+\subsubsection{Cold Start Consideration}
+ 
+Cloud Run is configured with a minimum instance count of zero. This means that during idle periods, no instances are running, and the first request after an idle period will experience a cold start latency of approximately one to two seconds.
+ 
+This trade-off is explicitly accepted for the following reasons:
+ 
+\begin{itemize}
+    \item In normal operations, the system processes only background administrative traffic. Cold start latency is not user-visible for these low-priority requests.
+    \item During a disaster event, the first request is the admin activating the event — a single, high-privilege action. The cold start cost is absorbed by this one request. Subsequent employee report submissions arrive after push notifications are delivered, providing a natural buffer window of 30 to 60 seconds before the write burst begins.
+\end{itemize}
+ 
+For Phase 3 global deployment, minimum instance count should be re-evaluated. If 24/7 availability is required across time zones, setting a minimum of one warm instance per region eliminates cold start risk at a modest cost.
+ 
+\subsubsection{Database Scaling}
+ 
+Cloud SQL for PostgreSQL handles read and write traffic from the Cloud Run service. To manage peak write load during a burst event, the following strategies are applied:
+ 
+\begin{itemize}
+    \item \textbf{Connection pooling:} The application uses a connection pool to limit the number of simultaneous database connections. Cloud Run instances share a bounded pool, preventing connection exhaustion on Cloud SQL.
+    \item \textbf{Read offloading via Redis:} Dashboard statistics queries — the dominant read pattern under load — are served from Memorystore rather than Cloud SQL. The cache is invalidated and refreshed asynchronously when new safety reports are committed, ensuring that the database is not queried for every supervisor dashboard refresh.
+    \item \textbf{Write isolation:} Safety report submissions are written directly to PostgreSQL with strong consistency guarantees. These writes are simple \texttt{INSERT} operations on indexed tables and are designed to complete in under 10 milliseconds under normal conditions.
+\end{itemize}
+ 
+If Phase 3 write volume exceeds Cloud SQL single-primary throughput, a read replica can be added with no application code changes, routing all \texttt{SELECT} queries to the replica.
+ 
+%--------------------------------------------------
+\subsection{Reliability Strategy}
+ 
+\subsubsection{High Availability via Cloud Run}
+ 
+Cloud Run provides built-in high availability within the asia-east1 region. The platform distributes instances across multiple availability zones transparently. If a zone experiences a failure, Cloud Run routes traffic to healthy instances in remaining zones without operator intervention.
+ 
+No additional load balancer configuration is required. Google's global HTTPS load balancer, which fronts Cloud Run, automatically performs health checks and removes unhealthy backends from rotation.
+ 
+\subsubsection{Failover for Notification Delivery}
+ 
+Notification delivery follows a two-tier fallback strategy:
+ 
+\begin{enumerate}
+    \item \textbf{FCM (Primary):} Push notification is sent to the employee's registered PWA token via Firebase Cloud Messaging.
+    \item \textbf{SMS via Twilio (Fallback):} If FCM delivery fails (token invalid, device offline, or FCM error response), the NotificationModule automatically retries via Twilio SMS to the employee's registered phone number.
+\end{enumerate}
+ 
+This fallback is particularly important during disaster scenarios in which employees may be operating under degraded network conditions. SMS operates over the cellular voice network and is more resilient to packet-level congestion than data-dependent push notifications.
+ 
+\subsubsection{Retry and Idempotency}
+ 
+Cloud Pub/Sub guarantees at-least-once delivery. A Pub/Sub message may be redelivered if the subscriber fails to acknowledge it within the acknowledgement deadline. The NotificationModule is designed to be idempotent with respect to message redelivery:
+ 
+\begin{itemize}
+    \item Before sending a notification, the module checks the \texttt{Notification} table in Cloud SQL for an existing record with the same \texttt{(event\_id, user\_id, channel)} composite key.
+    \item If a record already exists with status \texttt{Sent}, the message is acknowledged immediately and no duplicate notification is dispatched.
+    \item If no record exists, the notification is sent and the result is recorded atomically.
+\end{itemize}
+ 
+This check-then-act pattern ensures that a Pub/Sub redelivery does not result in an employee receiving duplicate push notifications or SMS messages.
+ 
+\subsubsection{Health Checks and Zero-Downtime Deployments}
+ 
+The application exposes a \texttt{GET /health} endpoint that returns HTTP 200 when the service is ready to accept traffic. This endpoint verifies connectivity to Cloud SQL and Memorystore on startup, ensuring that an instance is not marked ready before its dependencies are reachable. If an instance fails to respond to health checks, Cloud Run removes it from the load-balancing pool and starts a replacement instance automatically.
+ 
+Cloud Run's built-in traffic-splitting mechanism provides zero-downtime deployments. When a new container revision is deployed, Cloud Run routes traffic gradually to the new revision while keeping the previous revision active. If the new revision fails its health checks, traffic is not shifted and the previous revision continues to serve all requests.
+ 
+\subsubsection{Single Point of Failure Analysis}
+ 
+The following table identifies each component's SPOF risk and the corresponding mitigation strategy.
+ 
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{3cm}|p{4cm}|p{7cm}|}
+\hline
+\textbf{Component} & \textbf{SPOF Risk} & \textbf{Mitigation} \\
+\hline
+Cloud Run & Single-region failure & GCP multi-zone instance distribution; automatic rerouting on zone failure. \\
+\hline
+Cloud SQL & Single primary instance & Cloud SQL high-availability mode provides a hot standby replica with automatic failover in under 60 seconds. \\
+\hline
+APScheduler & Runs in-process; multiple Cloud Run instances each execute the scheduler independently, causing duplicate reminder messages & Redis distributed lock (\texttt{SET NX + TTL}): only the instance that acquires the lock executes the scheduler job. Other instances skip silently. Phase 3 migration path: replace with Cloud Scheduler + Cloud Tasks to fully externalise scheduling. \\
+\hline
+Cloud Pub/Sub & No SPOF risk & GCP-managed service with 99.95\% availability SLA and automatic replication. \\
+\hline
+Cloud Memorystore & Single Redis instance & Cache miss falls back to Cloud SQL reads. JWT blacklist temporarily unavailable; tokens still expire via TTL. Phase 3: enable Memorystore replication for automatic in-region failover. \\
+\hline
+FCM (Firebase) & External dependency & Automatic SMS fallback via Twilio when FCM delivery fails. \\
+\hline
+Twilio SMS & External dependency & Known limitation. If both FCM and SMS are unavailable simultaneously, notification delivery fails. Monitored via delivery status callbacks; operators are alerted to manually contact affected employees. \\
+\hline
+\end{tabular}
+\caption{Single Point of Failure Analysis}
+\end{table}
+ 
+%--------------------------------------------------
+\subsection{Monitoring, Logging, and Alerting}
+ 
+\subsubsection{Metrics and Why They Matter}
+ 
+Cloud Run automatically exports runtime metrics to Cloud Monitoring. The following metrics are monitored, with rationale for each:
+ 
+\begin{itemize}
+    \item \textbf{Request latency (p50, p95, p99):} Tracks API response time distribution. p99 is the most operationally significant — a sustained p99 above 2 seconds indicates that a subset of requests are hitting database contention or cold start delays, even if median latency appears healthy.
+    \item \textbf{HTTP 5xx error rate:} A non-zero 5xx rate during a disaster event is directly harmful: it means employees are failing to submit safety reports. A rate above 1\% over five minutes triggers an immediate alert.
+    \item \textbf{Cloud Run instance count:} An unexpected instance spike (e.g., scaling to 50+ instances outside of an active event) may indicate a runaway APScheduler loop or a Pub/Sub redelivery storm caused by a failing subscriber.
+    \item \textbf{Pub/Sub \texttt{oldest\_unacked\_message\_age}:} This is the earliest observable signal that notification fan-out throughput is falling behind. If this metric rises above five minutes, the NotificationModule is not processing messages fast enough. This precedes user-visible notification delays and allows operators to intervene before the SLO is breached.
+    \item \textbf{Cloud SQL connection utilisation:} Approaching the connection limit (above 80\%) indicates the need to tune the application connection pool size or scale the database tier before connection exhaustion causes request failures.
+    \item \textbf{Redis memory utilisation:} If Memorystore approaches its memory limit, cache eviction begins and dashboard read performance degrades as traffic falls back to Cloud SQL.
+\end{itemize}
+ 
+\subsubsection{Structured Logging}
+ 
+All application logs are emitted as structured JSON to standard output. Cloud Run automatically ingests these logs into Cloud Logging. Each log entry includes the following fields:
+ 
+\begin{itemize}
+    \item \texttt{severity}: Log level (INFO, WARNING, ERROR).
+    \item \texttt{request\_id}: Unique identifier propagated from the incoming HTTP request header, allowing all log lines for a single request to be correlated.
+    \item \texttt{user\_id}: Present on authenticated requests, enabling per-user audit trails.
+    \item \texttt{event\_id}: Present on event-related operations, enabling per-event log filtering.
+    \item \texttt{module}: The internal module that emitted the log (e.g., \texttt{notification}, \texttt{report}).
+\end{itemize}
+ 
+Logs are retained in Cloud Logging for 30 days and exported to Cloud Storage for long-term retention, aligning with the 6--12 month system log retention policy defined in Section~6.
+ 
+\subsubsection{Distributed Tracing}
+ 
+Cloud Run integrates with Cloud Trace to capture end-to-end request traces. Traces are particularly useful for diagnosing latency spikes across the report submission flow, which involves the API handler, a PostgreSQL write, a Redis cache invalidation, and a Pub/Sub publish in sequence. A single trace provides the duration and outcome of each step, enabling rapid identification of bottlenecks without requiring log correlation across multiple services.
+ 
+\subsubsection{Alerting Policy}
+ 
+Cloud Alerting policies are configured on the conditions listed in Table \ref{tab:alerting_policy}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{3cm}|p{2cm}|p{1.5cm}|p{2.5cm}|p{4.5cm}|}
+\hline
+\textbf{Condition} & \textbf{Threshold} & \textbf{Window} & \textbf{Severity} & \textbf{Why This Threshold} \\
+\hline
+HTTP 5xx error rate & $>$1\% & 5 min & Critical & Direct employee impact during events \\
+\hline
+API p99 latency & $>$2000 ms & 5 min & Warning & Exceeds acceptable UX for one-tap reporting \\
+\hline
+Pub/Sub unacknowledged message age & $>$5 min & 5 min & Warning & Early signal of notification fan-out falling behind \\
+\hline
+Cloud SQL connection utilisation & $>$80\% & 5 min & Warning & Leading indicator before connection exhaustion \\
+\hline
+Cloud Run instance count & $>$50 & 1 min & Informational & Unexpected scale-out outside active event windows \\
+\hline
+Redis memory utilisation & $>$85\% & 5 min & Warning & Cache eviction degrades dashboard read performance \\
+\hline
+\end{tabular}
+\caption{Alerting Policy}
+\label{tab:alerting_policy}
+\end{table}
+ 
+Alerts are delivered via email for Warning severity, and via SMS to the on-call operator for Critical severity. For Phase 3, integration with PagerDuty or equivalent on-call management tooling is recommended.
+ 
+\subsubsection{Service Level Objective and Error Budget}
+ 
+The following SLOs are defined for the system's core flows:
+ 
+\begin{itemize}
+    \item \textbf{Availability SLO:} 99.5\% of report submission requests (\texttt{POST /reports}) return a 2xx or 4xx response within 3 seconds, measured over a rolling 30-day window. This corresponds to a monthly error budget of approximately 3.6 hours.
+    \item \textbf{Notification delivery SLO:} 95\% of push notifications (FCM + SMS fallback combined) are delivered within 5 minutes of event activation.
+\end{itemize}
+ 
+If the error budget is consumed faster than the monthly burn rate allows, new feature deployments are paused and reliability work is prioritised until the budget is restored. This policy prevents accumulating reliability debt in exchange for feature velocity.
+ 
+%--------------------------------------------------
+\subsection{Backup and Recovery}
+ 
+\subsubsection{Database Backup}
+ 
+Cloud SQL provides automated daily backups with point-in-time recovery (PITR) enabled. The backup configuration is as follows:
+ 
+\begin{itemize}
+    \item \textbf{Automated daily backups:} Retained for 7 days. Covers the case of accidental data deletion or corruption discovered within the week.
+    \item \textbf{Point-in-time recovery:} Transaction logs are retained for 7 days, allowing recovery to any second within that window.
+    \item \textbf{On-demand backups:} Triggered manually before major schema migrations. Retained indefinitely until explicitly deleted.
+\end{itemize}
+ 
+Backups are stored in Google Cloud Storage within the same region (asia-east1) and are replicated to a second GCP region for geographic redundancy.
+ 
+\subsubsection{Disaster Recovery Procedure}
+ 
+The primary disaster scenario for this system is a regional GCP failure affecting asia-east1. The recovery targets are:
+ 
+\begin{itemize}
+    \item \textbf{RTO (Recovery Time Objective):} 4 hours. Within 4 hours of a confirmed regional failure, the system can be restored in a secondary region using the latest Cloud SQL backup and a redeployed Cloud Run service.
+    \item \textbf{RPO (Recovery Point Objective):} 1 hour. Given PITR support, data loss is bounded to the most recent committed transaction, with a maximum gap of 1 hour under degraded backup conditions.
+\end{itemize}
+ 
+The recovery procedure is as follows:
+ 
+\begin{enumerate}
+    \item Restore the most recent Cloud SQL backup to a new instance in the target region (e.g., asia-northeast1, Tokyo).
+    \item Deploy the Cloud Run service from the existing container image stored in Artifact Registry (images are stored globally, not region-locked).
+    \item Update DNS or load balancer configuration to route traffic to the new region endpoint.
+    \item Verify connectivity between Cloud Run, Cloud SQL, and Memorystore in the new region via the \texttt{/health} endpoint.
+    \item Resume operations and notify affected users of the recovery.
+\end{enumerate}
+ 
+This procedure is documented in a runbook and should be rehearsed at least once per year as a disaster recovery drill.
+ 
+\subsubsection{Redis Cache Recovery}
+ 
+Cloud Memorystore does not persist data across instance failures by default. Because Redis is used exclusively as a cache and JWT blacklist store, a Memorystore failure does not result in permanent data loss:
+ 
+\begin{itemize}
+    \item \textbf{Cache miss fallback:} On cache miss, the application reads directly from Cloud SQL. Dashboard statistics will reflect slightly higher database load until the cache is warmed.
+    \item \textbf{JWT blacklist:} Tokens in the blacklist are re-added on the next logout request. A brief window of blacklist unavailability is acceptable because JWT tokens expire after a short TTL regardless.
+\end{itemize}
+ 
+A Memorystore instance can be restored in approximately 10 minutes. For Phase 3, enabling Memorystore replication (high-availability mode) provides automatic failover within the same region with no application-side changes.
+
+
+
+
+\end{document}

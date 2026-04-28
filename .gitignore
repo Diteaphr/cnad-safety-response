@@ -1,6 +1,16 @@
 .secrets/
-*.json
 __pycache__/
 .env
 .venv/
+venv/
 .vscode/
+.DS_Store
+
+# Node/Frontend
+node_modules/
+dist/
+build/
+coverage/
+
+# Docker volumes
+postgres_data/
