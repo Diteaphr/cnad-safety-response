@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Menu } from 'lucide-react';
 import type { NavKey, Role } from '../types';
 
 const navByRole: Record<Role, Array<{ key: NavKey; label: string }>> = {
@@ -21,6 +23,8 @@ const navByRole: Record<Role, Array<{ key: NavKey; label: string }>> = {
   ],
 };
 
+const NARROW_SIDEBAR_MEDIA = '(max-width: 980px)';
+
 export function Layout({
   currentRole,
   roleOptions,
@@ -38,10 +42,86 @@ export function Layout({
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
+  const [isNarrowViewport, setIsNarrowViewport] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(NARROW_SIDEBAR_MEDIA).matches,
+  );
   const navItems = navByRole[currentRole];
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia(NARROW_SIDEBAR_MEDIA);
+    const onChange = () => setIsNarrowViewport(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isNarrowViewport && sidebarDrawerOpen) setSidebarDrawerOpen(false);
+  }, [isNarrowViewport, sidebarDrawerOpen]);
+
+  useEffect(() => {
+    setSidebarDrawerOpen(false);
+  }, [currentRole, currentNav]);
+
+  useEffect(() => {
+    if (!sidebarDrawerOpen || !isNarrowViewport) return undefined;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSidebarDrawerOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prev;
+    };
+  }, [sidebarDrawerOpen, isNarrowViewport]);
+
+  const navigateFromSidebar = (key: NavKey) => {
+    setSidebarDrawerOpen(false);
+    onSwitchNav(key);
+  };
+
+  const pickRoleFromSidebar = (role: Role) => {
+    setSidebarDrawerOpen(false);
+    onSwitchRole(role);
+  };
+
+  const logoutFromSidebar = () => {
+    setSidebarDrawerOpen(false);
+    onLogout();
+  };
+
   return (
     <div className="app-frame">
-      <aside className="sidebar">
+      <header className="app-mobile-shell-header">
+        <button
+          type="button"
+          className="sidebar-hamburger-btn"
+          aria-expanded={sidebarDrawerOpen}
+          aria-controls="app-sidebar-drawer"
+          onClick={() => setSidebarDrawerOpen((open) => !open)}
+        >
+          <Menu size={20} strokeWidth={2.25} aria-hidden />
+          <span className="sr-only">Toggle menu</span>
+        </button>
+        <span className="app-mobile-shell-title">Safety Connect</span>
+      </header>
+
+      <button
+        type="button"
+        className={`sidebar-drawer-overlay${sidebarDrawerOpen ? ' is-visible' : ''}`}
+        aria-label="Close menu"
+        tabIndex={-1}
+        onClick={() => setSidebarDrawerOpen(false)}
+      />
+
+      <aside
+        id="app-sidebar-drawer"
+        className={`sidebar${sidebarDrawerOpen ? ' is-drawer-open' : ''}`}
+        {...(isNarrowViewport ? { 'aria-hidden': !sidebarDrawerOpen } : {})}
+      >
         <h1>Employee Safety & Response</h1>
         <p className="muted">Emergency response operations center</p>
         <nav>
@@ -49,7 +129,7 @@ export function Layout({
             <button
               key={item.key}
               className={currentNav === item.key ? 'nav-btn active' : 'nav-btn'}
-              onClick={() => onSwitchNav(item.key)}
+              onClick={() => navigateFromSidebar(item.key)}
               type="button"
             >
               {item.label}
@@ -64,7 +144,7 @@ export function Layout({
                 <button
                   key={role}
                   className={role === currentRole ? 'pill active' : 'pill'}
-                  onClick={() => onSwitchRole(role)}
+                  onClick={() => pickRoleFromSidebar(role)}
                   type="button"
                 >
                   {role}
@@ -73,31 +153,12 @@ export function Layout({
             </div>
           </div>
         ) : null}
-        <button className="btn ghost logout" onClick={onLogout} type="button">
+        <button className="btn ghost logout" onClick={logoutFromSidebar} type="button">
           Logout
         </button>
       </aside>
 
       <main className="content">{children}</main>
-
-      <nav className="bottom-nav">
-        {navItems.slice(0, 4).map((item) => (
-          <button
-            key={item.key}
-            className={currentNav === item.key ? 'bottom-item active' : 'bottom-item'}
-            onClick={() => onSwitchNav(item.key)}
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-        <button className="bottom-item logout-item" onClick={onLogout} type="button">
-          Logout
-        </button>
-      </nav>
-      <button className="mobile-logout" onClick={onLogout} type="button">
-        Logout
-      </button>
     </div>
   );
 }
