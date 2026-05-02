@@ -34,6 +34,9 @@ import { Layout } from './components/Layout';
 import { StatCard } from './components/StatCard';
 import { StatusBadge } from './components/StatusBadge';
 import { Toast } from './components/Toast';
+import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
+import { DirectReportsListPage } from './profile/DirectReportsListPage';
+import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
 import { demoRoleAccounts, departments, events as seedEvents, notificationSummary, responses as seedResponses, users } from './mockData';
 import type { EventItem, NavKey, Role, SafetyResponse, ToastState, User } from './types';
 
@@ -56,6 +59,7 @@ function App() {
   const [events, setEvents] = useState<EventItem[]>(seedEvents);
   const [responses, setResponses] = useState<SafetyResponse[]>(seedResponses);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [profileSubordinateUserId, setProfileSubordinateUserId] = useState<string | null>(null);
   const [showActivateModal, setShowActivateModal] = useState(false);
   const [eventToActivate, setEventToActivate] = useState<string | null>(null);
   const [selectedEmployeeEventId, setSelectedEmployeeEventId] = useState(seedEvents.find((event) => event.status === 'active')?.id ?? seedEvents[0].id);
@@ -147,6 +151,39 @@ function App() {
     () => departments.find((d) => d.id === session.user?.departmentId)?.name ?? 'Unknown',
     [session.user],
   );
+
+  const profileDirectReportIds = useMemo(() => {
+    const uid = session.user?.id;
+    if (!uid) return new Set<string>();
+    return new Set(users.filter((u) => u.managerId === uid).map((u) => u.id));
+  }, [session.user?.id]);
+
+  const profileDirectReports = useMemo(() => {
+    const uid = session.user?.id;
+    if (!uid) return [];
+    return users.filter((u) => u.managerId === uid);
+  }, [session.user?.id]);
+
+  const profileHistorySubordinate = useMemo(
+    () => (profileSubordinateUserId ? users.find((u) => u.id === profileSubordinateUserId) ?? null : null),
+    [profileSubordinateUserId],
+  );
+
+  useEffect(() => {
+    const profileFamily = ['profile', 'profile-direct-reports-list', 'profile-direct-report-history'];
+    if (!profileFamily.includes(navKey)) setProfileSubordinateUserId(null);
+  }, [navKey]);
+
+  useEffect(() => {
+    if (!session.user?.id) return;
+    if (navKey === 'profile-direct-reports-list' && profileDirectReportIds.size === 0) setNavKey('profile');
+    if (navKey === 'profile-direct-report-history') {
+      if (!profileSubordinateUserId || !profileDirectReportIds.has(profileSubordinateUserId)) {
+        setProfileSubordinateUserId(null);
+        setNavKey('profile');
+      }
+    }
+  }, [navKey, session.user?.id, profileSubordinateUserId, profileDirectReportIds]);
 
   const employeeRows = useMemo(() => {
     if (!selectedSupervisorEvent && !selectedAdminEvent) return [];
@@ -311,7 +348,9 @@ function App() {
                 ? 'admin-dashboard'
                 : navKey === 'notifications-event-detail'
                   ? 'notifications'
-                  : navKey
+                  : navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history'
+                    ? 'profile'
+                    : navKey
         }
         onSwitchRole={pickRole}
         onSwitchNav={setNavKey}
@@ -431,7 +470,43 @@ function App() {
             onBackToEvents={() => setNavKey('notifications')}
           />
         )}
-        {navKey === 'profile' && <ProfilePage user={session.user!} departmentName={currentDepartment} />}
+        {navKey === 'profile' && (
+          <ProfileSettingsPage
+            user={session.user!}
+            departmentName={currentDepartment}
+            allUsers={users}
+            departments={departments}
+            showToast={showToast}
+            onLogout={logout}
+            onNavigateToDirectReportsList={() => setNavKey('profile-direct-reports-list')}
+            onNavigateToSubordinateHistory={(userId) => {
+              setProfileSubordinateUserId(userId);
+              setNavKey('profile-direct-report-history');
+            }}
+          />
+        )}
+        {navKey === 'profile-direct-reports-list' && (
+          <DirectReportsListPage
+            directReports={profileDirectReports}
+            departments={departments}
+            onBack={() => setNavKey('profile')}
+            onSelectSubordinate={(userId) => {
+              setProfileSubordinateUserId(userId);
+              setNavKey('profile-direct-report-history');
+            }}
+          />
+        )}
+        {navKey === 'profile-direct-report-history' && profileHistorySubordinate ? (
+          <DirectReportEventHistoryPage
+            subordinate={profileHistorySubordinate}
+            events={events}
+            responses={responses}
+            onBack={() => {
+              setProfileSubordinateUserId(null);
+              setNavKey('profile');
+            }}
+          />
+        ) : null}
       </Layout>
 
       <ConfirmModal
@@ -1854,22 +1929,6 @@ function NotificationPage({
             ))}
           </div>
         </section>
-      </div>
-    </section>
-  );
-}
-
-function ProfilePage({ user, departmentName }: { user: User; departmentName: string }) {
-  return (
-    <section className="page-section">
-      <h2>Profile & Settings</h2>
-      <div className="panel">
-        <p><strong>Name:</strong> {user.name}</p>
-        <p><strong>Email:</strong> {user.email}</p>
-        <p><strong>Department:</strong> {departmentName}</p>
-        <p><strong>Roles:</strong> {user.roles.join(', ')}</p>
-        <p><strong>Notification:</strong> {user.pushEnabled ? 'Push Enabled' : 'Push Not Enabled'}</p>
-        <button className="btn primary" type="button">Enable Push Notifications</button>
       </div>
     </section>
   );

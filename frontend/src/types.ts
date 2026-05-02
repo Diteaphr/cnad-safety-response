@@ -14,7 +14,9 @@ export type NavKey =
   | 'user-management'
   | 'notifications'
   | 'notifications-event-detail'
-  | 'profile';
+  | 'profile'
+  | 'profile-direct-reports-list'
+  | 'profile-direct-report-history';
 
 export interface User {
   id: string;
@@ -24,6 +26,14 @@ export interface User {
   roles: Role[];
   pushEnabled: boolean;
   managerId?: string | null;
+  /** 員工編號（畫面顯示） */
+  employeeCode?: string;
+  /** 職稱 */
+  jobTitle?: string;
+  /** 電話／手機（選填） */
+  phone?: string;
+  /** Teams / 即時訊息 ID（選填） */
+  teamsUsername?: string;
 }
 
 export interface Department {
