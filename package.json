@@ -9,7 +9,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev": "docker compose up --build"
+    "dev": "docker compose up --build",
+    "dev:detach": "docker compose up --build -d"
   },
   "repository": {
     "type": "git",

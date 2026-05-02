@@ -3,6 +3,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
     ports:
       - "3000:3000"
     depends_on:
@@ -10,41 +12,42 @@ services:
 
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/safety_db
+      - ENV=development
+      - USE_GCP=false
+      - DATABASE_URL=postgresql+psycopg://user:password@postgres:5432/employee_safety
       - REDIS_URL=redis://redis:6379/0
-      - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
-      - PROJECT_ID=cnad-safety-response
+      - REDIS_ENABLED=true
     depends_on:
-      - postgres
-      - redis
-      - pubsub-emulator
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   postgres:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: safety_db
+      POSTGRES_DB: employee_safety
     ports:
       - "15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d employee_safety"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-
-  pubsub-emulator:
-    image: gcr.io/google.com/cloudsdktool/cloud-sdk:emulators
-    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085
-    ports:
-      - "8085:8085"
 
 volumes:
   postgres_data:

@@ -1,110 +1,127 @@
 # CNAD Safety Response System
 
-Employee Safety & Response prototype for disaster-time status reporting.
+Employee safety reporting prototype: React SPA + FastAPI backend + PostgreSQL (three-layer API → service → repository). Follow the sections below to run **frontend, backend, and database** together.
 
-This repository currently contains:
-- a **frontend-first high-fidelity prototype** (React + TypeScript + PWA)
-- a lightweight backend service (FastAPI)
-- Docker-based local run setup
+---
 
-The focus is UX, role-based flows, and emergency response page behavior.
+## Prerequisites
 
-## What Is Implemented
+| Tool | Purpose |
+|------|---------|
+| **Git** | Clone this repository |
+| **Docker Desktop** (or Docker Engine + Compose v2) | Postgres, Redis, and optional all-in-one stack |
+| **Node.js 20+** | Local Vite dev server (`frontend/`) |
+| **Python 3.11+** | Run the API on your machine (optional hybrid workflow) |
 
-### Frontend (prototype-first)
-- Role-based demo login:
-  - Employee
-  - Supervisor
-  - Admin
-  - Multi-role (role selector page)
-- Event-first flow (2-step) for all roles:
-  1) choose event card
-  2) enter event detail page/dashboard
-- Employee flow:
-  - event list with ongoing/closed filter
-  - event detail + one-tap report (`I'm Safe` / `I Need Help`)
-  - optional location/comment/file attachment
-  - history page
-- Supervisor flow:
-  - event selection page
-  - event-specific dashboard with KPIs, pie chart, filters, and employee list
-  - reminder/export action buttons
-- Admin flow:
-  - event selection page
-  - global dashboard sections (overview, ranking, alerts, pending queue)
-  - event management page with template-style creation + activation confirmation
-  - user/department management page
-  - notification/reminder page (event-specific view)
-- Responsive UI:
-  - desktop sidebar
-  - mobile bottom nav + mobile logout fallback
+---
 
-### Backend
-- FastAPI app with basic health and mock-oriented endpoints.
-- Frontend currently relies on mock frontend state for most interactions.
-- Backend is retained for architecture direction and future integration.
+## First-time setup (after `git clone`)
 
-## Project Structure
+1. From the **repository root**, choose **one** path below:
+   - **Path A — Docker everything** (simplest for backend + DB + hosted UI)
+   - **Path B — Hybrid** (best for active frontend work: Vite hot reload + Docker DB)
 
-- `frontend/` React + TypeScript + Vite + PWA
-- `app/` FastAPI backend source
-- `docker-compose.yml` local multi-service stack
-- `docs/` architecture and notes
+2. You do **not** need `npm install` at the repo root unless you use the root npm scripts; root `package.json` only wires Docker commands.
 
-## Quick Start (Recommended)
+---
 
-### Prerequisites
-- Docker Desktop (running)
-- Node.js 20+ (optional if running frontend outside Docker)
+## Path A — Full stack in Docker (recommended to “just run it”)
 
-### Run with Docker
-From repo root:
+### Start
+
+From the **repository root**:
+
+```bash
+docker compose up --build -d
+```
+
+**Detached** (runs in background). To watch logs: `docker compose logs -f backend`.
+
+**Alternative:** attached logs in the current terminal (blocks until you press Ctrl+C):
 
 ```bash
 npm run dev
 ```
 
-This starts containers for:
-- frontend (`http://localhost:3000`)
-- backend (`http://localhost:8000`)
-- postgres (`localhost:5432`)
-- redis (`localhost:6379`)
-- pubsub emulator (`localhost:8085`)
+(`npm run dev` is the same as `docker compose up --build` **without** `-d`.)
 
-### Stop
+**Shortcut for detached:**
+
+```bash
+npm run dev:detach
+```
+
+Wait ~30–60s on first pull/build. Postgres must pass its healthcheck before the backend starts.
+
+### Verify
+
+| Check | Expected |
+|-------|----------|
+| [http://localhost:8000/health](http://localhost:8000/health) | JSON with `"status": "ok"` (and DB/redis fields) |
+| [http://localhost:8000/api/departments](http://localhost:8000/api/departments) | JSON with a `departments` array (404 ⇒ wrong/old backend image — rebuild: `docker compose up --build -d backend`) |
+| [http://localhost:3000](http://localhost:3000) | SPA (nginx). API calls use `/api/*` proxied to the `backend` service |
+
+### Default credentials (local Docker Postgres)
+
+Connect from your host (e.g. TablePlus, `psql`, DBeaver):
+
+```text
+Host:     127.0.0.1
+Port:     15432        ← mapped from container 5432; NOT 5432 on the host
+Database: employee_safety
+User:     user
+Password: password
+```
+
+### What runs automatically
+
+- **Migrations:** `alembic upgrade head` runs inside the backend container on startup.
+- **Demo seed:** if the `users` table is **empty**, startup inserts demo departments, users, events, and sample responses once.
+
+### Stop / reset
 
 ```bash
 docker compose down
 ```
 
-## Smooth Setup Tips (Important)
-
-### 1) Port 5432 conflict
-If startup fails with `address already in use` on `5432`, stop local postgres service first.
-
-Typical Homebrew case:
-```bash
-brew services stop postgresql@15
-```
-
-### 2) PWA cache / old UI showing
-Because frontend is a PWA, browser service worker may cache old assets.
-
-If UI looks outdated after rebuild:
-1. Hard refresh (`Cmd+Shift+R`)
-2. If still stale: DevTools -> Application -> Service Workers -> Unregister
-3. Clear site storage and reload
-
-### 3) Rebuild only frontend
-When CSS/TS changes are not reflected:
+Delete DB data (destructive):
 
 ```bash
-docker compose up --build -d frontend
+docker compose down -v
 ```
 
-## Local Frontend-Only Development (Optional)
+---
 
-If you prefer running frontend directly:
+## Path B — Vite + Docker Postgres/Redis + local FastAPI (recommended for frontend dev)
+
+Use this when you want hot reload and faster iteration. **Do not** run the Docker **frontend** container at the same time — it also binds port **3000**, same as Vite.
+
+1. **Stop** the compose frontend if it was running: `docker compose stop frontend` (or only start DB services — step 2).
+
+2. **Start only Postgres and Redis:**
+
+```bash
+docker compose up -d postgres redis
+```
+
+Wait until Postgres is ready (a few seconds). Confirm: `docker compose ps` shows `postgres` healthy.
+
+3. **Backend** (new terminal, always from **`backend/`** — Alembic and `app` imports assume this directory):
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+cp .env.example .env
+# Default DATABASE_URL uses localhost:15432 → Docker Postgres from root compose
+
+alembic upgrade head
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+4. **Frontend** (another terminal):
 
 ```bash
 cd frontend
@@ -112,33 +129,89 @@ npm install
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+Open **[http://localhost:3000](http://localhost:3000)** (Vite).  
+The dev server **proxies `/api` → `http://127.0.0.1:8000`**, so leave **`VITE_API_URL` unset** unless you intentionally want the browser to talk to the API directly.
 
-## Build Check
+Optional `frontend/.env`:
 
-Frontend production build:
+```env
+# Leave empty for dev proxy (recommended):
+# VITE_API_URL=
 
-```bash
-cd frontend
-npm run build
+# Or point at the API explicitly:
+# VITE_API_URL=http://127.0.0.1:8000
 ```
 
-Backend syntax check:
+Never set `VITE_API_URL` to `.../api` — paths already include `/api/...`.
 
-```bash
-python -m compileall app/main.py
+### Verify (hybrid)
+
+- [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) — OpenAPI
+- [http://127.0.0.1:8000/api/departments](http://127.0.0.1:8000/api/departments) — should return `200`
+- App at `http://localhost:3000` should load catalog without console `404` on `/api/*`
+
+---
+
+## Database URLs (reference)
+
+**Host machine → Docker Postgres** (from `docker-compose.yml`):
+
+```text
+postgresql+psycopg://user:password@127.0.0.1:15432/employee_safety
 ```
 
-## Demo Notes for Teammates
+**Container → Postgres** (hostname `postgres`, port `5432`):
 
-- This is a **prototype for system design/demo**.
-- Most interactions are mock/state-driven to prioritize UX and role flows.
-- Event cards are the entry point before dashboards/reporting pages.
-- Employee reporting page is intentionally the most simplified, high-priority UX.
+```text
+postgresql+psycopg://user:password@postgres:5432/employee_safety
+```
 
-## Next Suggested Work
+---
 
-- Add route-based URLs using `react-router-dom` (instead of state-only view switching)
-- Connect frontend pages to backend APIs progressively
-- Add persistent storage and auth integration
-- Expand charts/tables with real data pipeline
+## Authentication (quick reference)
+
+| Flow | Notes |
+|------|--------|
+| **Demo role login** (“Login with demo role”) | Uses seeded user IDs — **no password** stored for those users |
+| **Email + password** | Register via **Create account** on the login screen |
+
+---
+
+## Troubleshooting
+
+| Symptom | What to do |
+|---------|------------|
+| **`bind: address already in use` on port 3000** | Stop the Docker frontend (`docker compose stop frontend`) or stop another process on 3000. For Vite use another port: `npm run dev -- --port 5173`. |
+| **`connection refused` to Postgres** | Use port **15432** on the host when connecting to Docker Postgres. Ensure `docker compose ps` shows `postgres` running/healthy. |
+| **`404` on `/api/departments` etc.** | API must be **`backend/app`** (`cd backend && uvicorn ...`). From Docker: `docker compose up --build -d backend`. Do **not** run the legacy FastAPI app from the repo root `app/` package for this stack. |
+| **`ModuleNotFoundError` / wrong routes** | Run `uvicorn` and `alembic` only inside **`backend/`**. |
+| **Stale UI** | PWA service worker: hard refresh or DevTools → Application → Service Workers → Unregister. |
+
+---
+
+## Repository layout
+
+| Path | Purpose |
+|------|---------|
+| `frontend/` | React + TypeScript + Vite + PWA |
+| `backend/` | FastAPI, SQLAlchemy, Alembic, `/api/...` portal routes |
+| `docker-compose.yml` | Postgres, Redis, backend, frontend |
+| `app/` at repo root | Legacy / experimental — **not** the Postgres-backed API entrypoint for this project |
+
+---
+
+## Useful commands
+
+```bash
+# SPA production build
+cd frontend && npm run build
+
+# Inspect registered routes (from backend venv, cwd = backend)
+cd backend && python -c "from app.main import app; print([getattr(r,'path',r) for r in app.routes])"
+```
+
+---
+
+## License
+
+See repository metadata / team policy.
