@@ -40,6 +40,10 @@ export interface EventItem {
   targetDepartmentIds: string[];
   status: 'draft' | 'active' | 'closed';
   startAt: string;
+  /** 列表卡上顯示的部門／單位（如 R&D） */
+  cardDepartment?: string;
+  /** 列表卡上顯示的地點摘要 */
+  venue?: string;
 }
 
 export interface SafetyResponse {
@@ -49,6 +53,9 @@ export interface SafetyResponse {
   status: Exclude<SafetyStatus, 'pending'>;
   location?: string;
   comment?: string;
+  /** 最近一次上傳的檔名（不重存 binary，仅展示用） */
+  attachmentName?: string;
+  attachmentSizeBytes?: number;
   updatedAt: string;
 }
 

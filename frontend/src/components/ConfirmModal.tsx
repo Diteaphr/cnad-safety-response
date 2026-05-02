@@ -2,14 +2,18 @@ export function ConfirmModal({
   open,
   title,
   description,
+  cancelText = 'Cancel',
   confirmText,
+  confirmTone = 'danger',
   onCancel,
   onConfirm,
 }: {
   open: boolean;
   title: string;
   description: string;
+  cancelText?: string;
   confirmText: string;
+  confirmTone?: 'danger' | 'primary';
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -22,9 +26,9 @@ export function ConfirmModal({
         <p>{description}</p>
         <div className="modal-actions">
           <button className="btn ghost" onClick={onCancel} type="button">
-            Cancel
+            {cancelText}
           </button>
-          <button className="btn danger" onClick={onConfirm} type="button">
+          <button className={confirmTone === 'primary' ? 'btn primary' : 'btn danger'} onClick={onConfirm} type="button">
             {confirmText}
           </button>
         </div>
