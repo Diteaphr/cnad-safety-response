@@ -200,6 +200,45 @@ postgresql+psycopg://user:password@postgres:5432/employee_safety
 
 ---
 
+## Running tests
+
+Tests run inside the Docker backend container against a separate `employee_safety_test` database (automatically created on first startup).
+
+**Prerequisites:** make sure the full stack is running:
+
+```bash
+docker compose up -d
+```
+
+**Run all tests:**
+
+```bash
+docker compose exec backend pytest
+```
+
+**Common options:**
+
+```bash
+docker compose exec backend pytest tests/test_jwt.py        # single file
+docker compose exec backend pytest -x                        # stop on first failure
+docker compose exec backend pytest -s                        # show print / log output
+docker compose exec backend pytest -v                        # verbose (default)
+```
+
+**What is tested:**
+
+| File | Coverage |
+|------|----------|
+| `tests/test_jwt.py` | JWT token creation and validation (unit, no DB) |
+| `tests/test_auth.py` | `POST /api/auth/register`, `POST /api/auth/login` |
+| `tests/test_reports.py` | `POST /api/reports`, `GET /api/reports/me` |
+| `tests/test_reminders.py` | `POST /api/events/{id}/reminders` (supervisor role, idempotency) |
+| `tests/test_notifications.py` | `GET /api/notifications/me` |
+
+> **Isolation:** each test truncates all tables before running. The test database (`employee_safety_test`) is fully separate from the development database (`employee_safety`) — running tests never affects your local data.
+
+---
+
 ## Useful commands
 
 ```bash
