@@ -12,19 +12,24 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.jwt import create_access_token
 from app.core.passwords import hash_password, verify_password
 from app.models.event import Event
+from app.models.notification import Notification
 from app.models.role import Role
 from app.models.safety_response import SafetyResponse
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.event_repository import EventRepository
+from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.portal import CreateEventIn, LoginIn, RegisterIn, ReportIn
-from app.services.safety_response_service import SafetyResponseService
 from app.schemas.response import SafetyResponseCreate
+from app.services.integrations.mock_notification_channels import send_fcm_mock
+from app.services.notification_service import NotificationService
+from app.services.safety_response_service import SafetyResponseService
 
 
 def _parse_iso(dt: str) -> datetime:
@@ -43,7 +48,9 @@ class PortalService:
         self._depts = DepartmentRepository()
         self._events = EventRepository()
         self._responses = SafetyResponseRepository()
+        self._notifications = NotificationRepository()
         self._response_svc = SafetyResponseService()
+        self._notif_svc = NotificationService()
 
     def _user_out(self, user: User) -> dict[str, Any]:
         roles = _role_names(user)
@@ -455,4 +462,95 @@ class PortalService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password.",
             )
-        return {"user": self._user_out(user)}
+        roles = _role_names(user)
+        token = create_access_token(user.user_id, roles)
+        return {
+            "user": self._user_out(user),
+            "access_token": token,
+            "token_type": "bearer",
+        }
+
+    # ------------------------------------------------------------------
+    # Notifications
+    # ------------------------------------------------------------------
+
+    def _notif_out(self, n: Notification) -> dict[str, Any]:
+        return {
+            "id": str(n.notification_id),
+            "eventId": str(n.event_id),
+            "channel": n.channel,
+            "status": n.status,
+            "sentAt": n.sent_at.isoformat() if n.sent_at else None,
+        }
+
+    def notifications_for_user(
+        self, db: Session, user_id: uuid.UUID
+    ) -> list[dict[str, Any]]:
+        if self._users.get_by_id(db, user_id) is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        rows = self._notifications.list_for_user(db, user_id)
+        return [self._notif_out(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Supervisor: send reminders
+    # ------------------------------------------------------------------
+
+    def send_reminders(
+        self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID
+    ) -> dict[str, Any]:
+        actor = self._users.get_by_id(db, actor_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if "supervisor" not in _role_names(actor):
+            raise HTTPException(status_code=403, detail="Supervisor only")
+
+        ev = self._events.get_by_id(db, event_id)
+        if ev is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        if ev.status != "active":
+            raise HTTPException(status_code=400, detail="Event is not active")
+
+        team_users = [
+            u
+            for u in self._users.list_subordinates(db, actor_id)
+            if "employee" in _role_names(u)
+        ]
+
+        reports = self._responses.list_for_event(db, event_id)
+        latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
+        for r in reports:
+            prev = latest_by_user.get(r.user_id)
+            if prev is None or r.responded_at > prev.responded_at:
+                latest_by_user[r.user_id] = r
+
+        sent = 0
+        already_safe = 0
+
+        def _make_send_fn(target_user: User, event_title: str, eid: uuid.UUID):
+            return lambda: send_fcm_mock(
+                device_token=str(target_user.user_id),
+                title="安全確認提醒",
+                body=f"請盡快回報您的安全狀態：{event_title}",
+                data={"event_id": str(eid)},
+            )
+
+        for user in team_users:
+            lr = latest_by_user.get(user.user_id)
+            if lr is not None and lr.status == "safe":
+                already_safe += 1
+                continue
+            self._notif_svc.deliver_with_idempotency(
+                db,
+                event_id=event_id,
+                user_id=user.user_id,
+                channel="fcm_reminder",
+                send_fn=_make_send_fn(user, ev.title, event_id),
+            )
+            sent += 1
+
+        return {
+            "message": "Reminders sent",
+            "sent": sent,
+            "already_safe": already_safe,
+            "total_team": len(team_users),
+        }

@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import Annotated
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.core.jwt import decode_token
+
+_bearer = HTTPBearer()
 
 
-async def get_actor_user_id(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
 ) -> uuid.UUID:
-    if not x_user_id:
+    payload = decode_token(credentials.credentials)
+    try:
+        return uuid.UUID(payload["sub"])
+    except (KeyError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing X-User-Id header (minimal auth stub).",
-        )
-    try:
-        return uuid.UUID(x_user_id.strip())
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid X-User-Id UUID.",
+            detail="Invalid token payload.",
         ) from e

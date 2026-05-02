@@ -6,12 +6,15 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 COPY requirements.txt .
+COPY requirements-test.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements-test.txt
 
 COPY alembic.ini alembic.ini
+COPY pytest.ini pytest.ini
 COPY alembic ./alembic
 COPY app ./app
+COPY tests ./tests
 
 EXPOSE 8000
 

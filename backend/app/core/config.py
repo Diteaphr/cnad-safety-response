@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     use_pubsub_emulator: bool = False
     pubsub_emulator_host: str = "localhost:8085"
 
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str = "change-me-in-production-use-strong-secret"
 
     model_config = SettingsConfigDict(
         env_file=".env",

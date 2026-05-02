@@ -4,6 +4,7 @@ sqlalchemy>=2.0.0
 psycopg[binary]>=3.1.0
 alembic>=1.11.0
 redis>=5.0.0
+PyJWT>=2.8.0
 # Production GCP Pub/Sub (uncomment when enabling real publishers):
 # google-cloud-pubsub>=2.18.0
 pydantic-settings>=2.0.0

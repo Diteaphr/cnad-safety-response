@@ -21,6 +21,16 @@ class NotificationRepository:
         )
         return db.execute(stmt).scalar_one_or_none()
 
+    def list_for_user(
+        self, db: Session, user_id: uuid.UUID
+    ) -> list[Notification]:
+        stmt = (
+            select(Notification)
+            .where(Notification.user_id == user_id)
+            .order_by(Notification.sent_at.desc())
+        )
+        return list(db.scalars(stmt).all())
+
     def create_or_update_status(
         self,
         db: Session,
