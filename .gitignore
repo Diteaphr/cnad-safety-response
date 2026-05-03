@@ -1,10 +1,16 @@
 .secrets/
 __pycache__/
 .env
+.env.local
+.env.*.local
 .venv/
 venv/
 .vscode/
 .DS_Store
+.idea/
+
+# 作業題目／本地備份：`CNAD_*.pdf`（非程式碼）；刻意納版請 `git add -f`
+**/CNAD_*.pdf
 
 # Node/Frontend
 node_modules/
