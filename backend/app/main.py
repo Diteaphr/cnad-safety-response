@@ -21,6 +21,7 @@ app.include_router(portal.router)
 
 @app.on_event("startup")
 def _seed_demo_if_empty() -> None:
+    """初次空庫時灌種子。**不**強制重置；強制清庫請用 scripts/dev_reseed_demo.py."""
     db = SessionLocal()
     try:
         run_if_empty(db)

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.schemas.portal import CreateEventIn, EventActionIn, LoginIn, RegisterIn, ReportIn
+from app.schemas.portal import CreateEventIn, DemoLoginIn, EventActionIn, LoginIn, RegisterIn, ReportIn
 from app.services.portal_service import PortalService
 
 router = APIRouter(prefix="/api", tags=["portal"])
@@ -64,6 +64,11 @@ def register_account(payload: RegisterIn, db: Session = Depends(get_db)):
 @router.post("/auth/login")
 def login_with_email(payload: LoginIn, db: Session = Depends(get_db)):
     return _portal.login(db, payload)
+
+
+@router.post("/auth/demo-login")
+def demo_login(payload: DemoLoginIn, db: Session = Depends(get_db)):
+    return _portal.issue_demo_login_token(db, user_id_str=payload.userId.strip())
 
 
 # ------------------------------------------------------------------

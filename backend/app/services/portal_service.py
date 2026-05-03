@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.jwt import create_access_token
 from app.core.passwords import hash_password, verify_password
 from app.models.event import Event
@@ -462,6 +463,34 @@ class PortalService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password.",
             )
+        roles = _role_names(user)
+        token = create_access_token(user.user_id, roles)
+        return {
+            "user": self._user_out(user),
+            "access_token": token,
+            "token_type": "bearer",
+        }
+
+    def issue_demo_login_token(self, db: Session, *, user_id_str: str) -> dict[str, Any]:
+        """僅發給種子資料的 Demo 使用者，供 SPA 下拉登入不需密碼。生產 env 請關閉。"""
+        if settings.env.lower() in ("production", "prod"):
+            raise HTTPException(
+                status_code=403,
+                detail="Demo authentication is disabled in production.",
+            )
+        try:
+            uid = uuid.UUID(user_id_str.strip())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid user id.") from e
+        allowed_ids = {acc["userId"] for acc in self.demo_accounts()}
+        if str(uid) not in allowed_ids:
+            raise HTTPException(
+                status_code=403,
+                detail="Demo login is restricted to seeded demo accounts.",
+            )
+        user = self._users.get_by_id(db, uid)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
         roles = _role_names(user)
         token = create_access_token(user.user_id, roles)
         return {

@@ -195,6 +195,16 @@ export async function loginWithEmailApi(body: {
   return data;
 }
 
+/** Demo 下拉登入後取得 JWT，否則受保護的 POST（如 /api/reports）會 401/403 Not authenticated */
+export async function loginDemoUserApi(userId: string): Promise<{ user: User; access_token: string; token_type: string }> {
+  clearAccessToken();
+  const data = await apiFetch<{ user: User; access_token: string; token_type: string }>('/api/auth/demo-login', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+  setAccessToken(data.access_token);
+  return data;
+}
 export async function submitReportApi(payload: {
   eventId: string;
   userId: string;

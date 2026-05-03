@@ -3,10 +3,9 @@ export type Role = 'employee' | 'supervisor' | 'admin';
 export type SafetyStatus = 'safe' | 'need_help' | 'pending';
 
 export type NavKey =
-  | 'employee-home'
+  | 'member-home'
   | 'employee-event-detail'
   | 'employee-history'
-  | 'supervisor-dashboard'
   | 'supervisor-event-detail'
   | 'admin-dashboard'
   | 'admin-event-detail'

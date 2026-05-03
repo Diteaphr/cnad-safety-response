@@ -1,13 +1,19 @@
-"""Insert demo users/events/responses if DB is empty (local testing)."""
+"""種子假資料。
+
+- ``run_if_empty``：後端 startup 呼叫，若 **尚無使用者** 則灌入一次。
+- ``reset_and_seed_demo``：**不會**被 API / 排程 / startup 自動呼叫，
+  僅供你用 ``scripts/dev_reseed_demo.py`` 在終端機 **手動、一次性**重灌開發資料庫。
+"""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.core.base import Base
 from app.models.department import Department
 from app.models.event import Event
 from app.models.event_department import EventDepartment
@@ -17,18 +23,29 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.seeding import ids
 
+_SKIP_TRUNCATE_TABLES = frozenset({"roles", "alembic_version"})
+
 
 def _role_id(db: Session, name: str) -> uuid.UUID:
     rid = db.execute(select(Role.role_id).where(Role.role_name == name)).scalar_one()
     return rid
 
 
-def run_if_empty(db: Session) -> bool:
-    """Return True if seeding ran."""
-    n = db.execute(select(func.count()).select_from(User)).scalar_one()
-    if n and n > 0:
-        return False
+def clear_demo_tables_keep_roles(db: Session) -> None:
+    """清空業務資料，保留 migrations 種入的 roles。"""
+    import app.models as _models  # noqa: F401 — 載入 Notification 等，註冊至 metadata
 
+    q = ", ".join(
+        f'"{t.name}"' for t in Base.metadata.sorted_tables if t.name not in _SKIP_TRUNCATE_TABLES
+    )
+    if not q:
+        raise RuntimeError("No tables to truncate (metadata empty?)")
+    db.execute(text(f"TRUNCATE TABLE {q} CASCADE"))
+    db.commit()
+
+
+def insert_demo_entities(db: Session) -> None:
+    """寫入與 ids.py 對齊的假資料（假設 roles 已存在）。"""
     role_employee = _role_id(db, "employee")
     role_supervisor = _role_id(db, "supervisor")
     role_admin = _role_id(db, "admin")
@@ -185,4 +202,25 @@ def run_if_empty(db: Session) -> bool:
         )
 
     db.commit()
+
+
+def reset_and_seed_demo(db: Session) -> None:
+    """刪除業務資料表列並重灌種子；**無路由、無常駐程序**，僅由開發 CLI 手動呼叫。"""
+    from app.core.config import settings
+
+    if settings.env.lower() in ("production", "prod"):
+        raise RuntimeError(
+            '拒絕在 production 執行重灌。將 backend .env 的 env 調成 development，'
+            "或確認你不在正式環境執行此腳本。"
+        )
+    clear_demo_tables_keep_roles(db)
+    insert_demo_entities(db)
+
+
+def run_if_empty(db: Session) -> bool:
+    """Return True if seeding ran."""
+    n = db.execute(select(func.count()).select_from(User)).scalar_one()
+    if n and n > 0:
+        return False
+    insert_demo_entities(db)
     return True

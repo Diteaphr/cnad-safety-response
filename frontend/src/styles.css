@@ -1878,10 +1878,6 @@ button.employee-events-card:hover .employee-events-card-inner {
   box-shadow: 0 6px 20px rgba(15, 39, 66, 0.09);
 }
 
-button.employee-events-card.is-selected .employee-events-card-inner {
-  box-shadow: 0 0 0 2px #0f2742, 0 2px 10px rgba(15, 39, 66, 0.06);
-}
-
 .employee-events-card-inner {
   display: flex;
   align-items: stretch;
@@ -2586,5 +2582,157 @@ button.employee-events-card.is-selected .employee-events-card-inner {
     justify-content: center;
   }
 
+}
+
+/* Unified member event home — dual-entry & team-only cards */
+.member-event-shell {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #e5edf5;
+  box-shadow: 0 2px 10px rgba(15, 39, 66, 0.06);
+  background: #fff;
+  transition: box-shadow 0.12s ease;
+}
+
+.member-event-shell:hover {
+  box-shadow: 0 6px 20px rgba(15, 39, 66, 0.09);
+}
+
+.member-event-shell-top.employee-events-card-inner {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.member-event-shell-top-main.employee-events-card-main {
+  grid-template-columns: auto 1fr;
+  min-height: 0;
+}
+
+button.member-event-shell.member-event-shell--team-only.member-event-team-fullbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.member-event-shell--team-only.member-event-team-fullbtn:hover {
+  box-shadow: 0 6px 20px rgba(15, 39, 66, 0.09);
+}
+
+.member-event-dual-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  margin: 0;
+  background: #f6f9fc;
+  border-top: 1px solid #e5edf5;
+}
+
+@media (max-width: 720px) {
+  .member-event-dual-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.member-event-action-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
+}
+
+.member-event-action-tile:hover {
+  border-color: #d1dbe8;
+  box-shadow: 0 2px 8px rgba(15, 39, 66, 0.07);
+}
+
+.member-event-action-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0f2742;
+}
+
+.member-event-action-summary {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 2.75rem;
+}
+
+.member-event-action-summary--team .member-event-team-mini-badges {
+  flex: 1;
+  justify-content: flex-start;
+}
+
+.member-event-action-chevron {
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.member-event-team-mini-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.member-team-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.member-team-pill.safe {
+  background: rgba(52, 211, 153, 0.2);
+  color: #065f46;
+}
+
+.member-team-pill.danger {
+  background: rgba(248, 113, 113, 0.24);
+  color: #991b1b;
+}
+
+.member-team-pill.muted {
+  background: #e9eef5;
+  color: #5a738f;
+}
+
+.member-event-team-only-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+  margin: 0;
+  border-top: 1px solid #e5edf5;
+  background: #f6f9fc;
+}
+
+.member-event-team-only-summary {
+  min-height: 0;
 }
 

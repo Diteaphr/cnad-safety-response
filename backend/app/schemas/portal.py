@@ -82,3 +82,9 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+
+
+class DemoLoginIn(BaseModel):
+    """與前端 Demo 下拉一致的 userId（種子使用者 UUID）；見 GET /api/demo-accounts。"""
+
+    userId: str = Field(min_length=1, max_length=64)

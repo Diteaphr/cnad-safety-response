@@ -5,12 +5,12 @@ import type { NavKey, Role } from '../types';
 
 const navByRole: Record<Role, Array<{ key: NavKey; label: string }>> = {
   employee: [
-    { key: 'employee-home', label: 'Home' },
+    { key: 'member-home', label: 'Events' },
     { key: 'employee-history', label: 'History' },
     { key: 'profile', label: 'Profile' },
   ],
   supervisor: [
-    { key: 'supervisor-dashboard', label: 'Dashboard' },
+    { key: 'member-home', label: 'Events' },
     { key: 'notifications', label: 'Reminders' },
     { key: 'profile', label: 'Profile' },
   ],

@@ -48,6 +48,7 @@ import {
   getEvents,
   getReports,
   getUsers,
+  loginDemoUserApi,
   loginWithEmailApi,
   registerApi,
   submitReportApi,
@@ -66,14 +67,14 @@ interface SessionState {
 }
 
 const roleDefaultNav: Record<Role, NavKey> = {
-  employee: 'employee-home',
-  supervisor: 'supervisor-dashboard',
+  employee: 'member-home',
+  supervisor: 'member-home',
   admin: 'admin-dashboard',
 };
 
 function App() {
   const [session, setSession] = useState<SessionState>({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
-  const [navKey, setNavKey] = useState<NavKey>('employee-home');
+  const [navKey, setNavKey] = useState<NavKey>('member-home');
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -169,7 +170,18 @@ function App() {
     [employeeAccessibleEvents],
   );
 
-  const employeeListRows = useMemo(() => {
+  const subordinateUserIds = useMemo(
+    () => users.filter((user) => user.managerId === session.user?.id).map((user) => user.id),
+    [users, session.user?.id],
+  );
+
+  const hasDirectReports = subordinateUserIds.length > 0;
+  const hasManager = Boolean(session.user?.managerId);
+
+  /** 1:僅個人回報 2:回報＋團隊 3:僅團隊 */
+  const memberHomeMode: 1 | 2 | 3 = !hasDirectReports ? 1 : hasManager ? 2 : 3;
+
+  const memberListRows = useMemo(() => {
     const uid = session.user?.id;
     if (!uid || !employeeDeptId) return [];
     const tabStatus = employeeEventFilter === 'ongoing' ? 'active' : 'closed';
@@ -181,31 +193,68 @@ function App() {
         return hay.includes(q);
       });
     }
-    const enriched = list.map((event) => ({
-      event,
-      latest: responses
+    let enriched = list.map((event) => {
+      const latest = responses
         .filter((r) => r.eventId === event.id && r.userId === uid)
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0],
-    }));
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+
+      let teamCounts:
+        | { total: number; safe: number; needHelp: number; pending: number }
+        | undefined;
+
+      if (subordinateUserIds.length > 0) {
+        let safe = 0;
+        let needHelp = 0;
+        let pending = 0;
+        for (const sid of subordinateUserIds) {
+          const lr = responses
+            .filter((r) => r.eventId === event.id && r.userId === sid)
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+          if (!lr) pending += 1;
+          else if (lr.status === 'safe') safe += 1;
+          else needHelp += 1;
+        }
+        teamCounts = {
+          total: subordinateUserIds.length,
+          safe,
+          needHelp,
+          pending,
+        };
+      }
+
+      return { event, latest, teamCounts };
+    });
 
     if (employeeEventFilter === 'ongoing') {
-      enriched.sort((a, b) => {
-        const ap = a.latest ? 1 : 0;
-        const bp = b.latest ? 1 : 0;
-        if (ap !== bp) return ap - bp;
-        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
-      });
+      if (memberHomeMode === 3) {
+        enriched.sort((a, b) => {
+          const pendA = a.teamCounts?.pending ?? 0;
+          const pendB = b.teamCounts?.pending ?? 0;
+          if (pendA !== pendB) return pendB - pendA;
+          return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+        });
+      } else {
+        enriched.sort((a, b) => {
+          const ap = a.latest ? 1 : 0;
+          const bp = b.latest ? 1 : 0;
+          if (ap !== bp) return ap - bp;
+          return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+        });
+      }
     } else {
       enriched.sort((a, b) => new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime());
     }
+
     return enriched;
   }, [
     employeeAccessibleEvents,
     employeeDeptId,
     employeeEventFilter,
     employeeListSearch,
+    memberHomeMode,
     responses,
     session.user?.id,
+    subordinateUserIds,
   ]);
   const selectedEmployeeEvent = useMemo(
     () => events.find((event) => event.id === selectedEmployeeEventId) ?? null,
@@ -295,26 +344,38 @@ function App() {
     window.setTimeout(() => setToast(null), 2200);
   };
 
-  const handleLogin = (demoId: string) => {
+  const handleLogin = async (demoId: string) => {
     clearAccessToken();
     const account = demoAccountsForLogin.find((item) => item.id === demoId);
     if (!account) return;
-    const selectedUser = users.find((u) => u.id === account.userId);
-    if (!selectedUser) {
+    const cachedUser = users.find((u) => u.id === account.userId);
+    if (!cachedUser) {
       showToast({
         tone: 'danger',
         message: '載入使用者清單後才能 Demo 登入。請確認 /api/users 可走通並重新整理頁面。',
       });
       return;
     }
-    const initialRole = account.roles[0];
-    setSession({
-      isLoggedIn: true,
-      user: selectedUser,
-      availableRoles: account.roles,
-      currentRole: account.roles.length === 1 ? initialRole : null,
-    });
-    setNavKey(roleDefaultNav[initialRole]);
+    try {
+      const { user: tokenUser } = await loginDemoUserApi(cachedUser.id);
+      mergeUserIntoList(tokenUser);
+      const initialRole = account.roles[0];
+      setSession({
+        isLoggedIn: true,
+        user: tokenUser,
+        availableRoles: account.roles,
+        currentRole: account.roles.length === 1 ? initialRole : null,
+      });
+      setNavKey(roleDefaultNav[initialRole]);
+    } catch (e) {
+      showToast({
+        tone: 'danger',
+        message:
+          e instanceof Error
+            ? e.message
+            : 'Demo 登入未取得 JWT（後端請升級並啟動 /api/auth/demo-login）；暫請改用 Email 登入。',
+      });
+    }
   };
 
   const mergeUserIntoList = (user: User) => {
@@ -419,6 +480,7 @@ function App() {
       if (updated) {
         setSelectedAdminEventId(updated.id);
         setSelectedSupervisorEventId(updated.id);
+        setSelectedEmployeeEventId(updated.id);
       }
       setShowActivateModal(false);
       setEventToActivate(null);
@@ -497,29 +559,33 @@ function App() {
         currentRole={session.currentRole}
         roleOptions={session.availableRoles}
         currentNav={
-          navKey === 'employee-event-detail'
-            ? 'employee-home'
-            : navKey === 'supervisor-event-detail'
-              ? 'supervisor-dashboard'
-              : navKey === 'admin-event-detail'
-                ? 'admin-dashboard'
-                : navKey === 'notifications-event-detail'
-                  ? 'notifications'
-                  : navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history'
-                    ? 'profile'
-                    : navKey
+          navKey === 'employee-event-detail' || navKey === 'supervisor-event-detail'
+            ? 'member-home'
+            : navKey === 'admin-event-detail'
+              ? 'admin-dashboard'
+              : navKey === 'notifications-event-detail'
+                ? 'notifications'
+                : navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history'
+                  ? 'profile'
+                  : navKey
         }
         onSwitchRole={pickRole}
         onSwitchNav={setNavKey}
         onLogout={logout}
       >
-        {navKey === 'employee-home' && (
-          <EmployeeEventListPage
-            rows={employeeListRows}
-            selectedEventId={selectedEmployeeEventId}
-            onSelectEvent={(eventId) => {
+        {navKey === 'member-home' && session.currentRole !== 'admin' && (
+          <MemberEventListPage
+            mode={memberHomeMode}
+            rows={memberListRows}
+            selectedPersonalEventId={selectedEmployeeEventId}
+            selectedTeamEventId={selectedSupervisorEventId}
+            onOpenPersonal={(eventId) => {
               setSelectedEmployeeEventId(eventId);
               setNavKey('employee-event-detail');
+            }}
+            onOpenTeam={(eventId) => {
+              setSelectedSupervisorEventId(eventId);
+              setNavKey('supervisor-event-detail');
             }}
             employeeEventFilter={employeeEventFilter}
             setEmployeeEventFilter={setEmployeeEventFilter}
@@ -544,7 +610,7 @@ function App() {
             employeeAttachment={employeeAttachment}
             setEmployeeAttachment={setEmployeeAttachment}
             onSubmit={submitEmployeeStatus}
-            onBackToEvents={() => setNavKey('employee-home')}
+            onBackToEvents={() => setNavKey('member-home')}
           />
         )}
         {navKey === 'employee-history' && (
@@ -553,17 +619,6 @@ function App() {
             events={events}
             filter={historyFilter}
             setFilter={setHistoryFilter}
-          />
-        )}
-        {navKey === 'supervisor-dashboard' && (
-          <EventSelectionPage
-            title="Supervisor Event Center"
-            events={events.filter((event) => event.status !== 'draft')}
-            selectedEventId={selectedSupervisorEventId}
-            onSelectEvent={(eventId) => {
-              setSelectedSupervisorEventId(eventId);
-              setNavKey('supervisor-event-detail');
-            }}
           />
         )}
         {navKey === 'supervisor-event-detail' && (
@@ -576,7 +631,7 @@ function App() {
             setSearchText={setSearchText}
             onSendReminder={() => showToast({ tone: 'warning', message: 'Reminder sent to non-responders.' })}
             onExport={() => showToast({ tone: 'info', message: 'Report exported and email queued.' })}
-            onBackToEvents={() => setNavKey('supervisor-dashboard')}
+            onBackToEvents={() => setNavKey('member-home')}
           />
         )}
         {navKey === 'admin-dashboard' && (
@@ -691,7 +746,7 @@ function LoginPage({
   accounts: DemoAccount[];
   loading: boolean;
   error: string | null;
-  onLogin: (demoId: string) => void;
+  onLogin: (demoId: string) => void | Promise<void>;
   onEmailLogin: (email: string, password: string) => Promise<void>;
   onGoRegister: () => void;
 }) {
@@ -768,7 +823,7 @@ function LoginPage({
         </label>
         <button
           className="btn ghost"
-          onClick={() => onLogin(demoId)}
+          onClick={() => void onLogin(demoId)}
           type="button"
           disabled={loading || accounts.length === 0}
         >
@@ -1063,10 +1118,232 @@ function EmployeeEventListCard({
   );
 }
 
-function EmployeeEventListPage({
+type MemberHomeRow = {
+  event: EventItem;
+  latest?: SafetyResponse;
+  teamCounts?: { total: number; safe: number; needHelp: number; pending: number };
+};
+
+function MemberEventDualCard({
+  event,
+  latest,
+  teamCounts,
+  filterTab,
+  selectedPersonalEventId,
+  selectedTeamEventId,
+  onOpenPersonal,
+  onOpenTeam,
+}: {
+  event: EventItem;
+  latest?: SafetyResponse;
+  teamCounts: { total: number; safe: number; needHelp: number; pending: number };
+  filterTab: 'ongoing' | 'closed';
+  selectedPersonalEventId: string;
+  selectedTeamEventId: string;
+  onOpenPersonal: (eventId: string) => void;
+  onOpenTeam: (eventId: string) => void;
+}) {
+  const Icon = employeeEventTypeIcon(event.type);
+  const deptLabel = event.cardDepartment ?? '';
+  const isOngoingTab = filterTab === 'ongoing';
+  const pending = !latest && isOngoingTab;
+  const stripeClass =
+    !isOngoingTab ? 'muted' : pending ? 'pending' : latest?.status === 'need_help' ? 'danger' : 'safe';
+
+  const personalMini = isOngoingTab ? (
+    <>
+      {!latest ? (
+        <span className="employee-events-status-pill pending">
+          <Hourglass size={14} strokeWidth={2} aria-hidden />
+          Pending response
+        </span>
+      ) : latest.status === 'safe' ? (
+        <span className="employee-events-status-pill safe">
+          <CheckCircle2 size={14} strokeWidth={2} aria-hidden />
+          I&apos;m Safe
+        </span>
+      ) : (
+        <span className="employee-events-status-pill danger">
+          <AlertCircle size={14} strokeWidth={2} aria-hidden />
+          I need help
+        </span>
+      )}
+    </>
+  ) : (
+    <>
+      <span className="employee-events-status-pill closed">Closed</span>
+      {latest?.status === 'safe' ? (
+        <span className="employee-events-closed-safe">
+          <CheckCircle2 size={14} className="text-safe" aria-hidden />
+          Personal · Safe
+        </span>
+      ) : latest?.status === 'need_help' ? (
+        <span className="employee-events-closed-safe danger-text">
+          <AlertCircle size={14} aria-hidden />
+          Personal · Need help
+        </span>
+      ) : (
+        <span className="employee-events-status-hint muted">No personal submission</span>
+      )}
+    </>
+  );
+
+  const teamMini = (
+    <div className="member-event-team-mini-badges" role="group" aria-label="Team response summary">
+      <span className="member-team-pill safe">
+        <CheckCircle2 size={12} strokeWidth={2.25} aria-hidden />
+        {teamCounts.safe} Safe
+      </span>
+      <span className={`member-team-pill${teamCounts.needHelp > 0 ? ' danger' : ''}`}>
+        <AlertCircle size={12} strokeWidth={2.25} aria-hidden />
+        {teamCounts.needHelp} Need help
+      </span>
+      <span className="member-team-pill muted">
+        <Hourglass size={12} strokeWidth={2} aria-hidden />
+        {teamCounts.pending} Pending
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="member-event-shell">
+      <div className="member-event-shell-top employee-events-card-inner">
+        <div className={`employee-events-card-stripe ee-stripe-bg-${stripeClass}`} aria-hidden />
+        <div className="employee-events-card-main member-event-shell-top-main">
+          <div className="employee-events-card-icon" aria-hidden>
+            <Icon size={22} strokeWidth={1.85} />
+          </div>
+          <div className="employee-events-card-body">
+            <div className="employee-events-card-title">{event.title}</div>
+            <div className="employee-events-meta">
+              <span className="employee-events-meta-dot">
+                {event.type}
+                {deptLabel ? <> · {deptLabel}</> : null}
+              </span>
+            </div>
+            <div className="employee-events-meta subtle">{formatEmployeeCardTime(event.startAt)}</div>
+            {event.venue ? <div className="employee-events-meta subtle">{event.venue}</div> : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="member-event-dual-actions">
+        <button
+          type="button"
+          className={`member-event-action-tile member-event-action-tile--personal${
+            selectedPersonalEventId === event.id ? ' is-selected' : ''
+          }`}
+          onClick={() => onOpenPersonal(event.id)}
+        >
+          <span className="member-event-action-label">Your response</span>
+          <div className="member-event-action-summary">
+            <div>{personalMini}</div>
+            <ChevronRight className="member-event-action-chevron" size={18} strokeWidth={2.25} aria-hidden />
+          </div>
+        </button>
+        <button
+          type="button"
+          className={`member-event-action-tile member-event-action-tile--team${
+            selectedTeamEventId === event.id ? ' is-selected' : ''
+          }`}
+          onClick={() => onOpenTeam(event.id)}
+        >
+          <span className="member-event-action-label">Team overview ({teamCounts.total})</span>
+          <div className="member-event-action-summary member-event-action-summary--team">
+            <div>{teamMini}</div>
+            <ChevronRight className="member-event-action-chevron" size={18} strokeWidth={2.25} aria-hidden />
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MemberEventTeamCard({
+  event,
+  teamCounts,
+  filterTab,
+  selectedTeamEventId,
+  onOpenTeam,
+}: {
+  event: EventItem;
+  teamCounts: { total: number; safe: number; needHelp: number; pending: number };
+  filterTab: 'ongoing' | 'closed';
+  selectedTeamEventId: string;
+  onOpenTeam: (eventId: string) => void;
+}) {
+  const Icon = employeeEventTypeIcon(event.type);
+  const deptLabel = event.cardDepartment ?? '';
+  const isOngoingTab = filterTab === 'ongoing';
+  let stripeClass: string;
+  if (!isOngoingTab) stripeClass = 'muted';
+  else if (teamCounts.needHelp > 0) stripeClass = 'danger';
+  else if (teamCounts.pending > 0) stripeClass = 'pending';
+  else if (teamCounts.safe > 0) stripeClass = 'safe';
+  else stripeClass = 'muted';
+
+  const teamMini = (
+    <div className="member-event-team-mini-badges" role="group" aria-label="Team response summary">
+      <span className="member-team-pill safe">
+        <CheckCircle2 size={12} strokeWidth={2.25} aria-hidden />
+        {teamCounts.safe} Safe
+      </span>
+      <span className={`member-team-pill${teamCounts.needHelp > 0 ? ' danger' : ''}`}>
+        <AlertCircle size={12} strokeWidth={2.25} aria-hidden />
+        {teamCounts.needHelp} Need help
+      </span>
+      <span className="member-team-pill muted">
+        <Hourglass size={12} strokeWidth={2} aria-hidden />
+        {teamCounts.pending} Pending
+      </span>
+    </div>
+  );
+
+  return (
+    <button
+      type="button"
+      className={`member-event-shell member-event-shell--team-only member-event-team-fullbtn${
+        selectedTeamEventId === event.id ? ' is-selected' : ''
+      }`}
+      onClick={() => onOpenTeam(event.id)}
+    >
+      <div className="member-event-shell-top employee-events-card-inner">
+        <div className={`employee-events-card-stripe ee-stripe-bg-${stripeClass}`} aria-hidden />
+        <div className="employee-events-card-main member-event-shell-top-main">
+          <div className="employee-events-card-icon" aria-hidden>
+            <Icon size={22} strokeWidth={1.85} />
+          </div>
+          <div className="employee-events-card-body">
+            <div className="employee-events-card-title">{event.title}</div>
+            <div className="employee-events-meta">
+              <span className="employee-events-meta-dot">
+                {event.type}
+                {deptLabel ? <> · {deptLabel}</> : null}
+              </span>
+            </div>
+            <div className="employee-events-meta subtle">{formatEmployeeCardTime(event.startAt)}</div>
+            {event.venue ? <div className="employee-events-meta subtle">{event.venue}</div> : null}
+          </div>
+        </div>
+      </div>
+      <div className="member-event-team-only-footer">
+        <span className="member-event-action-label">Team overview ({teamCounts.total})</span>
+        <div className="member-event-action-summary member-event-action-summary--team member-event-team-only-summary">
+          {teamMini}
+          <ChevronRight className="member-event-action-chevron" size={18} strokeWidth={2.25} aria-hidden />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function MemberEventListPage({
+  mode,
   rows,
-  selectedEventId,
-  onSelectEvent,
+  selectedPersonalEventId,
+  selectedTeamEventId,
+  onOpenPersonal,
+  onOpenTeam,
   employeeEventFilter,
   setEmployeeEventFilter,
   ongoingCount,
@@ -1074,9 +1351,12 @@ function EmployeeEventListPage({
   searchQuery,
   setSearchQuery,
 }: {
-  rows: Array<{ event: EventItem; latest?: SafetyResponse }>;
-  selectedEventId: string;
-  onSelectEvent: (eventId: string) => void;
+  mode: 1 | 2 | 3;
+  rows: MemberHomeRow[];
+  selectedPersonalEventId: string;
+  selectedTeamEventId: string;
+  onOpenPersonal: (eventId: string) => void;
+  onOpenTeam: (eventId: string) => void;
   employeeEventFilter: 'ongoing' | 'closed';
   setEmployeeEventFilter: (value: 'ongoing' | 'closed') => void;
   ongoingCount: number;
@@ -1084,8 +1364,150 @@ function EmployeeEventListPage({
   searchQuery: string;
   setSearchQuery: (value: string) => void;
 }) {
-  const pendingRows = employeeEventFilter === 'ongoing' ? rows.filter((r) => !r.latest) : [];
-  const respondedRows = employeeEventFilter === 'ongoing' ? rows.filter((r) => Boolean(r.latest)) : [];
+  const pendingRows =
+    employeeEventFilter === 'ongoing' ? rows.filter((r) => !(mode === 3 ? false : Boolean(r.latest))) : [];
+  const respondedRows =
+    employeeEventFilter === 'ongoing' ? rows.filter((r) => (mode === 3 ? false : Boolean(r.latest))) : [];
+
+  const subtitleHero =
+    mode === 3
+      ? 'Review direct reports\' safety responses for events that include your department.'
+      : mode === 2
+        ? 'Submit your status and monitor your direct reports.'
+        : 'Stay informed. Report your status. Stay safe.';
+
+  const ongoingIntro =
+    mode === 3 ? (
+      <div className="employee-events-section-intro">
+        <Users className="employee-events-intro-icon" size={22} aria-hidden />
+        <div>
+          <h3>Ongoing Events</h3>
+          <p>Open teams first — sorted by unanswered direct reports.</p>
+        </div>
+      </div>
+    ) : (
+      <div className="employee-events-section-intro">
+        <Activity className="employee-events-intro-icon" size={22} aria-hidden />
+        <div>
+          <h3>Ongoing Events</h3>
+          <p>Events that require your response.</p>
+        </div>
+      </div>
+    );
+
+  const closedIntro =
+    mode === 3 ? (
+      <div className="employee-events-section-intro">
+        <Archive className="employee-events-intro-icon" size={22} aria-hidden />
+        <div>
+          <h3>Closed Events</h3>
+          <p>Past incidents for your team&apos;s departments.</p>
+        </div>
+      </div>
+    ) : (
+      <div className="employee-events-section-intro">
+        <Archive className="employee-events-intro-icon" size={22} aria-hidden />
+        <div>
+          <h3>Closed Events</h3>
+          <p>Events that have ended.</p>
+        </div>
+      </div>
+    );
+
+  const dualOrTeamCards = ({
+    pendingList,
+    respondedList,
+    closedFlat,
+    filterTab,
+  }: {
+    pendingList: MemberHomeRow[];
+    respondedList: MemberHomeRow[];
+    closedFlat: MemberHomeRow[];
+    filterTab: 'ongoing' | 'closed';
+  }) => {
+    if (mode === 1) {
+      if (filterTab === 'closed') {
+        return closedFlat.map(({ event, latest }) => (
+          <EmployeeEventListCard
+            key={event.id}
+            event={event}
+            latest={latest}
+            filterTab="closed"
+            selectedEventId={selectedPersonalEventId}
+            onSelectEvent={(id) => onOpenPersonal(id)}
+          />
+        ));
+      }
+      return (
+        <>
+          {pendingList.map(({ event, latest }) => (
+            <EmployeeEventListCard
+              key={event.id}
+              event={event}
+              latest={latest}
+              filterTab="ongoing"
+              selectedEventId={selectedPersonalEventId}
+              onSelectEvent={(id) => onOpenPersonal(id)}
+            />
+          ))}
+          {respondedList.map(({ event, latest }) => (
+            <EmployeeEventListCard
+              key={event.id}
+              event={event}
+              latest={latest}
+              filterTab="ongoing"
+              selectedEventId={selectedPersonalEventId}
+              onSelectEvent={(id) => onOpenPersonal(id)}
+            />
+          ))}
+        </>
+      );
+    }
+    if (mode === 2) {
+      const renderDual = ({ event, latest, teamCounts }: MemberHomeRow) => (
+        <MemberEventDualCard
+          key={event.id}
+          event={event}
+          latest={latest}
+          teamCounts={teamCounts!}
+          filterTab={filterTab}
+          selectedPersonalEventId={selectedPersonalEventId}
+          selectedTeamEventId={selectedTeamEventId}
+          onOpenPersonal={onOpenPersonal}
+          onOpenTeam={onOpenTeam}
+        />
+      );
+      if (filterTab === 'ongoing')
+        return (
+          <>
+            {pendingList.map((row) => renderDual(row))}
+            {respondedList.map((row) => renderDual(row))}
+          </>
+        );
+      return closedFlat.map((row) => renderDual(row));
+    }
+
+    /* mode === 3 */
+    const renderTeamOnly = ({ event, teamCounts }: MemberHomeRow) => (
+      <MemberEventTeamCard
+        key={event.id}
+        event={event}
+        teamCounts={teamCounts!}
+        filterTab={filterTab}
+        selectedTeamEventId={selectedTeamEventId}
+        onOpenTeam={onOpenTeam}
+      />
+    );
+
+    if (filterTab === 'ongoing')
+      return (
+        <>
+          {pendingList.concat(respondedList).map((row) => renderTeamOnly(row))}
+        </>
+      );
+
+    return closedFlat.map((row) => renderTeamOnly(row));
+  };
 
   return (
     <section className="page-section employee-events-page">
@@ -1095,7 +1517,7 @@ function EmployeeEventListPage({
             <Activity className="employee-events-title-icon" aria-hidden />
             Emergency Events
           </h2>
-          <p className="employee-events-subtitle">Stay informed. Report your status. Stay safe.</p>
+          <p className="employee-events-subtitle">{subtitleHero}</p>
         </div>
       </header>
 
@@ -1132,83 +1554,77 @@ function EmployeeEventListPage({
         </button>
       </div>
 
-      {employeeEventFilter === 'ongoing' ? (
-        <div className="employee-events-section-intro">
-          <Activity className="employee-events-intro-icon" size={22} aria-hidden />
-          <div>
-            <h3>Ongoing Events</h3>
-            <p>Events that require your response.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="employee-events-section-intro">
-          <Archive className="employee-events-intro-icon" size={22} aria-hidden />
-          <div>
-            <h3>Closed Events</h3>
-            <p>Events that have ended.</p>
-          </div>
-        </div>
-      )}
+      {employeeEventFilter === 'ongoing' ? ongoingIntro : closedIntro}
 
       <div className="employee-events-card-list">
         {employeeEventFilter === 'ongoing' ? (
           <>
-            {pendingRows.length > 0 ? (
-              <div className="employee-events-status-group employee-events-status-group--pending">
-                <h4 className="employee-events-group-heading">
-                  Not responded yet
-                  <span className="employee-events-group-count">{pendingRows.length}</span>
-                </h4>
+            {(mode !== 3 && pendingRows.length > 0) || (mode === 3 && rows.length > 0) ? (
+              <div
+                className={`employee-events-status-group employee-events-status-group--pending${mode === 3 ? ' member-mode3-single-list' : ''}`}
+              >
+                {mode !== 3 ? (
+                  <h4 className="employee-events-group-heading">
+                    Not responded yet
+                    <span className="employee-events-group-count">{pendingRows.length}</span>
+                  </h4>
+                ) : (
+                  <h4 className="employee-events-group-heading">
+                    Active
+                    <span className="employee-events-group-count">{rows.length}</span>
+                  </h4>
+                )}
                 <div className="employee-events-group-cards">
-                  {pendingRows.map(({ event, latest }) => (
-                    <EmployeeEventListCard
-                      key={event.id}
-                      event={event}
-                      latest={latest}
-                      filterTab="ongoing"
-                      selectedEventId={selectedEventId}
-                      onSelectEvent={onSelectEvent}
-                    />
-                  ))}
+                  {mode === 3 ? (
+                    dualOrTeamCards({
+                      pendingList: rows,
+                      respondedList: [],
+                      closedFlat: [],
+                      filterTab: 'ongoing',
+                    })
+                  ) : (
+                    dualOrTeamCards({
+                      pendingList: pendingRows,
+                      respondedList: [],
+                      closedFlat: [],
+                      filterTab: 'ongoing',
+                    })
+                  )}
                 </div>
               </div>
             ) : null}
-            {respondedRows.length > 0 ? (
-              <div
-                className={`employee-events-status-group employee-events-status-group--responded${
-                  pendingRows.length > 0 ? ' employee-events-status-group--after-pending' : ''
-                }`}
-              >
-                <h4 className="employee-events-group-heading">
-                  Responded
-                  <span className="employee-events-group-count">{respondedRows.length}</span>
-                </h4>
-                <div className="employee-events-group-cards">
-                  {respondedRows.map(({ event, latest }) => (
-                    <EmployeeEventListCard
-                      key={event.id}
-                      event={event}
-                      latest={latest}
-                      filterTab="ongoing"
-                      selectedEventId={selectedEventId}
-                      onSelectEvent={onSelectEvent}
-                    />
-                  ))}
-                </div>
-              </div>
+            {mode !== 3 ? (
+              <>
+                {respondedRows.length > 0 ? (
+                  <div
+                    className={`employee-events-status-group employee-events-status-group--responded${
+                      pendingRows.length > 0 ? ' employee-events-status-group--after-pending' : ''
+                    }`}
+                  >
+                    <h4 className="employee-events-group-heading">
+                      Responded
+                      <span className="employee-events-group-count">{respondedRows.length}</span>
+                    </h4>
+                    <div className="employee-events-group-cards">
+                      {dualOrTeamCards({
+                        pendingList: [],
+                        respondedList: respondedRows,
+                        closedFlat: [],
+                        filterTab: 'ongoing',
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </>
         ) : (
-          rows.map(({ event, latest }) => (
-            <EmployeeEventListCard
-              key={event.id}
-              event={event}
-              latest={latest}
-              filterTab="closed"
-              selectedEventId={selectedEventId}
-              onSelectEvent={onSelectEvent}
-            />
-          ))
+          dualOrTeamCards({
+            pendingList: [],
+            respondedList: [],
+            closedFlat: rows,
+            filterTab: 'closed',
+          })
         )}
       </div>
 
