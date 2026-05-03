@@ -16,6 +16,37 @@ const API_BASE = normalizeApiBase((import.meta.env.VITE_API_URL as string | unde
 
 export type DemoAccount = { id: string; label: string; roles: Role[]; userId: string };
 
+/**
+ * `/api/demo-accounts` 未載入時的預設選項（下拉仍可切）。
+ * **userId 必須與後端 `app/seeding/ids.py`、`PortalService.demo_accounts` 的 UUID 一致。**
+ */
+export const demoAccountsFallbackSeeded: DemoAccount[] = [
+  {
+    id: 'employee',
+    label: 'Employee Demo',
+    roles: ['employee'],
+    userId: 'b0000001-0000-4000-8000-000000000001',
+  },
+  {
+    id: 'supervisor',
+    label: 'Supervisor Demo',
+    roles: ['supervisor'],
+    userId: 'b0000001-0000-4000-8000-000000000002',
+  },
+  {
+    id: 'admin',
+    label: 'Admin Demo',
+    roles: ['admin'],
+    userId: 'b0000001-0000-4000-8000-000000000004',
+  },
+  {
+    id: 'multi',
+    label: 'Multi-role Demo',
+    roles: ['employee', 'supervisor', 'admin'],
+    userId: 'b0000001-0000-4000-8000-000000000002',
+  },
+];
+
 /** JWT（記憶體）；POST /api/reports、/api/events 等須 Bearer，見後端 `get_current_user`。 */
 let accessToken: string | null = null;
 
@@ -35,6 +66,26 @@ function requestUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
 
+/** 將非 2xx body 提成可讀訊息（含閘道 404 `{ message, code }` 與 FastAPI `{ detail }`）。 */
+function errorFromFailBody(status: number, body: string): Error {
+  const t = body.trim();
+  try {
+    const j = JSON.parse(t) as { detail?: unknown; message?: unknown; code?: unknown };
+    if (typeof j.detail === 'string') return new Error(j.detail);
+    if (Array.isArray(j.detail)) return new Error(JSON.stringify(j.detail));
+    if (typeof j.message === 'string') {
+      const c = typeof j.code === 'number' ? j.code : status;
+      return new Error(
+        `API 回覆 ${c}：${j.message}。請確認請求走的是 CNAD FastAPI（常見：` +
+          '8000 被別專案占用時請在 frontend/.env.local 設 CNAD_API_PROXY_TARGET=你的 uvicorn 埠，並重啟 npm run dev）',
+      );
+    }
+  } catch {
+    /* 非 JSON */
+  }
+  return new Error(t || String(status));
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -49,15 +100,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const text = await res.text();
   if (!res.ok) {
-    try {
-      const j = JSON.parse(text) as { detail?: unknown };
-      const d = j?.detail;
-      if (typeof d === 'string') throw new Error(d);
-      if (Array.isArray(d)) throw new Error(JSON.stringify(d));
-    } catch (e) {
-      if (e instanceof Error && e.message !== 'Unexpected end of JSON input') throw e;
-    }
-    throw new Error(text || res.statusText);
+    throw errorFromFailBody(res.status, text);
   }
   return (text ? JSON.parse(text) : {}) as T;
 }

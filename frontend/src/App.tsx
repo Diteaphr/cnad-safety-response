@@ -42,6 +42,7 @@ import {
   clearAccessToken,
   closeEventApi,
   createEventApi,
+  demoAccountsFallbackSeeded,
   getDemoAccounts,
   getDepartments,
   getEvents,
@@ -90,6 +91,11 @@ function App() {
   const [selectedAdminEventId, setSelectedAdminEventId] = useState('');
   const [selectedNotificationEventId, setSelectedNotificationEventId] = useState('');
   const eventsSelectionInitialized = useRef(false);
+
+  const demoAccountsForLogin = useMemo(
+    () => (demoAccounts.length > 0 ? demoAccounts : demoAccountsFallbackSeeded),
+    [demoAccounts],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -291,10 +297,16 @@ function App() {
 
   const handleLogin = (demoId: string) => {
     clearAccessToken();
-    const account = demoAccounts.find((item) => item.id === demoId);
+    const account = demoAccountsForLogin.find((item) => item.id === demoId);
     if (!account) return;
     const selectedUser = users.find((u) => u.id === account.userId);
-    if (!selectedUser) return;
+    if (!selectedUser) {
+      showToast({
+        tone: 'danger',
+        message: '載入使用者清單後才能 Demo 登入。請確認 /api/users 可走通並重新整理頁面。',
+      });
+      return;
+    }
     const initialRole = account.roles[0];
     setSession({
       isLoggedIn: true,
@@ -465,7 +477,7 @@ function App() {
     }
     return (
       <LoginPage
-        accounts={demoAccounts}
+        accounts={demoAccountsForLogin}
         loading={!catalogLoaded}
         error={catalogError}
         onLogin={handleLogin}
@@ -716,7 +728,7 @@ function LoginPage({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
-          disabled={loading || !!error}
+          disabled={loading}
         />
         <input
           placeholder="Password"
@@ -724,20 +736,20 @@ function LoginPage({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
-          disabled={loading || !!error}
+          disabled={loading}
         />
         {emailLoginError ? <p className="auth-inline-error">{emailLoginError}</p> : null}
         <button
           className="btn primary"
           onClick={() => void submitEmail()}
           type="button"
-          disabled={loading || !!error || emailSubmitting || !email.trim() || !password}
+          disabled={loading || emailSubmitting || !email.trim() || !password}
         >
           {emailSubmitting ? '登入中…' : 'Sign in'}
         </button>
         <p className="auth-footnote">
           還沒有帳號？{' '}
-          <button type="button" className="auth-link" onClick={onGoRegister} disabled={loading || !!error}>
+          <button type="button" className="auth-link" onClick={onGoRegister} disabled={loading}>
             建立帳號
           </button>
         </p>
@@ -758,7 +770,7 @@ function LoginPage({
           className="btn ghost"
           onClick={() => onLogin(demoId)}
           type="button"
-          disabled={loading || !!error || accounts.length === 0}
+          disabled={loading || accounts.length === 0}
         >
           Login with demo role
         </button>
@@ -829,14 +841,14 @@ function RegisterPage({
         <p className="muted-text">註冊後將以一般員工身分登入（employee）。主管／管理員由後台指派。</p>
         {loading && <p className="muted-text">載入後端資料…</p>}
         {error && <p className="muted-text" style={{ color: 'var(--danger, #c0392b)' }}>{error}</p>}
-        <input placeholder="姓名" value={name} onChange={(e) => setName(e.target.value)} disabled={loading || !!error} />
+        <input placeholder="姓名" value={name} onChange={(e) => setName(e.target.value)} disabled={loading} />
         <input
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
-          disabled={loading || !!error}
+          disabled={loading}
         />
         <input
           placeholder="密碼（至少 8 字）"
@@ -844,7 +856,7 @@ function RegisterPage({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
-          disabled={loading || !!error}
+          disabled={loading}
         />
         <input
           placeholder="確認密碼"
@@ -852,11 +864,11 @@ function RegisterPage({
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           autoComplete="new-password"
-          disabled={loading || !!error}
+          disabled={loading}
         />
         <label>
           部門（選填）
-          <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} disabled={loading || !!error}>
+          <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} disabled={loading}>
             <option value="">— 未指定 —</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
@@ -865,13 +877,13 @@ function RegisterPage({
             ))}
           </select>
         </label>
-        <input placeholder="電話（選填）" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={loading || !!error} />
-        <input placeholder="員工編號（選填，留空則自動產生）" value={employeeNo} onChange={(e) => setEmployeeNo(e.target.value)} disabled={loading || !!error} />
-        {formError ? <p className="auth-inline-error">{formError}</p> : null}
+        <input placeholder="電話（選填）" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={loading} />
+        <input placeholder="員工編號（選填，留空則自動產生）" value={employeeNo} onChange={(e) => setEmployeeNo(e.target.value)} disabled={loading} />
+        {formError && formError !== error ? <p className="auth-inline-error">{formError}</p> : null}
         <button
           className="btn primary"
           type="button"
-          disabled={loading || !!error || submitting || !name.trim() || !email.trim() || !password}
+          disabled={loading || submitting || !name.trim() || !email.trim() || !password}
           onClick={() => void submit()}
         >
           {submitting ? '送出中…' : '註冊並登入'}
