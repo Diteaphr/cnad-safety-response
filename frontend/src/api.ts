@@ -9,6 +9,7 @@ export type SupervisorTeamMemberApi = {
   status: string;
   reported_at: string | null;
   needs_follow_up: boolean;
+  phone?: string | null;
 };
 
 export type SupervisorDashboardApi = {
@@ -33,6 +34,17 @@ export type AdminDashboardApi = {
 export type PortalNotificationRow = {
   id: string;
   eventId: string;
+  channel: string;
+  status: string;
+  sentAt: string | null;
+};
+
+export type FailedNotificationRow = {
+  id: string;
+  eventId: string;
+  userId: string;
+  userName: string;
+  department: string | null;
   channel: string;
   status: string;
   sentAt: string | null;
@@ -267,12 +279,20 @@ export async function submitReportApi(payload: {
   );
 }
 
-export async function getSupervisorDashboardApi(): Promise<SupervisorDashboardApi> {
-  return apiFetch<SupervisorDashboardApi>('/api/dashboard/supervisor');
+export async function getSupervisorDashboardApi(eventId?: string): Promise<SupervisorDashboardApi> {
+  const q =
+    eventId && eventId.trim() !== ''
+      ? `?event_id=${encodeURIComponent(eventId.trim())}`
+      : '';
+  return apiFetch<SupervisorDashboardApi>(`/api/dashboard/supervisor${q}`);
 }
 
-export async function getAdminDashboardApi(): Promise<AdminDashboardApi> {
-  return apiFetch<AdminDashboardApi>('/api/dashboard/admin');
+export async function getAdminDashboardApi(eventId?: string): Promise<AdminDashboardApi> {
+  const q =
+    eventId && eventId.trim() !== ''
+      ? `?event_id=${encodeURIComponent(eventId.trim())}`
+      : '';
+  return apiFetch<AdminDashboardApi>(`/api/dashboard/admin${q}`);
 }
 
 export async function getMyNotificationsApi(): Promise<{ notifications: PortalNotificationRow[] }> {
@@ -286,6 +306,16 @@ export async function sendEventRemindersApi(eventId: string): Promise<{
   total_team: number;
 }> {
   return apiFetch(`/api/events/${encodeURIComponent(eventId)}/reminders`, {
+    method: 'POST',
+  });
+}
+
+export async function getFailedNotificationsForEventApi(eventId: string): Promise<{ rows: FailedNotificationRow[] }> {
+  return apiFetch(`/api/events/${encodeURIComponent(eventId)}/notifications/failed`);
+}
+
+export async function retryFailedNotificationApi(notificationId: string): Promise<{ notification: PortalNotificationRow }> {
+  return apiFetch(`/api/notifications/${encodeURIComponent(notificationId)}/retry`, {
     method: 'POST',
   });
 }

@@ -24,16 +24,19 @@ import {
   getDemoAccounts,
   getDepartments,
   getEvents,
+  getFailedNotificationsForEventApi,
   getMyNotificationsApi,
   getReports,
   getSupervisorDashboardApi,
   getUsers,
   loginDemoUserApi,
   loginWithEmailApi,
+  retryFailedNotificationApi,
   submitReportApi,
   sendEventRemindersApi,
   type AdminDashboardApi,
   type DemoAccount,
+  type FailedNotificationRow,
   type PortalNotificationRow,
   type SupervisorDashboardApi,
 } from './api';
@@ -45,6 +48,8 @@ import {
   saveContactedMap,
 } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
+import { useLocale } from './locale/LocaleContext';
+import { getStrings } from './locale/strings';
 import type {
   Department,
   EventItem,
@@ -71,6 +76,7 @@ const roleDefaultNav: Record<Role, NavKey> = {
 };
 
 function App() {
+  const { locale } = useLocale();
   const [session, setSession] = useState<SessionState>({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
   const [navKey, setNavKey] = useState<NavKey>('member-home');
   const [supervisorTeamNudge, setSupervisorTeamNudge] = useState<null | { pendingPct: number; eventTitle: string }>(null);
@@ -101,6 +107,8 @@ function App() {
   const [supervisorDashboard, setSupervisorDashboard] = useState<SupervisorDashboardApi | null>(null);
   const [adminDashboard, setAdminDashboard] = useState<AdminDashboardApi | null>(null);
   const [myNotifications, setMyNotifications] = useState<PortalNotificationRow[]>([]);
+  const [failedNotificationRows, setFailedNotificationRows] = useState<FailedNotificationRow[]>([]);
+  const [loadingFailedRows, setLoadingFailedRows] = useState(false);
   const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<number | null>(null);
   const [contactedByEvent, setContactedByEvent] = useState<Record<string, Record<string, boolean>>>({});
   const [auditEpoch, setAuditEpoch] = useState(0);
@@ -111,6 +119,8 @@ function App() {
   const [selectedAdminEventId, setSelectedAdminEventId] = useState('');
   const [selectedNotificationEventId, setSelectedNotificationEventId] = useState('');
   const eventsSelectionInitialized = useRef(false);
+  const supervisorDashEventIdRef = useRef('');
+  const adminDashEventIdRef = useRef('');
 
   const demoAccountsForLogin = useMemo(
     () => (demoAccounts.length > 0 ? demoAccounts : demoAccountsFallbackSeeded),
@@ -158,6 +168,13 @@ function App() {
     setSelectedAdminEventId(id);
     setSelectedNotificationEventId(id);
   }, [events]);
+
+  useEffect(() => {
+    supervisorDashEventIdRef.current = selectedSupervisorEventId;
+  }, [selectedSupervisorEventId]);
+  useEffect(() => {
+    adminDashEventIdRef.current = selectedAdminEventId;
+  }, [selectedAdminEventId]);
 
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
@@ -345,6 +362,43 @@ function App() {
     () => events.find((event) => event.id === selectedAdminEventId) ?? null,
     [events, selectedAdminEventId],
   );
+
+  const supervisorDashMismatchHint = useMemo(() => {
+    const dash = getStrings(locale).dash;
+    if (
+      !supervisorDashboard?.event?.id ||
+      !selectedSupervisorEvent?.id ||
+      supervisorDashboard.event.id === selectedSupervisorEvent.id
+    ) {
+      return null;
+    }
+    return dash.snapshotMismatchDetail(supervisorDashboard.event.title, selectedSupervisorEvent.title);
+  }, [
+    locale,
+    supervisorDashboard?.event?.id,
+    supervisorDashboard?.event?.title,
+    selectedSupervisorEvent?.id,
+    selectedSupervisorEvent?.title,
+  ]);
+
+  const adminDashMismatchHint = useMemo(() => {
+    const dash = getStrings(locale).dash;
+    if (
+      !adminDashboard?.event?.id ||
+      !selectedAdminEvent?.id ||
+      adminDashboard.event.id === selectedAdminEvent.id
+    ) {
+      return null;
+    }
+    return dash.snapshotMismatchDetail(adminDashboard.event.title, selectedAdminEvent.title);
+  }, [
+    locale,
+    adminDashboard?.event?.id,
+    adminDashboard?.event?.title,
+    selectedAdminEvent?.id,
+    selectedAdminEvent?.title,
+  ]);
+
   const currentDepartment = useMemo(
     () => departments.find((d) => d.id === session.user?.departmentId)?.name ?? 'Unknown',
     [session.user],
@@ -462,7 +516,7 @@ function App() {
           status: st,
           updatedAt: t.reported_at ?? latest?.updatedAt,
           note: noteMerge || latest?.comment,
-          phone: uMeta?.phone,
+          phone: t.phone ?? uMeta?.phone,
           locationLine: latest?.location,
         };
       });
@@ -521,11 +575,13 @@ function App() {
     }
     try {
       if (session.currentRole === 'supervisor') {
-        const sd = await getSupervisorDashboardApi();
+        const eid = supervisorDashEventIdRef.current.trim();
+        const sd = await getSupervisorDashboardApi(eid || undefined);
         setSupervisorDashboard(sd);
       }
       if (session.currentRole === 'admin') {
-        const ad = await getAdminDashboardApi();
+        const eid = adminDashEventIdRef.current.trim();
+        const ad = await getAdminDashboardApi(eid || undefined);
         setAdminDashboard(ad);
       }
     } catch {
@@ -847,12 +903,31 @@ function App() {
     });
   }, [events, users, responses, selectedNotificationEventId, myNotifications, auditEpoch]);
 
+  const reloadFailedNotificationRows = useCallback(async () => {
+    if (!session.isLoggedIn || session.currentRole !== 'admin' || !selectedNotificationEventId) {
+      setFailedNotificationRows([]);
+      return;
+    }
+    setLoadingFailedRows(true);
+    try {
+      const out = await getFailedNotificationsForEventApi(selectedNotificationEventId);
+      setFailedNotificationRows(out.rows);
+    } catch {
+      setFailedNotificationRows([]);
+    } finally {
+      setLoadingFailedRows(false);
+    }
+  }, [session.isLoggedIn, session.currentRole, selectedNotificationEventId]);
+
+  useEffect(() => {
+    if (navKey !== 'notifications-event-detail') return;
+    void reloadFailedNotificationRows();
+  }, [navKey, reloadFailedNotificationRows]);
+
   const contactedForSupervisorRow = contactedByEvent[selectedSupervisorEventId] ?? {};
 
   const pendingRatioHigh =
     session.currentRole === 'supervisor' && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
-  const allTeamResponded = session.currentRole === 'supervisor' && stats.total > 0 && stats.pending === 0;
-
   if (!session.isLoggedIn) {
     if (authMode === 'register') {
       return (
@@ -945,6 +1020,7 @@ function App() {
           <TeamDashboardHomePage
             activeRows={supervisorTeamDashboardRows.active}
             closedRows={supervisorTeamDashboardRows.closed}
+            dashboardFreshAt={dashboardUpdatedAt}
             onOpenEvent={(eventId) => {
               setSelectedSupervisorEventId(eventId);
               setSupervisorOpenedDetailFrom('team-dashboard-home');
@@ -983,6 +1059,7 @@ function App() {
         )}
         {navKey === 'supervisor-event-detail' && (
           <SupervisorDashboardPage
+            event={selectedSupervisorEvent}
             stats={stats}
             rows={employeeRows}
             filter={supervisorFilter}
@@ -992,14 +1069,7 @@ function App() {
             contactedMap={contactedForSupervisorRow}
             onToggleContacted={toggleNeedHelpContact}
             pendingRatioHigh={pendingRatioHigh}
-            allRespondedBanner={allTeamResponded}
-            dashMismatchHint={
-              supervisorDashboard?.event?.id &&
-              selectedSupervisorEvent?.id &&
-              supervisorDashboard.event.id !== selectedSupervisorEvent.id
-                ? `圖表中 KPI／圓餅為後端目前「進行中」主事件：${supervisorDashboard.event.title}；下方表格仍以您選取的事件為準。`
-                : null
-            }
+            dashMismatchHint={supervisorDashMismatchHint}
             dashboardFreshAt={dashboardUpdatedAt}
             onSendReminder={() => {
               const eid = selectedSupervisorEvent?.id;
@@ -1014,7 +1084,7 @@ function App() {
         )}
         {navKey === 'admin-dashboard' && (
           <EventSelectionPage
-            title="Admin Global Event Center"
+            variant="admin"
             events={events}
             selectedEventId={selectedAdminEventId}
             onSelectEvent={(eventId) => {
@@ -1025,18 +1095,13 @@ function App() {
         )}
         {navKey === 'admin-event-detail' && (
           <AdminDashboardPage
+            event={selectedAdminEvent}
             stats={stats}
             rows={employeeRows}
             departments={departments}
             deptBreakdown={adminViewAligned && adminDashboard ? adminDashboard.departments : undefined}
             dashboardFreshAt={dashboardUpdatedAt}
-            dashMismatchHint={
-              adminDashboard?.event?.id &&
-              selectedAdminEvent?.id &&
-              adminDashboard.event.id !== selectedAdminEvent.id
-                ? `區塊中 KPI／部門細項為後端目前「進行中」主事件：${adminDashboard.event.title}；詳列員工仍以您選取的事件為準。`
-                : null
-            }
+            dashMismatchHint={adminDashMismatchHint}
             onBackToEvents={() => setNavKey('admin-dashboard')}
           />
         )}
@@ -1053,7 +1118,7 @@ function App() {
         {navKey === 'user-management' && <UserManagementPage users={users} departments={departments} />}
         {navKey === 'notifications' && (
           <EventSelectionPage
-            title="Notification Event Center"
+            variant="notification"
             events={events}
             selectedEventId={selectedNotificationEventId}
             onSelectEvent={(eventId) => {
@@ -1065,8 +1130,24 @@ function App() {
         {navKey === 'notifications-event-detail' && (
           <NotificationPage
             summary={notificationLiveSummary}
+            failedRows={failedNotificationRows}
+            loadingFailed={loadingFailedRows}
             canSendReminder={session.currentRole === 'supervisor'}
+            canManageFailed={session.currentRole === 'admin'}
             onSendReminder={() => dispatchRemindersForEvent(selectedNotificationEventId)}
+            onRefreshFailed={() => void reloadFailedNotificationRows()}
+            onRetryFailed={(notificationId) => {
+              if (session.currentRole !== 'admin') return;
+              void (async () => {
+                try {
+                  await retryFailedNotificationApi(notificationId);
+                  await reloadFailedNotificationRows();
+                  showToast({ tone: 'success', message: '已重送該筆失敗通知。' });
+                } catch (e) {
+                  showToast({ tone: 'danger', message: e instanceof Error ? e.message : '重送失敗' });
+                }
+              })();
+            }}
             onBackToEvents={() => setNavKey('notifications')}
           />
         )}
