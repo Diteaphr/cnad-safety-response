@@ -135,6 +135,17 @@ body { margin: 0; background: #f4f7fc; }
 }
 
 .app-frame { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+
+.offline-bar {
+  grid-column: 1 / -1;
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 0.92rem;
+  background: rgba(120, 80, 0, 0.12);
+  color: #5c3d00;
+  border-bottom: 1px solid rgba(120, 80, 0, 0.25);
+}
+
 .sidebar {
   background: #0f2742;
   color: #fff;
@@ -949,6 +960,51 @@ textarea { min-height: 90px; resize: vertical; }
   display: grid;
   gap: 12px;
 }
+.supervisor-share-line {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.supervisor-dash-scope-hint,
+.supervisor-dash-sync-time {
+  margin: 8px 0 0;
+  font-size: 0.92rem;
+}
+.supervisor-priority-alert {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(215, 80, 60, 0.45);
+  background: rgba(255, 240, 235, 0.85);
+  color: #7a2919;
+}
+.supervisor-all-clear {
+  margin: 8px 0 12px;
+  color: #1f6f3b;
+}
+.supervisor-need-help-panel.supervisor-need-help-many {
+  border-color: rgba(215, 80, 60, 0.55);
+}
+.supervisor-need-item .supervisor-need-help-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.supervisor-many-alert {
+  margin-top: 10px;
+  color: var(--danger, #c0392b);
+  font-weight: 600;
+}
+.btn.supervisor-contact-flag {
+  padding: 4px 10px;
+  font-size: 0.85rem;
+}
+.btn.supervisor-contact-flag.is-reached {
+  border-color: #3a8748;
+  color: #276034;
+}
+
 .dashboard-top {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -1063,6 +1119,51 @@ textarea { min-height: 90px; resize: vertical; }
   font-size: 0.9rem;
   line-height: 1.4;
   color: #64748b;
+}
+
+.employee-submit-progress {
+  margin: 0 14px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(30, 84, 148, 0.08);
+  border: 1px solid rgba(30, 84, 148, 0.16);
+  color: #143b66;
+  font-size: 0.93rem;
+  text-align: center;
+}
+
+.employee-submit-error-banner {
+  display: flex;
+  gap: 12px;
+  margin: 0 14px 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(213, 61, 63, 0.08);
+  border: 1px solid rgba(213, 61, 63, 0.32);
+  color: #742020;
+}
+
+.employee-submit-error-banner svg {
+  flex-shrink: 0;
+}
+
+.employee-submit-error-body strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 1rem;
+}
+
+.employee-submit-error-body p {
+  margin: 0 0 10px;
+  font-size: 0.93rem;
+  line-height: 1.35;
+}
+
+.employee-submit-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .employee-section-title {

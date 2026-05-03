@@ -40,6 +40,10 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
+        workbox: {
+          navigateFallback: '/index.html',
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+        },
       }),
     ],
     server: {

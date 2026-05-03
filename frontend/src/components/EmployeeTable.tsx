@@ -8,6 +8,8 @@ export interface EmployeeRow {
   status: SafetyStatus;
   updatedAt?: string;
   note?: string;
+  phone?: string;
+  locationLine?: string;
 }
 
 export function EmployeeTable({ rows }: { rows: EmployeeRow[] }) {
@@ -32,7 +34,15 @@ export function EmployeeTable({ rows }: { rows: EmployeeRow[] }) {
                 <StatusBadge status={row.status} />
               </td>
               <td>{row.updatedAt ? new Date(row.updatedAt).toLocaleTimeString() : '-'}</td>
-              <td>{row.note ?? '-'}</td>
+              <td>
+                {[
+                  row.phone ? `電話 ${row.phone}` : null,
+                  row.locationLine,
+                  row.note,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || '-'}
+              </td>
             </tr>
           ))}
         </tbody>

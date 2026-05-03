@@ -1,4 +1,4 @@
-import type { Department, EventItem, NotificationSummary, Role, SafetyResponse, User } from './types';
+import type { Department, EventItem, Role, SafetyResponse, User } from './types';
 
 export const departments: Department[] = [
   { id: 'd-rd', name: 'R&D', parentId: null },
@@ -247,16 +247,6 @@ export const responses: SafetyResponse[] = [
   /* e-002 颱風：其他同仁有回報，Maggie 刻意未回報以呈現 Pending */
   { id: 'r-009', eventId: 'e-002', userId: 'u-05', status: 'safe', comment: 'WFH safe', updatedAt: '2026-05-03T08:15:00.000Z' },
 ];
-
-export const notificationSummary: NotificationSummary = {
-  pushSent: 1380,
-  pushFailed: 32,
-  smsFallbackSent: 29,
-  reminderHistory: [
-    { id: 'n-01', eventId: 'e-001', sentAt: '2026-05-01T15:10:00.000Z', sentByRole: 'supervisor', note: 'First reminder to non-responders' },
-    { id: 'n-02', eventId: 'e-001', sentAt: '2026-05-01T15:20:00.000Z', sentByRole: 'admin', note: 'Escalation reminder sent' },
-  ],
-};
 
 export const demoRoleAccounts: Array<{ id: string; label: string; roles: Role[]; userId: string }> = [
   { id: 'employee', label: 'Employee Demo', roles: ['employee'], userId: 'u-01' },

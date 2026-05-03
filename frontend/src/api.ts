@@ -1,4 +1,42 @@
+import { fetchWithTimeout, isProbablyTransientNetworkError, withRetries } from './lib/httpClient';
 import type { Department, EventItem, Role, SafetyResponse, User } from './types';
+
+/** `/api/dashboard/supervisor` 回傳之 team 項目 */
+export type SupervisorTeamMemberApi = {
+  user_id: string;
+  name: string;
+  department: string;
+  status: string;
+  reported_at: string | null;
+  needs_follow_up: boolean;
+};
+
+export type SupervisorDashboardApi = {
+  event: EventItem | null;
+  kpis: { safe: number; need_help: number; responded: number; pending: number };
+  team: SupervisorTeamMemberApi[];
+};
+
+export type AdminDeptStatApi = {
+  department: string;
+  safe: number;
+  need_help: number;
+  pending: number;
+};
+
+export type AdminDashboardApi = {
+  event: EventItem | null;
+  kpis: { safe: number; need_help: number; responded: number; pending: number; targeted: number };
+  departments: AdminDeptStatApi[];
+};
+
+export type PortalNotificationRow = {
+  id: string;
+  eventId: string;
+  channel: string;
+  status: string;
+  sentAt: string | null;
+};
 
 /**
  * 後端 API 路徑皆以 `/api/...` 開頭；基底請填 **服務根網址**（不含 `/api`）。
@@ -86,7 +124,7 @@ function errorFromFailBody(status: number, body: string): Error {
   return new Error(t || String(status));
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function apiFetch<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init?.headers as Record<string, string> | undefined),
@@ -94,9 +132,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
-  const res = await fetch(requestUrl(path), {
-    ...init,
+  const { timeoutMs, ...restInit } = init ?? {};
+  const res = await fetchWithTimeout(requestUrl(path), {
+    ...restInit,
     headers,
+    timeoutMs: timeoutMs ?? 25_000,
   });
   const text = await res.text();
   if (!res.ok) {
@@ -212,8 +252,40 @@ export async function submitReportApi(payload: {
   location?: string;
   comment?: string;
 }): Promise<{ status: string; message: string; data: SafetyResponse }> {
-  return apiFetch('/api/reports', {
+  return withRetries(
+    async () =>
+      apiFetch<{ status: string; message: string; data: SafetyResponse }>('/api/reports', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        timeoutMs: 35_000,
+      }),
+    {
+      attempts: 3,
+      delayMs: 700,
+      shouldRetry: isProbablyTransientNetworkError,
+    },
+  );
+}
+
+export async function getSupervisorDashboardApi(): Promise<SupervisorDashboardApi> {
+  return apiFetch<SupervisorDashboardApi>('/api/dashboard/supervisor');
+}
+
+export async function getAdminDashboardApi(): Promise<AdminDashboardApi> {
+  return apiFetch<AdminDashboardApi>('/api/dashboard/admin');
+}
+
+export async function getMyNotificationsApi(): Promise<{ notifications: PortalNotificationRow[] }> {
+  return apiFetch('/api/notifications/me');
+}
+
+export async function sendEventRemindersApi(eventId: string): Promise<{
+  message: string;
+  sent: number;
+  already_safe: number;
+  total_team: number;
+}> {
+  return apiFetch(`/api/events/${encodeURIComponent(eventId)}/reminders`, {
     method: 'POST',
-    body: JSON.stringify(payload),
   });
 }

@@ -43,10 +43,21 @@ export function Layout({
   children: ReactNode;
 }) {
   const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
+  const [online, setOnline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine);
   const [isNarrowViewport, setIsNarrowViewport] = useState(
     () => typeof window !== 'undefined' && window.matchMedia(NARROW_SIDEBAR_MEDIA).matches,
   );
   const navItems = navByRole[currentRole];
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -95,6 +106,11 @@ export function Layout({
 
   return (
     <div className="app-frame">
+      {!online ? (
+        <div className="offline-bar" role="status">
+          目前離線：已快取的資料仍可操作；請恢復連線後再試送出。
+        </div>
+      ) : null}
       <header className="app-mobile-shell-header">
         <button
           type="button"
