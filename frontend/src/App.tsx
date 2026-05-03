@@ -39,6 +39,7 @@ import { DirectReportsListPage } from './profile/DirectReportsListPage';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
 import {
   activateEventApi,
+  clearAccessToken,
   closeEventApi,
   createEventApi,
   getDemoAccounts,
@@ -289,6 +290,7 @@ function App() {
   };
 
   const handleLogin = (demoId: string) => {
+    clearAccessToken();
     const account = demoAccounts.find((item) => item.id === demoId);
     if (!account) return;
     const selectedUser = users.find((u) => u.id === account.userId);
@@ -335,6 +337,7 @@ function App() {
   };
 
   const logout = () => {
+    clearAccessToken();
     setSession({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
     showToast({ tone: 'info', message: 'Logged out.' });
   };
@@ -799,7 +802,7 @@ function RegisterPage({
     }
     setSubmitting(true);
     try {
-      const out = await registerApi({
+      await registerApi({
         name: name.trim(),
         email: email.trim(),
         password,
@@ -807,7 +810,8 @@ function RegisterPage({
         phone: phone.trim() || undefined,
         employeeNo: employeeNo.trim() || undefined,
       });
-      onRegisterSuccess(out.user);
+      const loginOut = await loginWithEmailApi({ email: email.trim(), password });
+      onRegisterSuccess(loginOut.user);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : '註冊失敗');
     } finally {

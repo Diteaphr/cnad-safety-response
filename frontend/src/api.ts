@@ -16,6 +16,17 @@ const API_BASE = normalizeApiBase((import.meta.env.VITE_API_URL as string | unde
 
 export type DemoAccount = { id: string; label: string; roles: Role[]; userId: string };
 
+/** JWT（記憶體）；POST /api/reports、/api/events 等須 Bearer，見後端 `get_current_user`。 */
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}
+
+export function clearAccessToken(): void {
+  accessToken = null;
+}
+
 /** 空字串 = 與目前網頁同源（Vite `server.proxy` 或 nginx 的 `/api` 轉發）。有值 = 直連後端，例如 `http://localhost:8000`。 */
 function requestUrl(path: string): string {
   if (API_BASE === '') {
@@ -25,12 +36,16 @@ function requestUrl(path: string): string {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
   const res = await fetch(requestUrl(path), {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
   });
   const text = await res.text();
   if (!res.ok) {
@@ -127,11 +142,14 @@ export async function registerApi(body: {
 export async function loginWithEmailApi(body: {
   email: string;
   password: string;
-}): Promise<{ user: User }> {
-  return apiFetch('/api/auth/login', {
+}): Promise<{ user: User; access_token: string; token_type: string }> {
+  clearAccessToken();
+  const data = await apiFetch<{ user: User; access_token: string; token_type: string }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(body),
   });
+  setAccessToken(data.access_token);
+  return data;
 }
 
 export async function submitReportApi(payload: {
