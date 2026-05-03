@@ -271,16 +271,23 @@ class PortalService:
         rows = self._responses.list_for_user(db, user_id)
         return [self._response_out(r) for r in rows]
 
-    def supervisor_dashboard(self, db: Session, user_id: uuid.UUID) -> dict[str, Any]:
+    def supervisor_dashboard(
+        self, db: Session, user_id: uuid.UUID, event_id: uuid.UUID | None = None
+    ) -> dict[str, Any]:
         user = self._users.get_by_id(db, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         if "supervisor" not in _role_names(user):
             raise HTTPException(status_code=403, detail="Supervisor only")
         nm = self._depts.name_map(db)
-        events = [e for e in self._events.list_all(db) if e.status == "active"]
-        events.sort(key=lambda e: e.created_at, reverse=True)
-        active_event = events[0] if events else None
+        if event_id is not None:
+            active_event = self._events.get_by_id(db, event_id)
+            if active_event is None:
+                raise HTTPException(status_code=404, detail="Event not found")
+        else:
+            events = [e for e in self._events.list_all(db) if e.status == "active"]
+            events.sort(key=lambda e: e.created_at, reverse=True)
+            active_event = events[0] if events else None
         if active_event is None:
             return {
                 "event": None,
@@ -338,16 +345,23 @@ class PortalService:
             "team": sorted(team, key=lambda x: (x["status"] == "safe", x["name"])),
         }
 
-    def admin_dashboard(self, db: Session, user_id: uuid.UUID) -> dict[str, Any]:
+    def admin_dashboard(
+        self, db: Session, user_id: uuid.UUID, event_id: uuid.UUID | None = None
+    ) -> dict[str, Any]:
         user = self._users.get_by_id(db, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         if "admin" not in _role_names(user):
             raise HTTPException(status_code=403, detail="Admin only")
         nm = self._depts.name_map(db)
-        events = [e for e in self._events.list_all(db) if e.status == "active"]
-        events.sort(key=lambda e: e.created_at, reverse=True)
-        active_event = events[0] if events else None
+        if event_id is not None:
+            active_event = self._events.get_by_id(db, event_id)
+            if active_event is None:
+                raise HTTPException(status_code=404, detail="Event not found")
+        else:
+            events = [e for e in self._events.list_all(db) if e.status == "active"]
+            events.sort(key=lambda e: e.created_at, reverse=True)
+            active_event = events[0] if events else None
         if active_event is None:
             return {
                 "event": None,

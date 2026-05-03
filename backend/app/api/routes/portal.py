@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -135,13 +135,23 @@ def my_reports(actor: CurrentUser, db: Session = Depends(get_db)):
 
 
 @router.get("/dashboard/supervisor")
-def supervisor_dashboard(actor: CurrentUser, db: Session = Depends(get_db)):
-    return _portal.supervisor_dashboard(db, actor)
+def supervisor_dashboard(
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+    event_id: str | None = Query(default=None),
+):
+    eid = _parse_uuid(event_id, name="event_id") if event_id else None
+    return _portal.supervisor_dashboard(db, actor, event_id=eid)
 
 
 @router.get("/dashboard/admin")
-def admin_dashboard(actor: CurrentUser, db: Session = Depends(get_db)):
-    return _portal.admin_dashboard(db, actor)
+def admin_dashboard(
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+    event_id: str | None = Query(default=None),
+):
+    eid = _parse_uuid(event_id, name="event_id") if event_id else None
+    return _portal.admin_dashboard(db, actor, event_id=eid)
 
 
 @router.get("/notifications/me")
