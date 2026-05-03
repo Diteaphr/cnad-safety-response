@@ -33,6 +33,14 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { loadEmployeeReportDraft, saveEmployeeReportDraft } from '../../lib/employeeReportDraft';
 import type { EventItem, SafetyResponse } from '../../types';
 
+export type EmployeeReportFields = {
+  comment: string;
+  location: string;
+  attachment: File | null;
+};
+
+const EMPTY_STACK_REPORT_FIELDS: EmployeeReportFields = { comment: '', location: '', attachment: null };
+
 function employeeEventTypeIcon(type: EventItem['type']) {
   switch (type) {
     case 'Earthquake':
@@ -185,7 +193,7 @@ function EmployeeEventListCard({
   );
 }
 
-type MemberHomeRow = {
+export type MemberHomeRow = {
   event: EventItem;
   latest?: SafetyResponse;
   teamCounts?: { total: number; safe: number; needHelp: number; pending: number };
@@ -745,55 +753,60 @@ interface EditDraftBaseline {
   omitStoredAttachment: boolean;
 }
 
-export function EmployeeHomePage({
+function EmployeeQuickReportPanel({
   draftUserId,
   userName,
   selectedEvent,
   currentDepartment,
   latestResponse,
-  employeeComment,
-  setEmployeeComment,
-  employeeLocation,
-  setEmployeeLocation,
-  employeeAttachment,
-  setEmployeeAttachment,
   reportSubmitting,
   submitErrorMessage,
   onDismissSubmitError,
   onRetrySubmit,
   onSubmit,
+  layout = 'full',
+  hideEmergencyContact = false,
+  stackSectionId,
   onBackToEvents,
+  stackInitialReport = false,
 }: {
   draftUserId: string | null;
   userName: string;
   selectedEvent: EventItem | null;
   currentDepartment: string;
   latestResponse?: SafetyResponse;
-  employeeComment: string;
-  setEmployeeComment: (value: string) => void;
-  employeeLocation: string;
-  setEmployeeLocation: (value: string) => void;
-  employeeAttachment: File | null;
-  setEmployeeAttachment: (file: File | null) => void;
   reportSubmitting: boolean;
   submitErrorMessage: string | null;
   onDismissSubmitError: () => void;
   onRetrySubmit: () => void;
-  onSubmit: (status: 'safe' | 'need_help', meta?: { omitStoredAttachment?: boolean }) => void | Promise<void>;
-  onBackToEvents: () => void;
+  onSubmit: (
+    status: 'safe' | 'need_help',
+    fields: EmployeeReportFields,
+    meta?: { omitStoredAttachment?: boolean },
+  ) => void | Promise<void>;
+  layout?: 'full' | 'embedded';
+  /** 堆疊卡片用於 a11y 與捲動錨點 */
+  stackSectionId?: string;
+  hideEmergencyContact?: boolean;
+  onBackToEvents?: () => void;
+  /** 待回報首報：窄列＋雙大鈕、送出僅 status、成功 overlay */
+  stackInitialReport?: boolean;
 }) {
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const helpDetailsRef = useRef<HTMLDivElement>(null);
   const persistDraftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dropActive, setDropActive] = useState(false);
+  const [employeeComment, setEmployeeComment] = useState('');
+  const [employeeLocation, setEmployeeLocation] = useState('');
+  const [employeeAttachment, setEmployeeAttachment] = useState<File | null>(null);
   const [selectedNeedHelp, setSelectedNeedHelp] = useState(false);
   const [wantToUpdate, setWantToUpdate] = useState(false);
   const [draftBaseline, setDraftBaseline] = useState<EditDraftBaseline | null>(null);
   const [pendingSubmission, setPendingSubmission] = useState<'safe' | 'need_help' | null>(null);
   const [discardPromptAfter, setDiscardPromptAfter] = useState<'back' | 'cancel' | null>(null);
-  const [confirmSwitchToSafeOpen, setConfirmSwitchToSafeOpen] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [omitStoredAttachment, setOmitStoredAttachment] = useState(false);
+  const [initialSuccessOverlayOpen, setInitialSuccessOverlayOpen] = useState(false);
 
   const MAX_COMMENT_LEN = 500;
   const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -843,11 +856,12 @@ export function EmployeeHomePage({
     const stored = loadEmployeeReportDraft(draftUserId, eid);
     setEmployeeComment(stored?.comment ?? '');
     setEmployeeLocation(stored?.location ?? '');
-    setSelectedNeedHelp(Boolean(stored?.selectedNeedHelp));
-  }, [selectedEvent?.id, draftUserId, latestResponse?.id, setEmployeeComment, setEmployeeLocation]);
+    setSelectedNeedHelp(false);
+  }, [selectedEvent?.id, draftUserId, latestResponse?.id]);
 
   useEffect(() => {
     if (!draftUserId || !selectedEvent?.id || Boolean(latestResponse) || wantToUpdate) return;
+    if (stackInitialReport) return;
     if (persistDraftTimer.current) window.clearTimeout(persistDraftTimer.current);
     persistDraftTimer.current = window.setTimeout(() => {
       saveEmployeeReportDraft(draftUserId, selectedEvent.id, {
@@ -867,7 +881,25 @@ export function EmployeeHomePage({
     employeeComment,
     employeeLocation,
     selectedNeedHelp,
+    stackInitialReport,
   ]);
+
+
+  const prevLatestResponseIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    prevLatestResponseIdRef.current = undefined;
+    setInitialSuccessOverlayOpen(false);
+  }, [selectedEvent?.id]);
+
+  useEffect(() => {
+    const lid = latestResponse?.id;
+    if (!stackInitialReport || !lid) return;
+    if (prevLatestResponseIdRef.current !== lid) {
+      prevLatestResponseIdRef.current = lid;
+      setInitialSuccessOverlayOpen(true);
+    }
+  }, [stackInitialReport, latestResponse?.id]);
 
   useEffect(() => {
     if (latestResponse) setWantToUpdate(false);
@@ -887,15 +919,36 @@ export function EmployeeHomePage({
     if (!wantToUpdate) setDraftBaseline(null);
   }, [wantToUpdate]);
 
-  const handleNeedHelp = () => {
+  const reportFields = (): EmployeeReportFields => ({
+    comment: employeeComment,
+    location: employeeLocation,
+    attachment: employeeAttachment,
+  });
+
+  const handleSubmitSafeTap = () => {
+    if (reportSubmitting) return;
+    if (isRevisionDraft) {
+      setPendingSubmission('safe');
+      setSelectedNeedHelp(false);
+      return;
+    }
+    const fields = stackInitialReport ? EMPTY_STACK_REPORT_FIELDS : reportFields();
+    void onSubmit('safe', fields, {
+      omitStoredAttachment: stackInitialReport ? false : omitStoredAttachment,
+    });
+  };
+
+  const handleNeedHelpTap = () => {
     if (reportSubmitting) return;
     if (isRevisionDraft) {
       setPendingSubmission('need_help');
       setSelectedNeedHelp(true);
       return;
     }
-    setPendingSubmission(null);
-    setSelectedNeedHelp(true);
+    const fields = stackInitialReport ? EMPTY_STACK_REPORT_FIELDS : reportFields();
+    void onSubmit('need_help', fields, {
+      omitStoredAttachment: stackInitialReport ? false : omitStoredAttachment,
+    });
   };
 
   const enterRevisionMode = () => {
@@ -927,7 +980,7 @@ export function EmployeeHomePage({
     const reason = discardPromptAfter;
     if (draftBaseline) revertToBaselineAndExitEdit(draftBaseline);
     setDiscardPromptAfter(null);
-    if (reason === 'back') onBackToEvents();
+    if (reason === 'back') onBackToEvents?.();
   };
 
   const requestBackNavigation = () => {
@@ -935,7 +988,7 @@ export function EmployeeHomePage({
       setDiscardPromptAfter('back');
       return;
     }
-    onBackToEvents();
+    onBackToEvents?.();
   };
 
   const requestCancelRevision = () => {
@@ -947,30 +1000,10 @@ export function EmployeeHomePage({
     revertToBaselineAndExitEdit(draftBaseline);
   };
 
-  const handleSubmitSafeTap = () => {
-    if (reportSubmitting) return;
-    if (isRevisionDraft) {
-      setPendingSubmission('safe');
-      setSelectedNeedHelp(false);
-      return;
-    }
-    if (selectedNeedHelp) {
-      setConfirmSwitchToSafeOpen(true);
-      return;
-    }
-    void onSubmit('safe', { omitStoredAttachment });
-  };
-
-  const handleSubmitNeedHelpConfirm = () => {
-    if (reportSubmitting) return;
-    if (isRevisionDraft) return;
-    void onSubmit('need_help', { omitStoredAttachment });
-  };
-
   const handleSaveRevision = () => {
     if (reportSubmitting) return;
     if (!pendingSubmission || !isRevisionDraft) return;
-    void onSubmit(pendingSubmission, { omitStoredAttachment });
+    void onSubmit(pendingSubmission, reportFields(), { omitStoredAttachment });
   };
 
   const applyAttachment = (file: File | undefined | null) => {
@@ -987,78 +1020,78 @@ export function EmployeeHomePage({
     setEmployeeAttachment(file);
   };
 
-  const confirmSwitchToSafeSubmit = () => {
-    if (reportSubmitting) return;
-    setConfirmSwitchToSafeOpen(false);
-    setSelectedNeedHelp(false);
-    setEmployeeComment('');
-    setEmployeeLocation('');
-    setEmployeeAttachment(null);
-    setUploadNotice(null);
-    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
-    void onSubmit('safe', { omitStoredAttachment: false });
-  };
+  if (!selectedEvent) return null;
 
-  const heroTime = selectedEvent ? new Date(selectedEvent.startAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+  const fieldId = selectedEvent.id.replace(/[^a-zA-Z0-9_-]/g, '');
+  const heroTime = new Date(selectedEvent.startAt).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  const fullHero =
+    layout === 'full' ? (
+      <header className="employee-event-hero">
+        <button className="employee-event-back" type="button" onClick={requestBackNavigation} aria-label="返回事件列表">
+          <ChevronLeft size={24} strokeWidth={2.25} aria-hidden />
+        </button>
+        <div className="employee-event-hero-art" aria-hidden />
+        <div className="employee-event-hero-body">
+          <div className="employee-event-icon-ring">
+            <Activity size={36} strokeWidth={1.6} aria-hidden />
+          </div>
+          <h1 className="employee-event-headline">{selectedEvent.title}</h1>
+          <p className="employee-event-subline">
+            {hasReport && wantToUpdate ? '請更新並儲存你的回報。' : hasReport && !wantToUpdate ? '\u00a0' : `Hi ${userName}，請確認你的狀態是否平安。`}
+          </p>
+          <div className="employee-event-meta-pill">
+            <span className="employee-event-meta-item">
+              <span className="employee-event-meta-ic" aria-hidden>
+                ●
+              </span>
+              {selectedEvent.type}
+            </span>
+            <span className="employee-event-meta-split" aria-hidden />
+            <span className="employee-event-meta-item">{currentDepartment}</span>
+            <span className="employee-event-meta-split" aria-hidden />
+            <span className="employee-event-meta-item">{heroTime}</span>
+          </div>
+        </div>
+      </header>
+    ) : null;
 
   return (
-    <section className="employee-event-page">
-      {selectedEvent ? (
-        <>
-          <header className="employee-event-hero">
-            <button className="employee-event-back" type="button" onClick={requestBackNavigation} aria-label="返回事件列表">
-              <ChevronLeft size={24} strokeWidth={2.25} aria-hidden />
-            </button>
-            <div className="employee-event-hero-art" aria-hidden />
-            <div className="employee-event-hero-body">
-              <div className="employee-event-icon-ring">
-                <Activity size={36} strokeWidth={1.6} aria-hidden />
-              </div>
-              <h1 className="employee-event-headline">{selectedEvent.title}</h1>
-              <p className="employee-event-subline">
-                {hasReport && wantToUpdate ? '請更新並儲存你的回報。' : hasReport && !wantToUpdate ? '\u00a0' : `Hi ${userName}，請確認你的狀態是否平安。`}
-              </p>
-              <div className="employee-event-meta-pill">
-                <span className="employee-event-meta-item">
-                  <span className="employee-event-meta-ic" aria-hidden>
-                    ●
-                  </span>
-                  {selectedEvent.type}
-                </span>
-                <span className="employee-event-meta-split" aria-hidden />
-                <span className="employee-event-meta-item">{currentDepartment}</span>
-                <span className="employee-event-meta-split" aria-hidden />
-                <span className="employee-event-meta-item">{heroTime}</span>
-              </div>
+    <>
+      {fullHero}
+      {reportSubmitting ? (
+        <p className="employee-submit-progress" aria-live="polite">
+          送出中…（弱網下可能自動重試，請稍候）
+        </p>
+      ) : null}
+      {submitErrorMessage ? (
+        <div className="employee-submit-error-banner" role="alert">
+          <AlertCircle size={22} aria-hidden />
+          <div className="employee-submit-error-body">
+            <strong>無法送出回報</strong>
+            <p>{submitErrorMessage}</p>
+            <div className="employee-submit-error-actions">
+              <button type="button" className="btn primary" disabled={reportSubmitting} onClick={onRetrySubmit}>
+                <RefreshCw size={16} aria-hidden /> 重試
+              </button>
+              <button type="button" className="btn ghost" onClick={onDismissSubmitError}>
+                關閉
+              </button>
             </div>
-          </header>
+          </div>
+        </div>
+      ) : null}
 
-          {reportSubmitting ? (
-            <p className="employee-submit-progress" aria-live="polite">
-              送出中…（弱網下可能自動重試，請稍候）
-            </p>
-          ) : null}
-          {submitErrorMessage ? (
-            <div className="employee-submit-error-banner" role="alert">
-              <AlertCircle size={22} aria-hidden />
-              <div className="employee-submit-error-body">
-                <strong>無法送出回報</strong>
-                <p>{submitErrorMessage}</p>
-                <div className="employee-submit-error-actions">
-                  <button type="button" className="btn primary" disabled={reportSubmitting} onClick={onRetrySubmit}>
-                    <RefreshCw size={16} aria-hidden /> 重試
-                  </button>
-                  <button type="button" className="btn ghost" onClick={onDismissSubmitError}>
-                    關閉
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="employee-event-body">
-            <div className={`employee-event-shell${isRevisionDraft ? ' employee-event-shell--revision' : ''}`}>
-              {!showReportingControls && latestResponse ? (
+      <div
+        className={`employee-event-body${layout === 'embedded' ? ' employee-quick-report-body--embedded' : ''}`}
+        id={stackSectionId}
+      >
+        <div className={`employee-event-shell${isRevisionDraft ? ' employee-event-shell--revision' : ''}`}>
+              {!showReportingControls && latestResponse && !stackInitialReport ? (
                 <>
                   <div className="employee-submit-success-banner">
                     <CheckCircle2 className="employee-submit-success-ic" size={40} strokeWidth={2} aria-hidden />
@@ -1163,13 +1196,28 @@ export function EmployeeHomePage({
                       <button type="button" className="btn btn-navy-solid" onClick={enterRevisionMode}>
                         <Pencil size={18} strokeWidth={2} aria-hidden /> Edit Report
                       </button>
-                      <button type="button" className="btn employee-btn-outline" onClick={onBackToEvents}>
+                      <button type="button" className="btn employee-btn-outline" onClick={() => onBackToEvents?.()}>
                         Done
                       </button>
                     </div>
                   </article>
                 </>
-              ) : (
+              ) : null}
+              {!showReportingControls && latestResponse && stackInitialReport && !wantToUpdate && !initialSuccessOverlayOpen ? (
+                <div className="member-initial-report-done">
+                  <CheckCircle2 size={36} strokeWidth={2} className="member-initial-report-done-ic" aria-hidden />
+                  <div className="member-initial-report-done-copy">
+                    <strong>已回報成功</strong>
+                    <p className="muted-text">
+                      {latestResponse.status === 'safe' ? '狀態：平安 (I&apos;m Safe)' : '狀態：需要協助 (I need help)'}
+                    </p>
+                    <button type="button" className="btn primary btn-block" onClick={enterRevisionMode}>
+                      補充或更新資訊
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {showReportingControls ? (
                 <>
                   {isRevisionDraft ? (
                     <aside className="employee-edit-alert" role="status">
@@ -1181,12 +1229,44 @@ export function EmployeeHomePage({
                     </aside>
                   ) : null}
 
+                  {stackInitialReport && !isRevisionDraft ? (
+                    <>
+                      <div className={`member-initial-report-actions${reportSubmitting ? ' is-disabled' : ''}`}>
+                        <button
+                          type="button"
+                          disabled={reportSubmitting}
+                          className={`employee-status-wide safe member-initial-report-btn${safeButtonDimmed ? ' is-dimmed' : ''}`}
+                          onClick={handleSubmitSafeTap}
+                        >
+                          <span className="employee-status-inner">
+                            <span className="employee-status-ic" aria-hidden>
+                              <ShieldCheck size={28} strokeWidth={1.65} />
+                            </span>
+                            <span className="employee-status-label">I&apos;m Safe</span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reportSubmitting}
+                          className="employee-status-wide need member-initial-report-btn"
+                          onClick={handleNeedHelpTap}
+                        >
+                          <span className="employee-status-inner">
+                            <span className="employee-status-ic" aria-hidden>
+                              <LifeBuoy size={28} strokeWidth={1.65} />
+                            </span>
+                            <span className="employee-status-label">I need help</span>
+                          </span>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
                   <article className="event-detail-card">
                     <div className="event-detail-card-head">
                       <span className="event-detail-card-icon">
                         <Users size={22} strokeWidth={1.75} aria-hidden />
                       </span>
-                      <h3>Report your status</h3>
+                      <h3>{layout === 'embedded' ? '回報你的狀態' : 'Report your status'}</h3>
                     </div>
                     <div className={`employee-status-row${isRevisionDraft ? ' employee-status-row--revision' : ''}`}>
                       <button
@@ -1217,11 +1297,11 @@ export function EmployeeHomePage({
                         className={
                           isRevisionDraft
                             ? `employee-status-revision-btn employee-status-revision-btn--need${pendingSubmission === 'need_help' ? ' is-selected' : ''}`
-                            : `employee-status-wide need ${needFlowActive ? 'is-need-selected' : ''}`
+                            : `employee-status-wide need`
                         }
-                        onClick={handleNeedHelp}
+                        onClick={handleNeedHelpTap}
                       >
-                        {!isRevisionDraft && needFlowActive ? (
+                        {isRevisionDraft && needFlowActive ? (
                           <span className="employee-choice-check" aria-hidden>
                             ✓
                           </span>
@@ -1240,8 +1320,111 @@ export function EmployeeHomePage({
                       </button>
                     </div>
                   </article>
+                  )}
 
-                  {showHelpDetailsPanel ? (
+                  {!isRevisionDraft && showReportingControls && !stackInitialReport ? (
+                    <div className="employee-help-details-panel">
+                      <article className="event-detail-card">
+                        <div className="event-detail-card-head">
+                          <span className="event-detail-card-icon">
+                            <ClipboardList size={22} strokeWidth={1.75} aria-hidden />
+                          </span>
+                          <h3>
+                            補充說明 <span className="employee-optional-hint">（選填）</span>
+                          </h3>
+                        </div>
+                        <div className="employee-fields">
+                          <label className="employee-field-label" htmlFor={`emp-loc-${fieldId}`}>
+                            位置 <span className="employee-optional-hint">Optional</span>
+                          </label>
+                          <div className="input-with-leading-icon">
+                            <span className="input-leading-ic" aria-hidden>
+                              <MapPin size={19} strokeWidth={2} color="#3d5f85" />
+                            </span>
+                            <input
+                              id={`emp-loc-${fieldId}`}
+                              placeholder="例如：A 棟 3F"
+                              disabled={reportSubmitting}
+                              value={employeeLocation}
+                              onChange={(e) => setEmployeeLocation(e.target.value)}
+                            />
+                          </div>
+
+                          <label className="employee-field-label" htmlFor={`emp-comment-${fieldId}`}>
+                            備註 <span className="employee-optional-hint">Optional</span>
+                          </label>
+                          <div className="textarea-with-leading-icon">
+                            <span className="input-leading-ic textarea-leading" aria-hidden>
+                              <MessageSquare size={19} strokeWidth={2} color="#3d5f85" />
+                            </span>
+                            <textarea
+                              id={`emp-comment-${fieldId}`}
+                              placeholder="可簡述現況…"
+                              disabled={reportSubmitting}
+                              value={employeeComment}
+                              maxLength={MAX_COMMENT_LEN}
+                              onChange={(e) => setEmployeeComment(e.target.value.slice(0, MAX_COMMENT_LEN))}
+                            />
+                            <span className="employee-char-count">{employeeComment.length}/{MAX_COMMENT_LEN}</span>
+                          </div>
+                        </div>
+                      </article>
+
+                      <article className="event-detail-card">
+                        <div className="event-detail-card-head">
+                          <span className="event-detail-card-icon">
+                            <Paperclip size={22} strokeWidth={1.75} aria-hidden />
+                          </span>
+                          <h3>
+                            附件 <span className="employee-optional-hint">（選填）</span>
+                          </h3>
+                        </div>
+                        <input
+                          ref={attachmentInputRef}
+                          id={`emp-file-${fieldId}`}
+                          type="file"
+                          className="visually-hidden-input"
+                          onChange={(e) => applyAttachment(e.target.files?.[0])}
+                        />
+                        <label
+                          htmlFor={`emp-file-${fieldId}`}
+                          className={`employee-drop-zone${dropActive ? ' is-dragging' : ''}${employeeAttachment ? ' has-file' : ''}`}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setDropActive(true);
+                          }}
+                          onDragLeave={() => setDropActive(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDropActive(false);
+                            applyAttachment(e.dataTransfer.files?.[0]);
+                          }}
+                        >
+                          <span className="employee-drop-ic" aria-hidden>
+                            <CloudUpload size={46} strokeWidth={1.45} color="#1e5494" />
+                          </span>
+                          <span className="employee-drop-title">拖曳檔案到此，或點此瀏覽</span>
+                          <span className="employee-drop-hint">支援圖片、影片與文件（各自最大 10MB）</span>
+                          {employeeAttachment ? <span className="employee-drop-file">{employeeAttachment.name}</span> : null}
+                          {uploadNotice ? <span className="employee-drop-error">{uploadNotice}</span> : null}
+                        </label>
+                        {employeeAttachment ? (
+                          <button
+                            type="button"
+                            className="btn ghost btn-remove-att"
+                            onClick={() => {
+                              if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+                              applyAttachment(null);
+                            }}
+                          >
+                            移除附件
+                          </button>
+                        ) : null}
+                      </article>
+                    </div>
+                  ) : null}
+
+                  {isRevisionDraft && showHelpDetailsPanel ? (
                     <div ref={helpDetailsRef} className="employee-help-details-panel">
                     <article className="event-detail-card">
                       <div className="event-detail-card-head">
@@ -1251,7 +1434,7 @@ export function EmployeeHomePage({
                         <h3>{isRevisionDraft ? 'Additional details' : 'Additional details (Optional)'}</h3>
                       </div>
                       <div className="employee-fields">
-                        <label className="employee-field-label" htmlFor="emp-loc-input">
+                        <label className="employee-field-label" htmlFor={`emp-loc-rev-${fieldId}`}>
                           Location
                         </label>
                         <div className="input-with-leading-icon">
@@ -1259,7 +1442,7 @@ export function EmployeeHomePage({
                             <MapPin size={19} strokeWidth={2} color="#3d5f85" />
                           </span>
                           <input
-                            id="emp-loc-input"
+                            id={`emp-loc-rev-${fieldId}`}
                             placeholder="例如：Building A, 3F, Lab 2"
                             disabled={reportSubmitting}
                             value={employeeLocation}
@@ -1267,7 +1450,7 @@ export function EmployeeHomePage({
                           />
                         </div>
 
-                        <label className="employee-field-label" htmlFor="emp-comment-area">
+                        <label className="employee-field-label" htmlFor={`emp-comment-rev-${fieldId}`}>
                           Comment
                         </label>
                         <div className="textarea-with-leading-icon">
@@ -1275,7 +1458,7 @@ export function EmployeeHomePage({
                             <MessageSquare size={19} strokeWidth={2} color="#3d5f85" />
                           </span>
                           <textarea
-                            id="emp-comment-area"
+                            id={`emp-comment-rev-${fieldId}`}
                             placeholder="Tell us more about your situation…"
                             disabled={reportSubmitting}
                             value={employeeComment}
@@ -1284,12 +1467,6 @@ export function EmployeeHomePage({
                           />
                           <span className="employee-char-count">{employeeComment.length}/{MAX_COMMENT_LEN}</span>
                         </div>
-
-                        {!isRevisionDraft && selectedNeedHelp ? (
-                          <button className="btn danger employee-confirm-help" disabled={reportSubmitting} type="button" onClick={handleSubmitNeedHelpConfirm}>
-                            {isRevisionDraft ? '確認「需要協助」（暫存）' : '確認需要協助並送出'}
-                          </button>
-                        ) : null}
                       </div>
                     </article>
 
@@ -1322,9 +1499,9 @@ export function EmployeeHomePage({
                           </div>
                         </div>
                       ) : null}
-                      <input ref={attachmentInputRef} id="emp-file-input" type="file" className="visually-hidden-input" onChange={(e) => applyAttachment(e.target.files?.[0])} />
+                      <input ref={attachmentInputRef} id={`emp-file-rev-${fieldId}`} type="file" className="visually-hidden-input" onChange={(e) => applyAttachment(e.target.files?.[0])} />
                       <label
-                        htmlFor="emp-file-input"
+                        htmlFor={`emp-file-rev-${fieldId}`}
                         className={`employee-drop-zone${dropActive ? ' is-dragging' : ''}${employeeAttachment ? ' has-file' : ''}`}
                         onDragOver={(e) => {
                           e.preventDefault();
@@ -1361,8 +1538,9 @@ export function EmployeeHomePage({
                   </div>
                   ) : null}
                 </>
-              )}
+              ) : null}
 
+              {!hideEmergencyContact ? (
               <article className="event-detail-card event-detail-card--emergency">
                 <div className="event-detail-card-head">
                   <span className="event-detail-card-icon">
@@ -1418,6 +1596,7 @@ export function EmployeeHomePage({
                   </a>
                 </div>
               </article>
+              ) : null}
 
               <footer className={`employee-event-tagline${isRevisionDraft ? ' employee-event-tagline--revision' : ''}`}>
                 Stay safe. Stay connected. ♡
@@ -1445,6 +1624,34 @@ export function EmployeeHomePage({
             </footer>
           ) : null}
 
+          {stackInitialReport && latestResponse && initialSuccessOverlayOpen ? (
+            <div
+              className="member-report-success-overlay-backdrop"
+              role="presentation"
+              onClick={() => setInitialSuccessOverlayOpen(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setInitialSuccessOverlayOpen(false);
+              }}
+            >
+              <div
+                className="member-report-success-overlay-card"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="member-initial-success-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <CheckCircle2 size={52} strokeWidth={2} className="member-report-success-overlay-ic" aria-hidden />
+                <h3 id="member-initial-success-title">{selectedEvent.title}</h3>
+                <p className="member-report-success-overlay-status">
+                  {latestResponse.status === 'safe' ? '已送出：平安' : '已送出：需要協助'}
+                </p>
+                <button type="button" className="btn primary btn-block" onClick={() => setInitialSuccessOverlayOpen(false)}>
+                  關閉
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <ConfirmModal
             open={discardPromptAfter !== null}
             title="Discard unsaved changes?"
@@ -1454,59 +1661,308 @@ export function EmployeeHomePage({
             onCancel={() => setDiscardPromptAfter(null)}
             onConfirm={confirmDiscardDraft}
           />
-          <ConfirmModal
-            open={confirmSwitchToSafeOpen}
-            title="改為「I'm Safe」？"
-            description="你目前選擇了需要協助。若改為平安，將關閉詳細欄位並以「平安」送出回報。"
-            cancelText="取消"
-            confirmText="改為 I'm Safe 並送出"
-            confirmTone="primary"
-            onCancel={() => setConfirmSwitchToSafeOpen(false)}
-            onConfirm={confirmSwitchToSafeSubmit}
-          />
-        </>
-      ) : (
+    </>
+  );
+}
+
+export function EmployeeHomePage({
+  draftUserId,
+  userName,
+  selectedEvent,
+  currentDepartment,
+  latestResponse,
+  reportSubmitting,
+  submitErrorMessage,
+  onDismissSubmitError,
+  onRetrySubmit,
+  onSubmit,
+  onBackToEvents,
+}: {
+  draftUserId: string | null;
+  userName: string;
+  selectedEvent: EventItem | null;
+  currentDepartment: string;
+  latestResponse?: SafetyResponse;
+  reportSubmitting: boolean;
+  submitErrorMessage: string | null;
+  onDismissSubmitError: () => void;
+  onRetrySubmit: () => void;
+  onSubmit: (
+    status: 'safe' | 'need_help',
+    fields: EmployeeReportFields,
+    meta?: { omitStoredAttachment?: boolean },
+  ) => void | Promise<void>;
+  onBackToEvents: () => void;
+}) {
+  return (
+    <section className="employee-event-page">
+      {!selectedEvent ? (
         <div className="employee-event-empty">
           <p>目前沒有選取的事件</p>
         </div>
+      ) : (
+        <EmployeeQuickReportPanel
+          draftUserId={draftUserId}
+          userName={userName}
+          selectedEvent={selectedEvent}
+          currentDepartment={currentDepartment}
+          latestResponse={latestResponse}
+          reportSubmitting={reportSubmitting}
+          submitErrorMessage={submitErrorMessage}
+          onDismissSubmitError={onDismissSubmitError}
+          onRetrySubmit={onRetrySubmit}
+          onSubmit={onSubmit}
+          layout="full"
+          hideEmergencyContact={false}
+          onBackToEvents={onBackToEvents}
+        />
       )}
     </section>
   );
 }
 
-export function EmployeeHistoryPage({
+export function MemberPriorityHomePage({
+  priorityView,
+  draftUserId,
+  userName,
+  currentDepartment,
   responses,
-  events,
-  filter,
-  setFilter,
+  userId,
+  onSubmitReport,
+  onRetryReport,
+  submittingEventId,
+  submitErrorMessage,
+  submitErrorEventId,
+  onDismissSubmitError,
+  idleHistoryOngoing,
+  idleHistoryClosed,
+  onSupplementEvent,
+  supervisorTeamNudge,
+  onDismissSupervisorNudge,
+  onGoTeamDashboardFromNudge,
 }: {
+  priorityView: { kind: 'personal_stack' | 'idle'; rows: MemberHomeRow[] };
+  draftUserId: string | null;
+  userName: string;
+  currentDepartment: string;
   responses: SafetyResponse[];
-  events: EventItem[];
-  filter: 'all' | 'safe' | 'need_help';
-  setFilter: (value: 'all' | 'safe' | 'need_help') => void;
+  userId: string | null;
+  onSubmitReport: (
+    eventId: string,
+    status: 'safe' | 'need_help',
+    fields: EmployeeReportFields,
+    meta?: { omitStoredAttachment?: boolean },
+  ) => void | Promise<void>;
+  onRetryReport: () => void;
+  submittingEventId: string | null;
+  submitErrorMessage: string | null;
+  submitErrorEventId: string | null;
+  onDismissSubmitError: () => void;
+  idleHistoryOngoing: MemberHomeRow[];
+  idleHistoryClosed: MemberHomeRow[];
+  onSupplementEvent: (eventId: string) => void;
+  supervisorTeamNudge: null | { pendingPct: number; eventTitle: string };
+  onDismissSupervisorNudge: () => void;
+  onGoTeamDashboardFromNudge: () => void;
 }) {
-  const filtered = responses.filter((response) => (filter === 'all' ? true : response.status === filter));
-  return (
-    <section className="page-section">
-      <h2>My Reporting History</h2>
-      <div className="tabs">
-        {(['all', 'safe', 'need_help'] as const).map((item) => (
-          <button key={item} className={filter === item ? 'pill active' : 'pill'} onClick={() => setFilter(item)} type="button">
-            {item}
-          </button>
-        ))}
-      </div>
-      <div className="list">
-        {filtered.map((response) => {
-          const event = events.find((item) => item.id === response.eventId);
-          return (
-            <article className="list-item" key={response.id}>
+  const latestFor = (eventId: string) =>
+    userId
+      ? responses
+          .filter((r) => r.eventId === eventId && r.userId === userId)
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]
+      : undefined;
+
+  if (priorityView.kind === 'idle') {
+    return (
+      <section className="page-section employee-events-page member-priority-home member-priority-home--idle">
+        {supervisorTeamNudge ? (
+          <div className="supervisor-team-nudge-banner" role="status">
+            <div className="supervisor-team-nudge-copy">
+              <strong>已回報成功</strong>
+              <p>
+                事件「{supervisorTeamNudge.eventTitle}」轄下尚有 {supervisorTeamNudge.pendingPct}% 未回報，可前往團隊報表追蹤。
+              </p>
+            </div>
+            <div className="supervisor-team-nudge-actions">
+              <button type="button" className="btn primary" onClick={onGoTeamDashboardFromNudge}>
+                團隊報表
+              </button>
+              <button type="button" className="btn ghost" onClick={onDismissSupervisorNudge}>
+                關閉
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <header className="employee-events-hero">
+          <div className="employee-events-hero-text">
+            <h2 className="employee-events-title">
+              <Activity className="employee-events-title-icon" aria-hidden />
+              目前無須立即回報
+            </h2>
+            <p className="employee-events-subtitle">若需補充資料請於下方進行中事件操作；可向下捲動檢視已結束事件。</p>
+          </div>
+        </header>
+
+        <div className="member-idle-history">
+          <h3 className="section-title member-idle-history-title">進行中</h3>
+          {idleHistoryOngoing.length === 0 ? (
+            <p className="empty muted-text">尚無已回報且仍進行中的事件。</p>
+          ) : (
+            <ul className="member-idle-history-list">
+              {idleHistoryOngoing.map((row) => {
+                const lr = row.latest;
+                if (!lr) return null;
+                return (
+                  <li key={row.event.id} className="member-idle-history-row">
+                    <div className="member-idle-history-row-main">
+                      <span className="member-idle-history-event-title">{row.event.title}</span>
+                      <span className="muted-text subtle">{row.event.type}</span>
+                    </div>
+                    <div className="member-idle-history-row-aside">
+                      <StatusBadge status={lr.status} />
+                      <button type="button" className="btn primary btn-sm" onClick={() => onSupplementEvent(row.event.id)}>
+                        補充或更新資訊
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <h3 className="section-title member-idle-history-title member-idle-history-title--closed">已結束</h3>
+          {idleHistoryClosed.length === 0 ? (
+            <p className="empty muted-text">尚無已結束事件紀錄。</p>
+          ) : (
+            <ul className="member-idle-history-list">
+              {idleHistoryClosed.map((row) => {
+                const lr = row.latest;
+                if (!lr) return null;
+                return (
+                  <li key={row.event.id} className="member-idle-history-row member-idle-history-row--readonly">
+                    <div className="member-idle-history-row-main">
+                      <span className="member-idle-history-event-title">{row.event.title}</span>
+                      <span className="muted-text subtle">{formatEmployeeCardTime(lr.updatedAt)}</span>
+                    </div>
+                    <StatusBadge status={lr.status} />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <article className="event-detail-card event-detail-card--emergency member-priority-idle-emergency">
+          <div className="event-detail-card-head">
+            <span className="event-detail-card-icon">
+              <Phone size={22} strokeWidth={1.8} aria-hidden />
+            </span>
+            <h3>緊急聯絡</h3>
+          </div>
+          <div className="emergency-inline emergency-inline--desktop">
+            <a className="emergency-slot" href="tel:+886212345678">
+              <span className="emergency-slot-ic emergency-slot-ic--headset" aria-hidden>
+                <Headphones size={20} strokeWidth={2} />
+              </span>
               <div>
-                <strong>{event?.title ?? 'Unknown Event'}</strong>
-                <p>{new Date(response.updatedAt).toLocaleString()}</p>
+                <div className="emergency-slot-title">Emergency Hotline</div>
+                <div className="emergency-slot-num">+886 (2) 1234-5678</div>
               </div>
-              <StatusBadge status={response.status} />
-            </article>
+            </a>
+            <span className="emergency-vrule" aria-hidden />
+            <a className="emergency-slot" href="tel:+886298765432">
+              <span className="emergency-slot-ic emergency-slot-ic--people" aria-hidden>
+                <Users size={20} strokeWidth={2} />
+              </span>
+              <div>
+                <div className="emergency-slot-title">HR Duty Line</div>
+                <div className="emergency-slot-num">+886 (2) 9876-5432</div>
+              </div>
+            </a>
+          </div>
+          <div className="emergency-list emergency-list--narrow">
+            <a className="emergency-row" href="tel:+886212345678">
+              <span className="emergency-row-ic" aria-hidden>
+                <Headphones size={20} strokeWidth={2} />
+              </span>
+              <div className="emergency-row-text">
+                <div className="emergency-slot-title">Emergency Hotline</div>
+                <div className="emergency-slot-num">+886 (2) 1234-5678</div>
+              </div>
+              <span className="emergency-row-chevron" aria-hidden>
+                <ChevronRight size={20} strokeWidth={2} />
+              </span>
+            </a>
+            <a className="emergency-row" href="tel:+886298765432">
+              <span className="emergency-row-ic" aria-hidden>
+                <Users size={20} strokeWidth={2} />
+              </span>
+              <div className="emergency-row-text">
+                <div className="emergency-slot-title">HR Duty Line</div>
+                <div className="emergency-slot-num">+886 (2) 9876-5432</div>
+              </div>
+              <span className="emergency-row-chevron" aria-hidden>
+                <ChevronRight size={20} strokeWidth={2} />
+              </span>
+            </a>
+          </div>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-section employee-events-page member-priority-home" aria-label="待回報事件">
+      <header className="employee-events-hero">
+        <div className="employee-events-hero-text">
+          <h2 className="employee-events-title">
+            <ShieldCheck className="employee-events-title-icon" aria-hidden />
+            立即回報
+          </h2>
+          <p className="employee-events-subtitle">請先按下平安或需要協助完成首報；補充說明可於送出後再填寫。</p>
+        </div>
+      </header>
+
+      <div className="member-priority-stack">
+        {priorityView.rows.map((row) => {
+          const lid = `priority-head-${row.event.id}`;
+          const latest = latestFor(row.event.id) ?? row.latest;
+          const errHere = submitErrorEventId === row.event.id;
+          return (
+            <div key={row.event.id} className="member-priority-report-card" aria-labelledby={lid}>
+              <div className="member-priority-card-head">
+                <div className="member-priority-card-icon" aria-hidden>
+                  {(() => {
+                    const Ico = employeeEventTypeIcon(row.event.type);
+                    return <Ico size={24} strokeWidth={1.85} />;
+                  })()}
+                </div>
+                <div className="member-priority-card-head-text">
+                  <h3 className="member-priority-card-title" id={lid}>
+                    {row.event.title}
+                  </h3>
+                  <p className="member-priority-card-meta">
+                    {row.event.type} · {formatEmployeeCardTime(row.event.startAt)}
+                  </p>
+                </div>
+              </div>
+              <EmployeeQuickReportPanel
+                draftUserId={draftUserId}
+                userName={userName}
+                selectedEvent={row.event}
+                currentDepartment={currentDepartment}
+                latestResponse={latest}
+                reportSubmitting={submittingEventId === row.event.id}
+                submitErrorMessage={errHere ? submitErrorMessage : null}
+                onDismissSubmitError={onDismissSubmitError}
+                onRetrySubmit={onRetryReport}
+                onSubmit={(status, fields, meta) => onSubmitReport(row.event.id, status, fields, meta)}
+                layout="embedded"
+                hideEmergencyContact
+                stackInitialReport
+                stackSectionId={`priority-report-${row.event.id}`}
+              />
+            </div>
           );
         })}
       </div>

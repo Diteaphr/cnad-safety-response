@@ -1,7 +1,78 @@
 import { EmployeeTable } from '../../components/EmployeeTable';
 import { StatCard } from '../../components/StatCard';
 import { StatusBadge } from '../../components/StatusBadge';
-import type { Department } from '../../types';
+import type { Department, EventItem } from '../../types';
+
+export function TeamDashboardHomePage({
+  activeRows,
+  closedRows,
+  onOpenEvent,
+}: {
+  activeRows: Array<{ event: EventItem; teamCounts: { total: number; safe: number; needHelp: number; pending: number } }>;
+  closedRows: Array<{ event: EventItem; teamCounts: { total: number; safe: number; needHelp: number; pending: number } }>;
+  onOpenEvent: (eventId: string) => void;
+}) {
+  const renderCard = (
+    row: { event: EventItem; teamCounts: { total: number; safe: number; needHelp: number; pending: number } },
+    variant: 'active' | 'closed',
+  ) => {
+    const { event, teamCounts } = row;
+    const pctPending = teamCounts.total ? Math.round((teamCounts.pending / teamCounts.total) * 100) : 0;
+    const rate = teamCounts.total
+      ? Math.round(((teamCounts.safe + teamCounts.needHelp) / teamCounts.total) * 100)
+      : 0;
+    const alertHigh = variant === 'active' && teamCounts.total > 0 && teamCounts.pending / teamCounts.total >= 0.3;
+    return (
+      <button
+        key={event.id}
+        type="button"
+        className={`team-dash-event-card${variant === 'closed' ? ' team-dash-event-card--closed' : ''}${alertHigh ? ' team-dash-event-card--alert' : ''}`}
+        onClick={() => onOpenEvent(event.id)}
+      >
+        <div className="team-dash-event-card-top">
+          <strong className="team-dash-event-title">{event.title}</strong>
+          <span className="muted-text team-dash-event-meta">
+            {event.type} · {event.status === 'active' ? '進行中' : '已結束'}
+          </span>
+        </div>
+        <div className="team-dash-event-stats">
+          <span>
+            未回報 {teamCounts.pending} / {teamCounts.total}（{pctPending}%）
+          </span>
+          <span className="muted-text">已回報進度 {rate}%</span>
+        </div>
+        <div className="progress-track team-dash-progress">
+          <div className="progress-fill" style={{ width: `${rate}%` }} />
+        </div>
+      </button>
+    );
+  };
+
+  return (
+    <section className="page-section team-dashboard-home">
+      <header className="team-dashboard-home-header">
+        <h2>團隊報表</h2>
+        <p className="muted-text">進行中的事件列於最上方；點選卡片檢視轄下回報細節。</p>
+      </header>
+      <section className="team-dashboard-home-section">
+        <h3 className="section-title">進行中</h3>
+        {activeRows.length === 0 ? (
+          <p className="empty muted-text">目前沒有進行中且需追蹤轄下回報的事件。</p>
+        ) : (
+          <div className="team-dash-event-list">{activeRows.map((r) => renderCard(r, 'active'))}</div>
+        )}
+      </section>
+      <section className="team-dashboard-home-section team-dashboard-home-section--closed">
+        <h3 className="section-title">已結束</h3>
+        {closedRows.length === 0 ? (
+          <p className="empty muted-text">尚無已結束事件。</p>
+        ) : (
+          <div className="team-dash-event-list">{closedRows.map((r) => renderCard(r, 'closed'))}</div>
+        )}
+      </section>
+    </section>
+  );
+}
 
 export function SupervisorDashboardPage({
   stats,
@@ -19,6 +90,7 @@ export function SupervisorDashboardPage({
   allRespondedBanner,
   dashMismatchHint,
   dashboardFreshAt,
+  hideBulkTeamActions = false,
 }: {
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
   rows: Array<{
@@ -44,6 +116,8 @@ export function SupervisorDashboardPage({
   allRespondedBanner: boolean;
   dashMismatchHint: string | null;
   dashboardFreshAt: number | null;
+  /** 主管關懷視角：隱藏大量發送提醒／匯出（非 Admin 維運） */
+  hideBulkTeamActions?: boolean;
 }) {
   const filtered = rows
     .filter((row) => (filter === 'all' ? true : row.status === filter))
@@ -182,12 +256,18 @@ export function SupervisorDashboardPage({
             ))
           )}
           <div className="row-actions">
-            <button className="btn warning" onClick={onSendReminder} type="button">
-              Send Reminder
-            </button>
-            <button className="btn ghost" onClick={onExport} type="button">
-              Export / Email
-            </button>
+            {!hideBulkTeamActions ? (
+              <>
+                <button className="btn warning" onClick={onSendReminder} type="button">
+                  Send Reminder
+                </button>
+                <button className="btn ghost" onClick={onExport} type="button">
+                  Export / Email
+                </button>
+              </>
+            ) : (
+              <p className="muted-text small">請以電話或其他管道聯繫未回報同仁；本檢視不提供批次通知。</p>
+            )}
           </div>
         </section>
       </div>

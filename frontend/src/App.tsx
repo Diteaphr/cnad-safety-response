@@ -6,9 +6,14 @@ import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistory
 import { DirectReportsListPage } from './profile/DirectReportsListPage';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
 import { LoginPage, RegisterPage, RoleSelectionPage } from './features/auth/AuthScreens';
-import { SupervisorDashboardPage, AdminDashboardPage } from './features/dashboard/DashboardPages';
+import { SupervisorDashboardPage, AdminDashboardPage, TeamDashboardHomePage } from './features/dashboard/DashboardPages';
 import { EventManagementPage, EventSelectionPage, NotificationPage, UserManagementPage } from './features/events/EventAndAdminPages';
-import { EmployeeHistoryPage, EmployeeHomePage, MemberEventListPage } from './features/member/memberScreens';
+import {
+  EmployeeHomePage,
+  MemberPriorityHomePage,
+  type EmployeeReportFields,
+  type MemberHomeRow,
+} from './features/member/memberScreens';
 import {
   activateEventApi,
   clearAccessToken,
@@ -68,6 +73,10 @@ const roleDefaultNav: Record<Role, NavKey> = {
 function App() {
   const [session, setSession] = useState<SessionState>({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
   const [navKey, setNavKey] = useState<NavKey>('member-home');
+  const [supervisorTeamNudge, setSupervisorTeamNudge] = useState<null | { pendingPct: number; eventTitle: string }>(null);
+  const [supervisorOpenedDetailFrom, setSupervisorOpenedDetailFrom] = useState<'member-home' | 'team-dashboard-home'>(
+    'member-home',
+  );
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -79,9 +88,15 @@ function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [profileSubordinateUserId, setProfileSubordinateUserId] = useState<string | null>(null);
 
-  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [submittingReportEventId, setSubmittingReportEventId] = useState<string | null>(null);
   const [reportSubmitError, setReportSubmitError] = useState<string | null>(null);
-  const lastSubmitMetaRef = useRef<{ status: 'safe' | 'need_help'; meta?: { omitStoredAttachment?: boolean } } | null>(null);
+  const [reportSubmitErrorEventId, setReportSubmitErrorEventId] = useState<string | null>(null);
+  const lastSubmitMetaRef = useRef<{
+    eventId: string;
+    status: 'safe' | 'need_help';
+    fields: EmployeeReportFields;
+    meta?: { omitStoredAttachment?: boolean };
+  } | null>(null);
 
   const [supervisorDashboard, setSupervisorDashboard] = useState<SupervisorDashboardApi | null>(null);
   const [adminDashboard, setAdminDashboard] = useState<AdminDashboardApi | null>(null);
@@ -143,12 +158,7 @@ function App() {
     setSelectedAdminEventId(id);
     setSelectedNotificationEventId(id);
   }, [events]);
-  const [employeeEventFilter, setEmployeeEventFilter] = useState<'ongoing' | 'closed'>('ongoing');
-  const [employeeListSearch, setEmployeeListSearch] = useState('');
-  const [employeeComment, setEmployeeComment] = useState('');
-  const [employeeLocation, setEmployeeLocation] = useState('');
-  const [employeeAttachment, setEmployeeAttachment] = useState<File | null>(null);
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'safe' | 'need_help'>('all');
+
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
   const [eventForm, setEventForm] = useState({
@@ -166,14 +176,6 @@ function App() {
     return events.filter((event) => event.status !== 'draft' && event.targetDepartmentIds.includes(employeeDeptId));
   }, [events, employeeDeptId]);
 
-  const employeeTabCounts = useMemo(
-    () => ({
-      ongoing: employeeAccessibleEvents.filter((e) => e.status === 'active').length,
-      closed: employeeAccessibleEvents.filter((e) => e.status === 'closed').length,
-    }),
-    [employeeAccessibleEvents],
-  );
-
   const subordinateUserIds = useMemo(
     () => users.filter((user) => user.managerId === session.user?.id).map((user) => user.id),
     [users, session.user?.id],
@@ -185,19 +187,11 @@ function App() {
   /** 1:僅個人回報 2:回報＋團隊 3:僅團隊 */
   const memberHomeMode: 1 | 2 | 3 = !hasDirectReports ? 1 : hasManager ? 2 : 3;
 
-  const memberListRows = useMemo(() => {
+  const memberListRowsOngoing: MemberHomeRow[] = useMemo(() => {
     const uid = session.user?.id;
     if (!uid || !employeeDeptId) return [];
-    const tabStatus = employeeEventFilter === 'ongoing' ? 'active' : 'closed';
-    let list = employeeAccessibleEvents.filter((e) => e.status === tabStatus);
-    const q = employeeListSearch.trim().toLowerCase();
-    if (q) {
-      list = list.filter((e) => {
-        const hay = `${e.title} ${e.type} ${e.description} ${e.cardDepartment ?? ''} ${e.venue ?? ''}`.toLowerCase();
-        return hay.includes(q);
-      });
-    }
-    let enriched = list.map((event) => {
+    const list = employeeAccessibleEvents.filter((e) => e.status === 'active');
+    const enriched = list.map((event) => {
       const latest = responses
         .filter((r) => r.eventId === event.id && r.userId === uid)
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
@@ -229,37 +223,116 @@ function App() {
       return { event, latest, teamCounts };
     });
 
-    if (employeeEventFilter === 'ongoing') {
-      if (memberHomeMode === 3) {
-        enriched.sort((a, b) => {
-          const pendA = a.teamCounts?.pending ?? 0;
-          const pendB = b.teamCounts?.pending ?? 0;
-          if (pendA !== pendB) return pendB - pendA;
-          return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
-        });
-      } else {
-        enriched.sort((a, b) => {
-          const ap = a.latest ? 1 : 0;
-          const bp = b.latest ? 1 : 0;
-          if (ap !== bp) return ap - bp;
-          return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
-        });
-      }
+    if (memberHomeMode === 3) {
+      enriched.sort((a, b) => {
+        const pendA = a.teamCounts?.pending ?? 0;
+        const pendB = b.teamCounts?.pending ?? 0;
+        if (pendA !== pendB) return pendB - pendA;
+        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+      });
     } else {
-      enriched.sort((a, b) => new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime());
+      enriched.sort((a, b) => {
+        const ap = a.latest ? 1 : 0;
+        const bp = b.latest ? 1 : 0;
+        if (ap !== bp) return ap - bp;
+        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+      });
     }
 
     return enriched;
   }, [
     employeeAccessibleEvents,
     employeeDeptId,
-    employeeEventFilter,
-    employeeListSearch,
     memberHomeMode,
     responses,
     session.user?.id,
     subordinateUserIds,
   ]);
+
+  const memberPriorityView = useMemo((): { kind: 'personal_stack' | 'idle'; rows: MemberHomeRow[] } => {
+    const pend = memberListRowsOngoing.filter((r) => !r.latest);
+    return pend.length ? { kind: 'personal_stack', rows: pend } : { kind: 'idle', rows: [] };
+  }, [memberListRowsOngoing]);
+
+  const idlePersonalHistory = useMemo(() => {
+    const uid = session.user?.id;
+    if (!uid || !employeeDeptId) return { ongoing: [] as MemberHomeRow[], closed: [] as MemberHomeRow[] };
+    const ongoing: MemberHomeRow[] = [];
+    const closed: MemberHomeRow[] = [];
+    for (const event of employeeAccessibleEvents) {
+      const latest = responses
+        .filter((r) => r.eventId === event.id && r.userId === uid)
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+      if (!latest) continue;
+      const row: MemberHomeRow = { event, latest };
+      if (event.status === 'active') ongoing.push(row);
+      else if (event.status === 'closed') closed.push(row);
+    }
+    const sorter = (a: MemberHomeRow, b: MemberHomeRow) =>
+      new Date((b.latest as SafetyResponse).updatedAt).getTime() -
+      new Date((a.latest as SafetyResponse).updatedAt).getTime();
+    ongoing.sort(sorter);
+    closed.sort(sorter);
+    return { ongoing, closed };
+  }, [employeeAccessibleEvents, responses, session.user?.id, employeeDeptId]);
+
+  type TeamDashRow = {
+    event: EventItem;
+    teamCounts: { total: number; safe: number; needHelp: number; pending: number };
+  };
+
+  const supervisorTeamDashboardRows = useMemo(() => {
+    if (!hasDirectReports || !employeeDeptId) {
+      return { active: [] as TeamDashRow[], closed: [] as TeamDashRow[] };
+    }
+    const build = (status: 'active' | 'closed'): TeamDashRow[] =>
+      employeeAccessibleEvents
+        .filter((e) => e.status === status)
+        .map((event) => {
+          let safe = 0;
+          let needHelp = 0;
+          let pending = 0;
+          for (const sid of subordinateUserIds) {
+            const lr = responses
+              .filter((r) => r.eventId === event.id && r.userId === sid)
+              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+            if (!lr) pending += 1;
+            else if (lr.status === 'safe') safe += 1;
+            else needHelp += 1;
+          }
+          return {
+            event,
+            teamCounts: {
+              total: subordinateUserIds.length,
+              safe,
+              needHelp,
+              pending,
+            },
+          };
+        })
+        .filter((r) => r.teamCounts.total > 0);
+    const active = build('active').sort((a, b) => {
+      const ra = a.teamCounts.pending / Math.max(a.teamCounts.total, 1);
+      const rb = b.teamCounts.pending / Math.max(b.teamCounts.total, 1);
+      if (ra !== rb) return rb - ra;
+      return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+    });
+    const closed = build('closed').sort((a, b) => new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime());
+    return { active, closed };
+  }, [hasDirectReports, employeeDeptId, employeeAccessibleEvents, subordinateUserIds, responses]);
+
+  const layoutNavKey = useMemo((): NavKey => {
+    if (navKey === 'employee-event-detail' || navKey === 'supervisor-event-detail') {
+      if (navKey === 'supervisor-event-detail' && supervisorOpenedDetailFrom === 'team-dashboard-home') {
+        return 'team-dashboard-home';
+      }
+      return 'member-home';
+    }
+    if (navKey === 'admin-event-detail') return 'admin-dashboard';
+    if (navKey === 'notifications-event-detail') return 'notifications';
+    if (navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history') return 'profile';
+    return navKey;
+  }, [navKey, supervisorOpenedDetailFrom]);
   const selectedEmployeeEvent = useMemo(
     () => events.find((event) => event.id === selectedEmployeeEventId) ?? null,
     [events, selectedEmployeeEventId],
@@ -476,6 +549,7 @@ function App() {
     if (!session.isLoggedIn || session.currentRole === null) return undefined;
     const watchNav =
       navKey === 'supervisor-event-detail' ||
+      navKey === 'team-dashboard-home' ||
       navKey === 'admin-event-detail' ||
       navKey === 'notifications' ||
       navKey === 'notifications-event-detail';
@@ -616,6 +690,8 @@ function App() {
   const pickRole = (role: Role) => {
     setSession((prev) => ({ ...prev, currentRole: role }));
     setNavKey(roleDefaultNav[role]);
+    setSupervisorOpenedDetailFrom('member-home');
+    setSupervisorTeamNudge(null);
   };
 
   const logout = () => {
@@ -624,36 +700,66 @@ function App() {
     showToast({ tone: 'info', message: 'Logged out.' });
   };
 
-  const submitEmployeeStatus = async (status: 'safe' | 'need_help', meta?: { omitStoredAttachment?: boolean }) => {
-    if (!selectedEmployeeEvent || !session.user) return;
+  const submitEmployeeStatus = async (
+    eventId: string,
+    status: 'safe' | 'need_help',
+    fields: EmployeeReportFields,
+    meta?: { omitStoredAttachment?: boolean },
+  ) => {
+    if (!session.user) return;
     const uid = session.user.id;
-    const eid = selectedEmployeeEvent.id;
-    lastSubmitMetaRef.current = { status, meta };
+    const eventRow = events.find((e) => e.id === eventId);
+    if (!eventRow) return;
+    lastSubmitMetaRef.current = { eventId, status, fields, meta };
     setReportSubmitError(null);
-    setReportSubmitting(true);
+    setReportSubmitErrorEventId(null);
+    setSubmittingReportEventId(eventId);
     const prior = responses
-      .filter((r) => r.eventId === eid && r.userId === uid)
+      .filter((r) => r.eventId === eventId && r.userId === uid)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
     const keepPriorAttach = !(meta?.omitStoredAttachment ?? false);
     try {
       const out = await submitReportApi({
-        eventId: eid,
+        eventId,
         userId: uid,
         status,
-        comment: employeeComment.trim() || undefined,
-        location: employeeLocation.trim() || undefined,
+        comment: fields.comment.trim() || undefined,
+        location: fields.location.trim() || undefined,
       });
       const raw = out.data;
       const nextResponse: SafetyResponse = {
         ...raw,
-        attachmentName: employeeAttachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined) ?? raw.attachmentName,
-        attachmentSizeBytes: employeeAttachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined) ?? raw.attachmentSizeBytes,
+        attachmentName:
+          fields.attachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined) ?? raw.attachmentName,
+        attachmentSizeBytes:
+          fields.attachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined) ?? raw.attachmentSizeBytes,
       };
-      clearEmployeeReportDraft(uid, eid);
-      setResponses((prev) => [
-        ...prev.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
+      const mergedResponses: SafetyResponse[] = [
+        ...responses.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
         nextResponse,
-      ]);
+      ];
+      if (session.currentRole === 'supervisor' && subordinateUserIds.length > 0) {
+        let pend = 0;
+        for (const sid of subordinateUserIds) {
+          const lr = mergedResponses
+            .filter((r) => r.eventId === eventId && r.userId === sid)
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+          if (!lr) pend += 1;
+        }
+        const teamTotal = subordinateUserIds.length;
+        if (pend > 0 && teamTotal > 0) {
+          setSupervisorTeamNudge({
+            pendingPct: Math.round((pend / teamTotal) * 100),
+            eventTitle: eventRow.title,
+          });
+        } else {
+          setSupervisorTeamNudge(null);
+        }
+      } else {
+        setSupervisorTeamNudge(null);
+      }
+      clearEmployeeReportDraft(uid, eventId);
+      setResponses(mergedResponses);
       lastSubmitMetaRef.current = null;
       showToast({ tone: 'success', message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}` });
       void refreshOperationalData();
@@ -663,9 +769,10 @@ function App() {
           ? e.message
           : '送出失敗，請檢查網路或稍後重試。（系統將在弱網下自動重試數次）';
       setReportSubmitError(msg);
+      setReportSubmitErrorEventId(eventId);
       showToast({ tone: 'danger', message: msg });
     } finally {
-      setReportSubmitting(false);
+      setSubmittingReportEventId(null);
     }
   };
 
@@ -791,41 +898,58 @@ function App() {
       <Layout
         currentRole={session.currentRole}
         roleOptions={session.availableRoles}
-        currentNav={
-          navKey === 'employee-event-detail' || navKey === 'supervisor-event-detail'
-            ? 'member-home'
-            : navKey === 'admin-event-detail'
-              ? 'admin-dashboard'
-              : navKey === 'notifications-event-detail'
-                ? 'notifications'
-                : navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history'
-                  ? 'profile'
-                  : navKey
-        }
+        currentNav={layoutNavKey}
         onSwitchRole={pickRole}
-        onSwitchNav={setNavKey}
+        onSwitchNav={(key) => {
+          if (key === 'member-home') setSupervisorOpenedDetailFrom('member-home');
+          setNavKey(key);
+        }}
         onLogout={logout}
       >
         {navKey === 'member-home' && session.currentRole !== 'admin' && (
-          <MemberEventListPage
-            mode={memberHomeMode}
-            rows={memberListRows}
-            selectedPersonalEventId={selectedEmployeeEventId}
-            selectedTeamEventId={selectedSupervisorEventId}
-            onOpenPersonal={(eventId) => {
+          <MemberPriorityHomePage
+            priorityView={memberPriorityView}
+            draftUserId={session.user?.id ?? null}
+            userName={session.user?.name ?? ''}
+            currentDepartment={currentDepartment}
+            responses={responses}
+            userId={session.user?.id ?? null}
+            onSubmitReport={submitEmployeeStatus}
+            onRetryReport={() => {
+              const p = lastSubmitMetaRef.current;
+              if (!p) return;
+              void submitEmployeeStatus(p.eventId, p.status, p.fields, p.meta);
+            }}
+            submittingEventId={submittingReportEventId}
+            submitErrorMessage={reportSubmitError}
+            submitErrorEventId={reportSubmitErrorEventId}
+            onDismissSubmitError={() => {
+              setReportSubmitError(null);
+              setReportSubmitErrorEventId(null);
+            }}
+            idleHistoryOngoing={idlePersonalHistory.ongoing}
+            idleHistoryClosed={idlePersonalHistory.closed}
+            onSupplementEvent={(eventId) => {
               setSelectedEmployeeEventId(eventId);
               setNavKey('employee-event-detail');
             }}
-            onOpenTeam={(eventId) => {
+            supervisorTeamNudge={session.currentRole === 'supervisor' ? supervisorTeamNudge : null}
+            onDismissSupervisorNudge={() => setSupervisorTeamNudge(null)}
+            onGoTeamDashboardFromNudge={() => {
+              setSupervisorTeamNudge(null);
+              setNavKey('team-dashboard-home');
+            }}
+          />
+        )}
+        {navKey === 'team-dashboard-home' && session.currentRole === 'supervisor' && (
+          <TeamDashboardHomePage
+            activeRows={supervisorTeamDashboardRows.active}
+            closedRows={supervisorTeamDashboardRows.closed}
+            onOpenEvent={(eventId) => {
               setSelectedSupervisorEventId(eventId);
+              setSupervisorOpenedDetailFrom('team-dashboard-home');
               setNavKey('supervisor-event-detail');
             }}
-            employeeEventFilter={employeeEventFilter}
-            setEmployeeEventFilter={setEmployeeEventFilter}
-            ongoingCount={employeeTabCounts.ongoing}
-            closedCount={employeeTabCounts.closed}
-            searchQuery={employeeListSearch}
-            setSearchQuery={setEmployeeListSearch}
           />
         )}
         {navKey === 'employee-event-detail' && (
@@ -837,30 +961,24 @@ function App() {
             latestResponse={responses
               .filter((r) => r.userId === session.user?.id && r.eventId === selectedEmployeeEvent?.id)
               .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]}
-            employeeComment={employeeComment}
-            setEmployeeComment={setEmployeeComment}
-            employeeLocation={employeeLocation}
-            setEmployeeLocation={setEmployeeLocation}
-            employeeAttachment={employeeAttachment}
-            setEmployeeAttachment={setEmployeeAttachment}
-            reportSubmitting={reportSubmitting}
-            submitErrorMessage={reportSubmitError}
-            onDismissSubmitError={() => setReportSubmitError(null)}
+            reportSubmitting={submittingReportEventId === selectedEmployeeEvent?.id}
+            submitErrorMessage={
+              reportSubmitErrorEventId === selectedEmployeeEvent?.id ? reportSubmitError : null
+            }
+            onDismissSubmitError={() => {
+              setReportSubmitError(null);
+              setReportSubmitErrorEventId(null);
+            }}
             onRetrySubmit={() => {
               const p = lastSubmitMetaRef.current;
-              if (!p) return;
-              void submitEmployeeStatus(p.status, p.meta);
+              if (!p || !selectedEmployeeEvent || p.eventId !== selectedEmployeeEvent.id) return;
+              void submitEmployeeStatus(p.eventId, p.status, p.fields, p.meta);
             }}
-            onSubmit={submitEmployeeStatus}
+            onSubmit={(status, fields, meta) => {
+              if (!selectedEmployeeEvent) return;
+              void submitEmployeeStatus(selectedEmployeeEvent.id, status, fields, meta);
+            }}
             onBackToEvents={() => setNavKey('member-home')}
-          />
-        )}
-        {navKey === 'employee-history' && (
-          <EmployeeHistoryPage
-            responses={responses.filter((r) => r.userId === session.user?.id)}
-            events={events}
-            filter={historyFilter}
-            setFilter={setHistoryFilter}
           />
         )}
         {navKey === 'supervisor-event-detail' && (
@@ -888,7 +1006,10 @@ function App() {
               if (eid) void dispatchRemindersForEvent(eid);
             }}
             onExport={() => showToast({ tone: 'info', message: 'Report exported and email queued.' })}
-            onBackToEvents={() => setNavKey('member-home')}
+            hideBulkTeamActions
+            onBackToEvents={() =>
+              setNavKey(supervisorOpenedDetailFrom === 'team-dashboard-home' ? 'team-dashboard-home' : 'member-home')
+            }
           />
         )}
         {navKey === 'admin-dashboard' && (
