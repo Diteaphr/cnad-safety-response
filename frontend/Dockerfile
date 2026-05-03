@@ -12,6 +12,10 @@ RUN npm install
 # Copy all source assets
 COPY . .
 
+# 空字串：執行時由 nginx 將 /api 轉到後端（見 nginx.conf）。若要改為瀏覽器直連後端再加 ARG。
+ARG VITE_API_URL=
+ENV VITE_API_URL=$VITE_API_URL
+
 # Build the frontend assets using Vite
 RUN npm run build
 

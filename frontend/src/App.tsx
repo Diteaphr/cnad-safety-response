@@ -37,8 +37,24 @@ import { Toast } from './components/Toast';
 import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
 import { DirectReportsListPage } from './profile/DirectReportsListPage';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
-import { demoRoleAccounts, departments, events as seedEvents, notificationSummary, responses as seedResponses, users } from './mockData';
-import type { EventItem, NavKey, Role, SafetyResponse, ToastState, User } from './types';
+import {
+  activateEventApi,
+  closeEventApi,
+  createEventApi,
+  getDemoAccounts,
+  getDepartments,
+  getEvents,
+  getReports,
+  getUsers,
+  loginWithEmailApi,
+  registerApi,
+  submitReportApi,
+  type DemoAccount,
+} from './api';
+import { notificationSummary } from './mockData';
+import type { Department, EventItem, NavKey, Role, SafetyResponse, ToastState, User } from './types';
+
+type AuthMode = 'login' | 'register';
 
 interface SessionState {
   isLoggedIn: boolean;
@@ -56,16 +72,65 @@ const roleDefaultNav: Record<Role, NavKey> = {
 function App() {
   const [session, setSession] = useState<SessionState>({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
   const [navKey, setNavKey] = useState<NavKey>('employee-home');
-  const [events, setEvents] = useState<EventItem[]>(seedEvents);
-  const [responses, setResponses] = useState<SafetyResponse[]>(seedResponses);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [responses, setResponses] = useState<SafetyResponse[]>([]);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [profileSubordinateUserId, setProfileSubordinateUserId] = useState<string | null>(null);
   const [showActivateModal, setShowActivateModal] = useState(false);
   const [eventToActivate, setEventToActivate] = useState<string | null>(null);
-  const [selectedEmployeeEventId, setSelectedEmployeeEventId] = useState(seedEvents.find((event) => event.status === 'active')?.id ?? seedEvents[0].id);
-  const [selectedSupervisorEventId, setSelectedSupervisorEventId] = useState(seedEvents.find((event) => event.status === 'active')?.id ?? seedEvents[0].id);
-  const [selectedAdminEventId, setSelectedAdminEventId] = useState(seedEvents.find((event) => event.status === 'active')?.id ?? seedEvents[0].id);
-  const [selectedNotificationEventId, setSelectedNotificationEventId] = useState(seedEvents[0].id);
+  const [selectedEmployeeEventId, setSelectedEmployeeEventId] = useState('');
+  const [selectedSupervisorEventId, setSelectedSupervisorEventId] = useState('');
+  const [selectedAdminEventId, setSelectedAdminEventId] = useState('');
+  const [selectedNotificationEventId, setSelectedNotificationEventId] = useState('');
+  const eventsSelectionInitialized = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setCatalogError(null);
+        const [accounts, deptRows, userRows, evRows, respRows] = await Promise.all([
+          getDemoAccounts(),
+          getDepartments(),
+          getUsers(),
+          getEvents(),
+          getReports(),
+        ]);
+        if (cancelled) return;
+        setDemoAccounts(accounts);
+        setDepartments(deptRows);
+        setUsers(userRows);
+        setEvents(evRows);
+        setResponses(respRows);
+        setCatalogLoaded(true);
+      } catch (e) {
+        if (!cancelled) {
+          setCatalogError(e instanceof Error ? e.message : '無法載入資料');
+          setCatalogLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (events.length === 0) return;
+    if (eventsSelectionInitialized.current) return;
+    eventsSelectionInitialized.current = true;
+    const id = events.find((e) => e.status === 'active')?.id ?? events[0].id;
+    setSelectedEmployeeEventId(id);
+    setSelectedSupervisorEventId(id);
+    setSelectedAdminEventId(id);
+    setSelectedNotificationEventId(id);
+  }, [events]);
   const [employeeEventFilter, setEmployeeEventFilter] = useState<'ongoing' | 'closed'>('ongoing');
   const [employeeListSearch, setEmployeeListSearch] = useState('');
   const [employeeComment, setEmployeeComment] = useState('');
@@ -224,7 +289,7 @@ function App() {
   };
 
   const handleLogin = (demoId: string) => {
-    const account = demoRoleAccounts.find((item) => item.id === demoId);
+    const account = demoAccounts.find((item) => item.id === demoId);
     if (!account) return;
     const selectedUser = users.find((u) => u.id === account.userId);
     if (!selectedUser) return;
@@ -234,6 +299,32 @@ function App() {
       user: selectedUser,
       availableRoles: account.roles,
       currentRole: account.roles.length === 1 ? initialRole : null,
+    });
+    setNavKey(roleDefaultNav[initialRole]);
+  };
+
+  const mergeUserIntoList = (user: User) => {
+    setUsers((prev) => {
+      const idx = prev.findIndex((u) => u.id === user.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = user;
+        return next;
+      }
+      return [...prev, user];
+    });
+  };
+
+  const handleEmailLogin = async (email: string, password: string) => {
+    const { user } = await loginWithEmailApi({ email, password });
+    mergeUserIntoList(user);
+    const roles = user.roles;
+    const initialRole = roles[0];
+    setSession({
+      isLoggedIn: true,
+      user,
+      availableRoles: roles,
+      currentRole: roles.length === 1 ? initialRole : null,
     });
     setNavKey(roleDefaultNav[initialRole]);
   };
@@ -248,7 +339,7 @@ function App() {
     showToast({ tone: 'info', message: 'Logged out.' });
   };
 
-  const submitEmployeeStatus = (status: 'safe' | 'need_help', meta?: { omitStoredAttachment?: boolean }) => {
+  const submitEmployeeStatus = async (status: 'safe' | 'need_help', meta?: { omitStoredAttachment?: boolean }) => {
     if (!selectedEmployeeEvent || !session.user) return;
     const uid = session.user.id;
     const eid = selectedEmployeeEvent.id;
@@ -256,37 +347,46 @@ function App() {
       .filter((r) => r.eventId === eid && r.userId === uid)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
     const keepPriorAttach = !(meta?.omitStoredAttachment ?? false);
-    const nextResponse: SafetyResponse = {
-      id: `r-${Date.now()}`,
-      eventId: eid,
-      userId: uid,
-      status,
-      comment: employeeComment.trim() || undefined,
-      location: employeeLocation.trim() || undefined,
-      attachmentName: employeeAttachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined),
-      attachmentSizeBytes: employeeAttachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined),
-      updatedAt: new Date().toISOString(),
-    };
-    setResponses((prev) => [
-      ...prev.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
-      nextResponse,
-    ]);
-    showToast({ tone: 'success', message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}` });
+    try {
+      const out = await submitReportApi({
+        eventId: eid,
+        userId: uid,
+        status,
+        comment: employeeComment.trim() || undefined,
+        location: employeeLocation.trim() || undefined,
+      });
+      const raw = out.data;
+      const nextResponse: SafetyResponse = {
+        ...raw,
+        attachmentName: employeeAttachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined) ?? raw.attachmentName,
+        attachmentSizeBytes: employeeAttachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined) ?? raw.attachmentSizeBytes,
+      };
+      setResponses((prev) => [
+        ...prev.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
+        nextResponse,
+      ]);
+      showToast({ tone: 'success', message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}` });
+    } catch (e) {
+      showToast({ tone: 'danger', message: e instanceof Error ? e.message : '送出失敗' });
+    }
   };
 
-  const createEvent = () => {
+  const createEvent = async () => {
+    if (!session.user) return;
     const type = eventForm.type === 'Other' && eventForm.customType.trim() ? ('Other' as EventItem['type']) : eventForm.type;
-    const newEvent: EventItem = {
-      id: `e-${Date.now()}`,
-      title: eventForm.title || 'Untitled Event',
-      type,
-      description: eventForm.description,
-      targetDepartmentIds: departments.map((d) => d.id),
-      status: 'draft',
-      startAt: new Date(eventForm.startAt).toISOString(),
-    };
-    setEvents((prev) => [newEvent, ...prev]);
-    showToast({ tone: 'success', message: 'Event template saved. You can activate it when an incident starts.' });
+    try {
+      const out = await createEventApi(session.user.id, {
+        title: eventForm.title || 'Untitled Event',
+        type,
+        description: eventForm.description,
+        startAt: new Date(eventForm.startAt).toISOString(),
+        targetDepartmentIds: departments.map((d) => d.id),
+      });
+      setEvents((prev) => [out.event, ...prev]);
+      showToast({ tone: 'success', message: 'Event template saved. You can activate it when an incident starts.' });
+    } catch (e) {
+      showToast({ tone: 'danger', message: e instanceof Error ? e.message : '建立失敗' });
+    }
   };
 
   const requestActivateEvent = (eventId: string) => {
@@ -294,25 +394,35 @@ function App() {
     setShowActivateModal(true);
   };
 
-  const activateEvent = () => {
-    if (!eventToActivate) return;
-    setEvents((prev) =>
-      prev.map((event) =>
-        event.id === eventToActivate
-          ? { ...event, status: 'active' }
-          : event.status === 'active'
-            ? { ...event, status: 'closed' }
-            : event,
-      ),
-    );
-    setShowActivateModal(false);
-    setEventToActivate(null);
-    showToast({ tone: 'warning', message: 'Event activated. Notifications will be sent to target users.' });
+  const activateEvent = async () => {
+    if (!eventToActivate || !session.user) return;
+    try {
+      const out = await activateEventApi(session.user.id, eventToActivate);
+      const fresh = await getEvents();
+      setEvents(fresh);
+      const updated = fresh.find((e) => e.id === out.event.id);
+      if (updated) {
+        setSelectedAdminEventId(updated.id);
+        setSelectedSupervisorEventId(updated.id);
+      }
+      setShowActivateModal(false);
+      setEventToActivate(null);
+      showToast({ tone: 'warning', message: 'Event activated. Notifications will be sent to target users.' });
+    } catch (e) {
+      showToast({ tone: 'danger', message: e instanceof Error ? e.message : '啟用失敗' });
+    }
   };
 
-  const closeEvent = (eventId: string) => {
-    setEvents((prev) => prev.map((event) => (event.id === eventId ? { ...event, status: 'closed' } : event)));
-    showToast({ tone: 'info', message: 'Event closed.' });
+  const closeEvent = async (eventId: string) => {
+    if (!session.user) return;
+    try {
+      await closeEventApi(session.user.id, eventId);
+      const fresh = await getEvents();
+      setEvents(fresh);
+      showToast({ tone: 'info', message: 'Event closed.' });
+    } catch (e) {
+      showToast({ tone: 'danger', message: e instanceof Error ? e.message : '關閉失敗' });
+    }
   };
 
   const selectedEventNotificationStats = useMemo(() => {
@@ -327,7 +437,39 @@ function App() {
   }, [responses, selectedNotificationEventId, events]);
 
   if (!session.isLoggedIn) {
-    return <LoginPage onLogin={handleLogin} />;
+    if (authMode === 'register') {
+      return (
+        <RegisterPage
+          departments={departments}
+          loading={!catalogLoaded}
+          error={catalogError}
+          onRegisterSuccess={(user) => {
+            mergeUserIntoList(user);
+            const roles = user.roles;
+            const initialRole = roles[0];
+            setSession({
+              isLoggedIn: true,
+              user,
+              availableRoles: roles,
+              currentRole: roles.length === 1 ? initialRole : null,
+            });
+            setNavKey(roleDefaultNav[initialRole]);
+            setAuthMode('login');
+          }}
+          onBack={() => setAuthMode('login')}
+        />
+      );
+    }
+    return (
+      <LoginPage
+        accounts={demoAccounts}
+        loading={!catalogLoaded}
+        error={catalogError}
+        onLogin={handleLogin}
+        onEmailLogin={handleEmailLogin}
+        onGoRegister={() => setAuthMode('register')}
+      />
+    );
   }
 
   if (!session.currentRole) {
@@ -437,6 +579,7 @@ function App() {
           <AdminDashboardPage
             stats={stats}
             rows={employeeRows}
+            departments={departments}
             onBackToEvents={() => setNavKey('admin-dashboard')}
           />
         )}
@@ -450,7 +593,7 @@ function App() {
             onClose={closeEvent}
           />
         )}
-        {navKey === 'user-management' && <UserManagementPage />}
+        {navKey === 'user-management' && <UserManagementPage users={users} departments={departments} />}
         {navKey === 'notifications' && (
           <EventSelectionPage
             title="Notification Event Center"
@@ -522,27 +665,212 @@ function App() {
   );
 }
 
-function LoginPage({ onLogin }: { onLogin: (demoId: string) => void }) {
+function LoginPage({
+  accounts,
+  loading,
+  error,
+  onLogin,
+  onEmailLogin,
+  onGoRegister,
+}: {
+  accounts: DemoAccount[];
+  loading: boolean;
+  error: string | null;
+  onLogin: (demoId: string) => void;
+  onEmailLogin: (email: string, password: string) => Promise<void>;
+  onGoRegister: () => void;
+}) {
   const [demoId, setDemoId] = useState('employee');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [emailLoginError, setEmailLoginError] = useState<string | null>(null);
+  const [emailSubmitting, setEmailSubmitting] = useState(false);
+
+  const submitEmail = async () => {
+    setEmailLoginError(null);
+    setEmailSubmitting(true);
+    try {
+      await onEmailLogin(email.trim(), password);
+    } catch (e) {
+      setEmailLoginError(e instanceof Error ? e.message : '登入失敗');
+    } finally {
+      setEmailSubmitting(false);
+    }
+  };
+
   return (
     <div className="auth-shell">
       <div className="auth-card">
         <h1>Employee Safety & Response</h1>
         <p>Emergency safety reporting and command dashboard.</p>
-        <input placeholder="Email" defaultValue="demo@company.com" />
-        <input placeholder="Password" type="password" defaultValue="password" />
+        {loading && <p className="muted-text">載入後端資料…</p>}
+        {error && <p className="muted-text" style={{ color: 'var(--danger, #c0392b)' }}>{error}</p>}
+
+        <h2 className="auth-section-title">使用 Email 登入</h2>
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          disabled={loading || !!error}
+        />
+        <input
+          placeholder="Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          disabled={loading || !!error}
+        />
+        {emailLoginError ? <p className="auth-inline-error">{emailLoginError}</p> : null}
+        <button
+          className="btn primary"
+          onClick={() => void submitEmail()}
+          type="button"
+          disabled={loading || !!error || emailSubmitting || !email.trim() || !password}
+        >
+          {emailSubmitting ? '登入中…' : 'Sign in'}
+        </button>
+        <p className="auth-footnote">
+          還沒有帳號？{' '}
+          <button type="button" className="auth-link" onClick={onGoRegister} disabled={loading || !!error}>
+            建立帳號
+          </button>
+        </p>
+
+        <hr className="auth-divider" />
+        <h2 className="auth-section-title">Demo（原型）</h2>
         <label>
           Prototype Role Selector
-          <select value={demoId} onChange={(e) => setDemoId(e.target.value)}>
-            {demoRoleAccounts.map((account) => (
+          <select value={demoId} onChange={(e) => setDemoId(e.target.value)} disabled={loading || accounts.length === 0}>
+            {accounts.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.label}
               </option>
             ))}
           </select>
         </label>
-        <button className="btn primary" onClick={() => onLogin(demoId)} type="button">
-          Login
+        <button
+          className="btn ghost"
+          onClick={() => onLogin(demoId)}
+          type="button"
+          disabled={loading || !!error || accounts.length === 0}
+        >
+          Login with demo role
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RegisterPage({
+  departments,
+  loading,
+  error,
+  onRegisterSuccess,
+  onBack,
+}: {
+  departments: Department[];
+  loading: boolean;
+  error: string | null;
+  onRegisterSuccess: (user: User) => void;
+  onBack: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [departmentId, setDepartmentId] = useState('');
+  const [phone, setPhone] = useState('');
+  const [employeeNo, setEmployeeNo] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    setFormError(null);
+    if (password.length < 8) {
+      setFormError('密碼至少 8 個字元');
+      return;
+    }
+    if (password !== confirm) {
+      setFormError('兩次輸入的密碼不一致');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const out = await registerApi({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        departmentId: departmentId || undefined,
+        phone: phone.trim() || undefined,
+        employeeNo: employeeNo.trim() || undefined,
+      });
+      onRegisterSuccess(out.user);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : '註冊失敗');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="auth-shell">
+      <div className="auth-card">
+        <button type="button" className="btn ghost auth-back" onClick={onBack}>
+          ← 返回登入
+        </button>
+        <h1>建立帳號</h1>
+        <p className="muted-text">註冊後將以一般員工身分登入（employee）。主管／管理員由後台指派。</p>
+        {loading && <p className="muted-text">載入後端資料…</p>}
+        {error && <p className="muted-text" style={{ color: 'var(--danger, #c0392b)' }}>{error}</p>}
+        <input placeholder="姓名" value={name} onChange={(e) => setName(e.target.value)} disabled={loading || !!error} />
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          disabled={loading || !!error}
+        />
+        <input
+          placeholder="密碼（至少 8 字）"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          disabled={loading || !!error}
+        />
+        <input
+          placeholder="確認密碼"
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          autoComplete="new-password"
+          disabled={loading || !!error}
+        />
+        <label>
+          部門（選填）
+          <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} disabled={loading || !!error}>
+            <option value="">— 未指定 —</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <input placeholder="電話（選填）" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={loading || !!error} />
+        <input placeholder="員工編號（選填，留空則自動產生）" value={employeeNo} onChange={(e) => setEmployeeNo(e.target.value)} disabled={loading || !!error} />
+        {formError ? <p className="auth-inline-error">{formError}</p> : null}
+        <button
+          className="btn primary"
+          type="button"
+          disabled={loading || !!error || submitting || !name.trim() || !email.trim() || !password}
+          onClick={() => void submit()}
+        >
+          {submitting ? '送出中…' : '註冊並登入'}
         </button>
       </div>
     </div>
@@ -1718,10 +2046,12 @@ function SupervisorDashboardPage({
 function AdminDashboardPage({
   stats,
   rows,
+  departments: deptList,
   onBackToEvents,
 }: {
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
   rows: Array<{ id: string; name: string; department: string; status: 'safe' | 'need_help' | 'pending'; note?: string }>;
+  departments: Department[];
   onBackToEvents: () => void;
 }) {
   const critical = rows.filter((row) => row.status === 'need_help');
@@ -1745,7 +2075,7 @@ function AdminDashboardPage({
         <section className="panel">
           <h3 className="section-title">Department Response Ranking</h3>
           <div className="list">
-            {departments.map((dept) => {
+            {deptList.map((dept) => {
               const deptRows = rows.filter((row) => row.department === dept.name);
               const responded = deptRows.filter((row) => row.status !== 'pending').length;
               const rate = deptRows.length ? Math.round((responded / deptRows.length) * 100) : 0;
@@ -1834,16 +2164,16 @@ function EventManagementPage({
   );
 }
 
-function UserManagementPage() {
-  const subordinateRows = users.filter((user) => user.managerId);
-  const childMap = departments.reduce<Record<string, string[]>>((acc, department) => {
+function UserManagementPage({ users: userList, departments: deptList }: { users: User[]; departments: Department[] }) {
+  const subordinateRows = userList.filter((user) => user.managerId);
+  const childMap = deptList.reduce<Record<string, string[]>>((acc, department) => {
     const parent = department.parentId ?? 'root';
     acc[parent] = [...(acc[parent] ?? []), department.id];
     return acc;
   }, {});
   const renderDepartmentTree = (parentId: string | null, depth = 0): JSX.Element[] =>
     (childMap[parentId ?? 'root'] ?? []).flatMap((deptId) => {
-      const department = departments.find((item) => item.id === deptId);
+      const department = deptList.find((item) => item.id === deptId);
       if (!department) return [];
       return [
         <div className="list-item" key={`${deptId}-${depth}`}>
@@ -1859,7 +2189,7 @@ function UserManagementPage() {
       <div className="grid-2">
         <section className="panel">
           <h3>Employees</h3>
-          {users.map((user) => (
+          {userList.map((user) => (
             <div className="list-item" key={user.id}>
               <div>
                 <strong>{user.name}</strong>
@@ -1875,7 +2205,7 @@ function UserManagementPage() {
           <h4>Manager → Direct Subordinates</h4>
           {subordinateRows.map((user) => (
             <div className="list-item" key={`sub-${user.id}`}>
-              <span>{users.find((manager) => manager.id === user.managerId)?.name ?? 'Unknown Manager'}</span>
+              <span>{userList.find((manager) => manager.id === user.managerId)?.name ?? 'Unknown Manager'}</span>
               <span>{user.name}</span>
             </div>
           ))}

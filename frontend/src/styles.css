@@ -36,6 +36,51 @@ body { margin: 0; background: #f4f7fc; }
   gap: 10px;
 }
 
+.auth-card h2.auth-section-title {
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #5a738f;
+}
+
+.auth-divider {
+  border: none;
+  border-top: 1px solid #d9e4f2;
+  margin: 14px 0;
+}
+
+.auth-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #1a6bb8;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.auth-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-footnote {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #5a738f;
+}
+
+.auth-inline-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #c0392b;
+}
+
+.auth-back {
+  justify-self: start;
+  margin-bottom: 4px;
+}
+
 .prettier-role-select {
   width: min(820px, 100%);
   padding: 30px;
