@@ -88,3 +88,10 @@ class DemoLoginIn(BaseModel):
     """與前端 Demo 下拉一致的 userId（種子使用者 UUID）；見 GET /api/demo-accounts。"""
 
     userId: str = Field(min_length=1, max_length=64)
+
+
+class ProfileUpdateIn(BaseModel):
+    """Fields an authenticated user may update on their own profile."""
+
+    name: str = Field(min_length=1, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=50)

@@ -55,3 +55,20 @@ class UserRepository:
     def employee_no_exists(self, db: Session, employee_no: str) -> bool:
         stmt = select(User.user_id).where(User.employee_no == employee_no).limit(1)
         return db.execute(stmt).first() is not None
+
+    def update_profile(
+        self,
+        db: Session,
+        user_id: uuid.UUID,
+        *,
+        name: str,
+        phone: str | None,
+    ) -> User:
+        stmt = select(User).where(User.user_id == user_id)
+        user = db.execute(stmt).scalar_one_or_none()
+        if user is None:
+            raise ValueError(f"User {user_id} not found")
+        user.name = name
+        user.phone = phone
+        db.flush()
+        return self.get_by_id(db, user_id)  # type: ignore[return-value]

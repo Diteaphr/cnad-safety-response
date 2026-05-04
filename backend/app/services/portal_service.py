@@ -26,7 +26,7 @@ from app.repositories.event_repository import EventRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.portal import CreateEventIn, LoginIn, RegisterIn, ReportIn
+from app.schemas.portal import CreateEventIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
@@ -417,6 +417,45 @@ class PortalService:
             },
             "departments": sorted(dept_stats.values(), key=lambda x: x["department"]),
         }
+
+    # ------------------------------------------------------------------
+    # Profile (self-service)
+    # ------------------------------------------------------------------
+
+    def _profile_out(self, user: User) -> dict[str, Any]:
+        """Extended user dict that includes phone and employeeNo — for /users/me."""
+        roles = _role_names(user)
+        rcast: list[Any] = [x for x in roles if x in ("employee", "supervisor", "admin")]
+        return {
+            "id": str(user.user_id),
+            "employeeNo": user.employee_no,
+            "name": user.name,
+            "email": user.email,
+            "phone": user.phone,
+            "departmentId": str(user.department_id) if user.department_id else None,
+            "managerId": str(user.manager_id) if user.manager_id else None,
+            "roles": rcast,
+        }
+
+    def get_profile(self, db: Session, user_id: uuid.UUID) -> dict[str, Any]:
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return self._profile_out(user)
+
+    def update_profile(
+        self, db: Session, user_id: uuid.UUID, payload: ProfileUpdateIn
+    ) -> dict[str, Any]:
+        if self._users.get_by_id(db, user_id) is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = self._users.update_profile(
+            db,
+            user_id,
+            name=payload.name.strip(),
+            phone=payload.phone.strip() if payload.phone else None,
+        )
+        db.commit()
+        return self._profile_out(user)
 
     def register(self, db: Session, payload: RegisterIn) -> dict[str, Any]:
         email = payload.email.strip().lower()

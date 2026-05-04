@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.schemas.portal import CreateEventIn, DemoLoginIn, EventActionIn, LoginIn, RegisterIn, ReportIn
+from app.schemas.portal import CreateEventIn, DemoLoginIn, EventActionIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.services.portal_service import PortalService
 
 logger = logging.getLogger(__name__)
@@ -183,6 +183,20 @@ def admin_dashboard(
 ):
     eid = _parse_uuid(event_id, name="event_id") if event_id else None
     return _portal.admin_dashboard(db, actor, event_id=eid)
+
+
+@router.get("/users/me")
+def get_my_profile(actor: CurrentUser, db: Session = Depends(get_db)):
+    return _portal.get_profile(db, actor)
+
+
+@router.put("/users/me")
+def update_my_profile(
+    payload: ProfileUpdateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.update_profile(db, actor, payload)
 
 
 @router.get("/notifications/me")
