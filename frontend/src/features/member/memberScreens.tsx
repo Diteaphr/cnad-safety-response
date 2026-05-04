@@ -30,6 +30,9 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { StatusBadge } from '../../components/StatusBadge';
+import { useLocale } from '../../locale/LocaleContext';
+import type { AppLocale } from '../../locale/LocaleContext';
+import { getStrings } from '../../locale/strings';
 import { loadEmployeeReportDraft, saveEmployeeReportDraft } from '../../lib/employeeReportDraft';
 import type { EventItem, SafetyResponse } from '../../types';
 
@@ -54,8 +57,9 @@ function employeeEventTypeIcon(type: EventItem['type']) {
   }
 }
 
-function formatEmployeeCardTime(iso: string) {
-  return new Date(iso).toLocaleString('zh-TW', {
+function formatEmployeeCardTime(iso: string, locale: AppLocale) {
+  const tag = locale === 'en' ? 'en-US' : 'zh-TW';
+  return new Date(iso).toLocaleString(tag, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -78,38 +82,53 @@ function EmployeeEventListCard({
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
 }) {
+  const { locale } = useLocale();
+  const ec = getStrings(locale).employee;
   const Icon = employeeEventTypeIcon(event.type);
   const deptLabel = event.cardDepartment ?? '';
   const isOngoingTab = filterTab === 'ongoing';
   const pending = !latest && isOngoingTab;
   const stripeClass =
     !isOngoingTab ? 'muted' : pending ? 'pending' : latest?.status === 'need_help' ? 'danger' : 'safe';
+  const respondedTimeStr =
+    latest && !pending
+      ? new Date(latest.updatedAt).toLocaleTimeString(locale === 'en' ? 'en-US' : 'zh-TW', {
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : '';
+  const closedDetailTime =
+    latest && filterTab === 'closed'
+      ? new Date(latest.updatedAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW', {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : '';
 
   const ongoingStatusBlock = isOngoingTab ? (
     <>
       {pending ? (
         <span className="employee-events-status-pill pending">
           <Hourglass size={14} strokeWidth={2} aria-hidden />
-          Pending response
+          {ec.cardPendingLabel}
         </span>
       ) : latest?.status === 'safe' ? (
         <span className="employee-events-status-pill safe">
           <CheckCircle2 size={14} strokeWidth={2} aria-hidden />
-          Reported · I&apos;m Safe
+          {ec.cardReportedSafeLabel}
         </span>
       ) : latest ? (
         <span className="employee-events-status-pill danger">
           <AlertCircle size={14} strokeWidth={2} aria-hidden />
-          Reported · I need help
+          {ec.cardReportedNeedLabel}
         </span>
       ) : null}
       {pending ? (
-        <span className="employee-events-status-hint">Please submit your status.</span>
+        <span className="employee-events-status-hint">{ec.cardAskSubmitHint}</span>
       ) : latest ? (
-        <span className="employee-events-status-hint muted">
-          You responded at{' '}
-          {new Date(latest.updatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-        </span>
+        <span className="employee-events-status-hint muted">{ec.cardRespondedHint(respondedTimeStr)}</span>
       ) : null}
     </>
   ) : null;
@@ -117,21 +136,19 @@ function EmployeeEventListCard({
   const closedStatusBlock =
     filterTab === 'closed' ? (
       <>
-        <span className="employee-events-status-pill closed">Closed</span>
+        <span className="employee-events-status-pill closed">{ec.cardClosedBadge}</span>
         {latest?.status === 'safe' ? (
           <span className="employee-events-closed-safe">
             <CheckCircle2 size={14} className="text-safe" aria-hidden />
-            I&apos;m Safe ·{' '}
-            {new Date(latest.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            {ec.cardIamSafeShort} · {closedDetailTime}
           </span>
         ) : latest?.status === 'need_help' ? (
           <span className="employee-events-closed-safe danger-text">
             <AlertCircle size={14} aria-hidden />
-            I need help ·{' '}
-            {new Date(latest.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            {ec.cardNeedHelpShort} · {closedDetailTime}
           </span>
         ) : (
-          <span className="employee-events-status-hint muted">No submission on file.</span>
+          <span className="employee-events-status-hint muted">{ec.cardNoSubmissionClosed}</span>
         )}
       </>
     ) : null;
@@ -157,7 +174,7 @@ function EmployeeEventListCard({
                 {deptLabel ? <> · {deptLabel}</> : null}
               </span>
             </div>
-            <div className="employee-events-meta subtle">{formatEmployeeCardTime(event.startAt)}</div>
+            <div className="employee-events-meta subtle">{formatEmployeeCardTime(event.startAt, locale)}</div>
             {event.venue ? <div className="employee-events-meta subtle">{event.venue}</div> : null}
 
             <div className="employee-events-card-mobile-only">{ongoingStatusBlock ?? closedStatusBlock}</div>
@@ -169,7 +186,7 @@ function EmployeeEventListCard({
                 <>
                   {ongoingStatusBlock}
                   <span className={`employee-events-card-cta ${pending ? 'primary' : 'ghost'}`}>
-                    <span className="employee-events-cta-label">{pending ? 'Continue' : 'View'}</span>
+                    <span className="employee-events-cta-label">{pending ? ec.cardContinue : ec.cardViewLabel}</span>
                     <ChevronRight size={16} strokeWidth={2.25} aria-hidden />
                   </span>
                 </>
@@ -177,7 +194,7 @@ function EmployeeEventListCard({
                 <>
                   {closedStatusBlock}
                   <span className="employee-events-card-cta ghost">
-                    <span className="employee-events-cta-label">View</span>
+                    <span className="employee-events-cta-label">{ec.cardViewLabel}</span>
                     <ChevronRight size={16} strokeWidth={2.25} aria-hidden />
                   </span>
                 </>
@@ -218,6 +235,8 @@ function MemberEventDualCard({
   onOpenPersonal: (eventId: string) => void;
   onOpenTeam: (eventId: string) => void;
 }) {
+  const { locale } = useLocale();
+  const ec = getStrings(locale).employee;
   const Icon = employeeEventTypeIcon(event.type);
   const deptLabel = event.cardDepartment ?? '';
   const isOngoingTab = filterTab === 'ongoing';
@@ -230,52 +249,52 @@ function MemberEventDualCard({
       {!latest ? (
         <span className="employee-events-status-pill pending">
           <Hourglass size={14} strokeWidth={2} aria-hidden />
-          Pending response
+          {ec.cardPendingLabel}
         </span>
       ) : latest.status === 'safe' ? (
         <span className="employee-events-status-pill safe">
           <CheckCircle2 size={14} strokeWidth={2} aria-hidden />
-          I&apos;m Safe
+          {ec.cardIamSafeShort}
         </span>
       ) : (
         <span className="employee-events-status-pill danger">
           <AlertCircle size={14} strokeWidth={2} aria-hidden />
-          I need help
+          {ec.cardNeedHelpShort}
         </span>
       )}
     </>
   ) : (
     <>
-      <span className="employee-events-status-pill closed">Closed</span>
+      <span className="employee-events-status-pill closed">{ec.cardClosedBadge}</span>
       {latest?.status === 'safe' ? (
         <span className="employee-events-closed-safe">
           <CheckCircle2 size={14} className="text-safe" aria-hidden />
-          Personal · Safe
+          {ec.dualPersonalSafeClosed}
         </span>
       ) : latest?.status === 'need_help' ? (
         <span className="employee-events-closed-safe danger-text">
           <AlertCircle size={14} aria-hidden />
-          Personal · Need help
+          {ec.dualPersonalNeedClosed}
         </span>
       ) : (
-        <span className="employee-events-status-hint muted">No personal submission</span>
+        <span className="employee-events-status-hint muted">{ec.dualNoPersonalSubmissionClosed}</span>
       )}
     </>
   );
 
   const teamMini = (
-    <div className="member-event-team-mini-badges" role="group" aria-label="Team response summary">
+    <div className="member-event-team-mini-badges" role="group" aria-label={ec.dualAriaTeamSummary}>
       <span className="member-team-pill safe">
         <CheckCircle2 size={12} strokeWidth={2.25} aria-hidden />
-        {teamCounts.safe} Safe
+        {ec.teamMiniSafe(teamCounts.safe)}
       </span>
       <span className={`member-team-pill${teamCounts.needHelp > 0 ? ' danger' : ''}`}>
         <AlertCircle size={12} strokeWidth={2.25} aria-hidden />
-        {teamCounts.needHelp} Need help
+        {ec.teamMiniNeed(teamCounts.needHelp)}
       </span>
       <span className="member-team-pill muted">
         <Hourglass size={12} strokeWidth={2} aria-hidden />
-        {teamCounts.pending} Pending
+        {ec.teamMiniPending(teamCounts.pending)}
       </span>
     </div>
   );
@@ -296,7 +315,7 @@ function MemberEventDualCard({
                 {deptLabel ? <> · {deptLabel}</> : null}
               </span>
             </div>
-            <div className="employee-events-meta subtle">{formatEmployeeCardTime(event.startAt)}</div>
+            <div className="employee-events-meta subtle">{formatEmployeeCardTime(event.startAt, locale)}</div>
             {event.venue ? <div className="employee-events-meta subtle">{event.venue}</div> : null}
           </div>
         </div>
@@ -310,7 +329,7 @@ function MemberEventDualCard({
           }`}
           onClick={() => onOpenPersonal(event.id)}
         >
-          <span className="member-event-action-label">Your response</span>
+          <span className="member-event-action-label">{ec.dualYourResponse}</span>
           <div className="member-event-action-summary">
             <div>{personalMini}</div>
             <ChevronRight className="member-event-action-chevron" size={18} strokeWidth={2.25} aria-hidden />
@@ -323,7 +342,7 @@ function MemberEventDualCard({
           }`}
           onClick={() => onOpenTeam(event.id)}
         >
-          <span className="member-event-action-label">Team overview ({teamCounts.total})</span>
+          <span className="member-event-action-label">{ec.dualTeamOverview(teamCounts.total)}</span>
           <div className="member-event-action-summary member-event-action-summary--team">
             <div>{teamMini}</div>
             <ChevronRight className="member-event-action-chevron" size={18} strokeWidth={2.25} aria-hidden />
@@ -347,6 +366,8 @@ function MemberEventTeamCard({
   selectedTeamEventId: string;
   onOpenTeam: (eventId: string) => void;
 }) {
+  const { locale } = useLocale();
+  const ec = getStrings(locale).employee;
   const Icon = employeeEventTypeIcon(event.type);
   const deptLabel = event.cardDepartment ?? '';
   const isOngoingTab = filterTab === 'ongoing';
@@ -358,18 +379,18 @@ function MemberEventTeamCard({
   else stripeClass = 'muted';
 
   const teamMini = (
-    <div className="member-event-team-mini-badges" role="group" aria-label="Team response summary">
+    <div className="member-event-team-mini-badges" role="group" aria-label={ec.dualAriaTeamSummary}>
       <span className="member-team-pill safe">
         <CheckCircle2 size={12} strokeWidth={2.25} aria-hidden />
-        {teamCounts.safe} Safe
+        {ec.teamMiniSafe(teamCounts.safe)}
       </span>
       <span className={`member-team-pill${teamCounts.needHelp > 0 ? ' danger' : ''}`}>
         <AlertCircle size={12} strokeWidth={2.25} aria-hidden />
-        {teamCounts.needHelp} Need help
+        {ec.teamMiniNeed(teamCounts.needHelp)}
       </span>
       <span className="member-team-pill muted">
         <Hourglass size={12} strokeWidth={2} aria-hidden />
-        {teamCounts.pending} Pending
+        {ec.teamMiniPending(teamCounts.pending)}
       </span>
     </div>
   );
@@ -396,13 +417,13 @@ function MemberEventTeamCard({
                 {deptLabel ? <> · {deptLabel}</> : null}
               </span>
             </div>
-            <div className="employee-events-meta subtle">{formatEmployeeCardTime(event.startAt)}</div>
+            <div className="employee-events-meta subtle">{formatEmployeeCardTime(event.startAt, locale)}</div>
             {event.venue ? <div className="employee-events-meta subtle">{event.venue}</div> : null}
           </div>
         </div>
       </div>
       <div className="member-event-team-only-footer">
-        <span className="member-event-action-label">Team overview ({teamCounts.total})</span>
+        <span className="member-event-action-label">{ec.dualTeamOverview(teamCounts.total)}</span>
         <div className="member-event-action-summary member-event-action-summary--team member-event-team-only-summary">
           {teamMini}
           <ChevronRight className="member-event-action-chevron" size={18} strokeWidth={2.25} aria-hidden />
@@ -792,6 +813,8 @@ function EmployeeQuickReportPanel({
   /** 待回報首報：窄列＋雙大鈕、送出僅 status、成功 overlay */
   stackInitialReport?: boolean;
 }) {
+  const { locale } = useLocale();
+  const ec = getStrings(locale).employee;
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const helpDetailsRef = useRef<HTMLDivElement>(null);
   const persistDraftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -932,6 +955,7 @@ function EmployeeQuickReportPanel({
       setSelectedNeedHelp(false);
       return;
     }
+    setSelectedNeedHelp(false);
     const fields = stackInitialReport ? EMPTY_STACK_REPORT_FIELDS : reportFields();
     void onSubmit('safe', fields, {
       omitStoredAttachment: stackInitialReport ? false : omitStoredAttachment,
@@ -945,8 +969,14 @@ function EmployeeQuickReportPanel({
       setSelectedNeedHelp(true);
       return;
     }
-    const fields = stackInitialReport ? EMPTY_STACK_REPORT_FIELDS : reportFields();
-    void onSubmit('need_help', fields, {
+    setSelectedNeedHelp(true);
+  };
+
+  const handleConfirmNeedHelp = () => {
+    if (reportSubmitting) return;
+    if (isRevisionDraft) return;
+    if (!selectedNeedHelp) return;
+    void onSubmit('need_help', reportFields(), {
       omitStoredAttachment: stackInitialReport ? false : omitStoredAttachment,
     });
   };
@@ -1013,7 +1043,7 @@ function EmployeeQuickReportPanel({
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      setUploadNotice('單檔不得超過 10MB');
+      setUploadNotice(ec.uploadTooBig);
       return;
     }
     setOmitStoredAttachment(false);
@@ -1032,7 +1062,7 @@ function EmployeeQuickReportPanel({
   const fullHero =
     layout === 'full' ? (
       <header className="employee-event-hero">
-        <button className="employee-event-back" type="button" onClick={requestBackNavigation} aria-label="返回事件列表">
+        <button className="employee-event-back" type="button" onClick={requestBackNavigation} aria-label={ec.backToEventsAria}>
           <ChevronLeft size={24} strokeWidth={2.25} aria-hidden />
         </button>
         <div className="employee-event-hero-art" aria-hidden />
@@ -1042,7 +1072,11 @@ function EmployeeQuickReportPanel({
           </div>
           <h1 className="employee-event-headline">{selectedEvent.title}</h1>
           <p className="employee-event-subline">
-            {hasReport && wantToUpdate ? '請更新並儲存你的回報。' : hasReport && !wantToUpdate ? '\u00a0' : `Hi ${userName}，請確認你的狀態是否平安。`}
+            {hasReport && wantToUpdate
+              ? ec.heroSublineDraft
+              : hasReport && !wantToUpdate
+                ? '\u00a0'
+                : ec.heroSublineReporting(userName)}
           </p>
           <div className="employee-event-meta-pill">
             <span className="employee-event-meta-item">
@@ -1065,21 +1099,21 @@ function EmployeeQuickReportPanel({
       {fullHero}
       {reportSubmitting ? (
         <p className="employee-submit-progress" aria-live="polite">
-          送出中…（弱網下可能自動重試，請稍候）
+          {ec.submitting}
         </p>
       ) : null}
       {submitErrorMessage ? (
         <div className="employee-submit-error-banner" role="alert">
           <AlertCircle size={22} aria-hidden />
           <div className="employee-submit-error-body">
-            <strong>無法送出回報</strong>
+            <strong>{ec.submitFailTitle}</strong>
             <p>{submitErrorMessage}</p>
             <div className="employee-submit-error-actions">
               <button type="button" className="btn primary" disabled={reportSubmitting} onClick={onRetrySubmit}>
-                <RefreshCw size={16} aria-hidden /> 重試
+                <RefreshCw size={16} aria-hidden /> {ec.retry}
               </button>
               <button type="button" className="btn ghost" onClick={onDismissSubmitError}>
-                關閉
+                {ec.close}
               </button>
             </div>
           </div>
@@ -1153,11 +1187,12 @@ function EmployeeQuickReportPanel({
                         </dd>
                       </div>
                       <div className="employee-summary-row">
-                        <dt>Submitted at</dt>
+                        <dt>{ec.submittedAtLabel}</dt>
                         <dd>
                           {(() => {
                             const t = new Date(latestResponse.updatedAt);
-                            return `${t.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} (${t.toLocaleTimeString('zh-TW', {
+                            const tag = locale === 'en' ? 'en-US' : 'zh-TW';
+                            return `${t.toLocaleTimeString(tag, { hour: 'numeric', minute: '2-digit' })} (${t.toLocaleTimeString(tag, {
                               hour: '2-digit',
                               minute: '2-digit',
                               second: '2-digit',
@@ -1167,15 +1202,15 @@ function EmployeeQuickReportPanel({
                         </dd>
                       </div>
                       <div className="employee-summary-row">
-                        <dt>Location</dt>
+                        <dt>{ec.locationLabel}</dt>
                         <dd>{latestResponse.location?.trim() || '—'}</dd>
                       </div>
                       <div className="employee-summary-row">
-                        <dt>Comment</dt>
+                        <dt>{ec.commentLabel}</dt>
                         <dd>{latestResponse.comment?.trim() || '—'}</dd>
                       </div>
                       <div className="employee-summary-row employee-summary-row--files">
-                        <dt>Attached files</dt>
+                        <dt>{ec.attachTitle}</dt>
                         <dd>
                           {latestResponse.attachmentName ? (
                             <span className="employee-file-chip">
@@ -1194,10 +1229,10 @@ function EmployeeQuickReportPanel({
 
                     <div className="employee-summary-actions">
                       <button type="button" className="btn btn-navy-solid" onClick={enterRevisionMode}>
-                        <Pencil size={18} strokeWidth={2} aria-hidden /> Edit Report
+                        <Pencil size={18} strokeWidth={2} aria-hidden /> {ec.editReport}
                       </button>
                       <button type="button" className="btn employee-btn-outline" onClick={() => onBackToEvents?.()}>
-                        Done
+                        {ec.done}
                       </button>
                     </div>
                   </article>
@@ -1207,12 +1242,12 @@ function EmployeeQuickReportPanel({
                 <div className="member-initial-report-done">
                   <CheckCircle2 size={36} strokeWidth={2} className="member-initial-report-done-ic" aria-hidden />
                   <div className="member-initial-report-done-copy">
-                    <strong>已回報成功</strong>
+                    <strong>{ec.reportSuccessTitle}</strong>
                     <p className="muted-text">
-                      {latestResponse.status === 'safe' ? '狀態：平安 (I&apos;m Safe)' : '狀態：需要協助 (I need help)'}
+                      {latestResponse.status === 'safe' ? ec.statusDetailSafe : ec.statusDetailNeedHelp}
                     </p>
                     <button type="button" className="btn primary btn-block" onClick={enterRevisionMode}>
-                      補充或更新資訊
+                      {ec.supplementOrUpdate}
                     </button>
                   </div>
                 </div>
@@ -1248,7 +1283,7 @@ function EmployeeQuickReportPanel({
                         <button
                           type="button"
                           disabled={reportSubmitting}
-                          className="employee-status-wide need member-initial-report-btn"
+                          className={`employee-status-wide need member-initial-report-btn${selectedNeedHelp ? ' is-selected' : ''}`}
                           onClick={handleNeedHelpTap}
                         >
                           <span className="employee-status-inner">
@@ -1266,7 +1301,7 @@ function EmployeeQuickReportPanel({
                       <span className="event-detail-card-icon">
                         <Users size={22} strokeWidth={1.75} aria-hidden />
                       </span>
-                      <h3>{layout === 'embedded' ? '回報你的狀態' : 'Report your status'}</h3>
+                      <h3>{ec.reportCardTitle}</h3>
                     </div>
                     <div className={`employee-status-row${isRevisionDraft ? ' employee-status-row--revision' : ''}`}>
                       <button
@@ -1322,20 +1357,21 @@ function EmployeeQuickReportPanel({
                   </article>
                   )}
 
-                  {!isRevisionDraft && showReportingControls && !stackInitialReport ? (
-                    <div className="employee-help-details-panel">
+                  {!isRevisionDraft && showReportingControls && selectedNeedHelp ? (
+                    <div ref={helpDetailsRef} className="employee-help-details-panel">
                       <article className="event-detail-card">
                         <div className="event-detail-card-head">
                           <span className="event-detail-card-icon">
                             <ClipboardList size={22} strokeWidth={1.75} aria-hidden />
                           </span>
                           <h3>
-                            補充說明 <span className="employee-optional-hint">（選填）</span>
+                            {ec.supplementaryTitle}{' '}
+                            <span className="employee-optional-hint">（{ec.optionalBadge}）</span>
                           </h3>
                         </div>
                         <div className="employee-fields">
                           <label className="employee-field-label" htmlFor={`emp-loc-${fieldId}`}>
-                            位置 <span className="employee-optional-hint">Optional</span>
+                            {ec.locationLabel}
                           </label>
                           <div className="input-with-leading-icon">
                             <span className="input-leading-ic" aria-hidden>
@@ -1343,7 +1379,7 @@ function EmployeeQuickReportPanel({
                             </span>
                             <input
                               id={`emp-loc-${fieldId}`}
-                              placeholder="例如：A 棟 3F"
+                              placeholder={ec.locationPlaceholder}
                               disabled={reportSubmitting}
                               value={employeeLocation}
                               onChange={(e) => setEmployeeLocation(e.target.value)}
@@ -1351,7 +1387,7 @@ function EmployeeQuickReportPanel({
                           </div>
 
                           <label className="employee-field-label" htmlFor={`emp-comment-${fieldId}`}>
-                            備註 <span className="employee-optional-hint">Optional</span>
+                            {ec.commentLabel}
                           </label>
                           <div className="textarea-with-leading-icon">
                             <span className="input-leading-ic textarea-leading" aria-hidden>
@@ -1359,7 +1395,7 @@ function EmployeeQuickReportPanel({
                             </span>
                             <textarea
                               id={`emp-comment-${fieldId}`}
-                              placeholder="可簡述現況…"
+                              placeholder={ec.commentPlaceholder}
                               disabled={reportSubmitting}
                               value={employeeComment}
                               maxLength={MAX_COMMENT_LEN}
@@ -1376,7 +1412,8 @@ function EmployeeQuickReportPanel({
                             <Paperclip size={22} strokeWidth={1.75} aria-hidden />
                           </span>
                           <h3>
-                            附件 <span className="employee-optional-hint">（選填）</span>
+                            {ec.attachTitle}{' '}
+                            <span className="employee-optional-hint">（{ec.optionalBadge}）</span>
                           </h3>
                         </div>
                         <input
@@ -1403,8 +1440,8 @@ function EmployeeQuickReportPanel({
                           <span className="employee-drop-ic" aria-hidden>
                             <CloudUpload size={46} strokeWidth={1.45} color="#1e5494" />
                           </span>
-                          <span className="employee-drop-title">拖曳檔案到此，或點此瀏覽</span>
-                          <span className="employee-drop-hint">支援圖片、影片與文件（各自最大 10MB）</span>
+                          <span className="employee-drop-title">{ec.dropTitle}</span>
+                          <span className="employee-drop-hint">{ec.dropHint}</span>
                           {employeeAttachment ? <span className="employee-drop-file">{employeeAttachment.name}</span> : null}
                           {uploadNotice ? <span className="employee-drop-error">{uploadNotice}</span> : null}
                         </label>
@@ -1417,10 +1454,18 @@ function EmployeeQuickReportPanel({
                               applyAttachment(null);
                             }}
                           >
-                            移除附件
+                            {ec.removeAttachment}
                           </button>
                         ) : null}
                       </article>
+                      <button
+                        type="button"
+                        className="btn primary btn-block employee-submit-need-help"
+                        disabled={reportSubmitting}
+                        onClick={handleConfirmNeedHelp}
+                      >
+                        {ec.submitNeedHelp}
+                      </button>
                     </div>
                   ) : null}
 
@@ -1431,11 +1476,11 @@ function EmployeeQuickReportPanel({
                         <span className="event-detail-card-icon">
                           <ClipboardList size={22} strokeWidth={1.75} aria-hidden />
                         </span>
-                        <h3>{isRevisionDraft ? 'Additional details' : 'Additional details (Optional)'}</h3>
+                        <h3>{ec.revisionDetailsHeading}</h3>
                       </div>
                       <div className="employee-fields">
                         <label className="employee-field-label" htmlFor={`emp-loc-rev-${fieldId}`}>
-                          Location
+                          {ec.locationLabel}
                         </label>
                         <div className="input-with-leading-icon">
                           <span className="input-leading-ic" aria-hidden>
@@ -1443,7 +1488,7 @@ function EmployeeQuickReportPanel({
                           </span>
                           <input
                             id={`emp-loc-rev-${fieldId}`}
-                            placeholder="例如：Building A, 3F, Lab 2"
+                            placeholder={ec.locationPlaceholder}
                             disabled={reportSubmitting}
                             value={employeeLocation}
                             onChange={(e) => setEmployeeLocation(e.target.value)}
@@ -1451,7 +1496,7 @@ function EmployeeQuickReportPanel({
                         </div>
 
                         <label className="employee-field-label" htmlFor={`emp-comment-rev-${fieldId}`}>
-                          Comment
+                          {ec.commentLabel}
                         </label>
                         <div className="textarea-with-leading-icon">
                           <span className="input-leading-ic textarea-leading" aria-hidden>
@@ -1459,7 +1504,7 @@ function EmployeeQuickReportPanel({
                           </span>
                           <textarea
                             id={`emp-comment-rev-${fieldId}`}
-                            placeholder="Tell us more about your situation…"
+                            placeholder={ec.commentPlaceholder}
                             disabled={reportSubmitting}
                             value={employeeComment}
                             maxLength={MAX_COMMENT_LEN}
@@ -1475,7 +1520,7 @@ function EmployeeQuickReportPanel({
                         <span className="event-detail-card-icon">
                           <Paperclip size={22} strokeWidth={1.75} aria-hidden />
                         </span>
-                        <h3>Attach files</h3>
+                        <h3>{ec.attachTitle}</h3>
                       </div>
                       {isRevisionDraft && latestResponse?.attachmentName && !employeeAttachment && !omitStoredAttachment ? (
                         <div className="employee-attached-existing">
@@ -1486,12 +1531,12 @@ function EmployeeQuickReportPanel({
                           </div>
                           <div className="employee-attached-actions">
                             <button type="button" className="btn ghost btn-compact" onClick={() => attachmentInputRef.current?.click()}>
-                              Replace
+                              {ec.replaceAttachment}
                             </button>
                             <button
                               type="button"
                               className="btn ghost btn-icon-danger"
-                              aria-label="Remove attachment"
+                              aria-label={ec.removeAttachmentAria}
                               onClick={() => setOmitStoredAttachment(true)}
                             >
                               <Trash2 size={18} strokeWidth={2} aria-hidden />
@@ -1517,8 +1562,8 @@ function EmployeeQuickReportPanel({
                         <span className="employee-drop-ic" aria-hidden>
                           <CloudUpload size={46} strokeWidth={1.45} color="#1e5494" />
                         </span>
-                        <span className="employee-drop-title">拖曳檔案到此，或點此瀏覽</span>
-                        <span className="employee-drop-hint">支援圖片、影片與文件（各自最大 10MB）</span>
+                        <span className="employee-drop-title">{ec.dropTitle}</span>
+                        <span className="employee-drop-hint">{ec.dropHint}</span>
                         {employeeAttachment ? <span className="employee-drop-file">{employeeAttachment.name}</span> : null}
                         {uploadNotice ? <span className="employee-drop-error">{uploadNotice}</span> : null}
                       </label>
@@ -1531,7 +1576,7 @@ function EmployeeQuickReportPanel({
                             applyAttachment(null);
                           }}
                         >
-                          移除附件
+                          {ec.removeAttachment}
                         </button>
                       ) : null}
                     </article>
@@ -1546,7 +1591,7 @@ function EmployeeQuickReportPanel({
                   <span className="event-detail-card-icon">
                     <Phone size={22} strokeWidth={1.8} aria-hidden />
                   </span>
-                  <h3>Emergency contact</h3>
+                  <h3>{ec.emergencyContactTitle}</h3>
                 </div>
                 <div className="emergency-inline emergency-inline--desktop">
                   <a className="emergency-slot" href="tel:+886212345678">
@@ -1643,10 +1688,10 @@ function EmployeeQuickReportPanel({
                 <CheckCircle2 size={52} strokeWidth={2} className="member-report-success-overlay-ic" aria-hidden />
                 <h3 id="member-initial-success-title">{selectedEvent.title}</h3>
                 <p className="member-report-success-overlay-status">
-                  {latestResponse.status === 'safe' ? '已送出：平安' : '已送出：需要協助'}
+                  {latestResponse.status === 'safe' ? ec.overlaySubmittedSafe : ec.overlaySubmittedNeedHelp}
                 </p>
                 <button type="button" className="btn primary btn-block" onClick={() => setInitialSuccessOverlayOpen(false)}>
-                  關閉
+                  {ec.close}
                 </button>
               </div>
             </div>
@@ -1694,11 +1739,13 @@ export function EmployeeHomePage({
   ) => void | Promise<void>;
   onBackToEvents: () => void;
 }) {
+  const { locale } = useLocale();
+  const ec = getStrings(locale).employee;
   return (
     <section className="employee-event-page">
       {!selectedEvent ? (
         <div className="employee-event-empty">
-          <p>目前沒有選取的事件</p>
+          <p>{ec.noEventSelected}</p>
         </div>
       ) : (
         <EmployeeQuickReportPanel
@@ -1765,6 +1812,9 @@ export function MemberPriorityHomePage({
   onDismissSupervisorNudge: () => void;
   onGoTeamDashboardFromNudge: () => void;
 }) {
+  const { locale } = useLocale();
+  const { employee: ec, layoutNav } = getStrings(locale);
+
   const latestFor = (eventId: string) =>
     userId
       ? responses
@@ -1778,17 +1828,15 @@ export function MemberPriorityHomePage({
         {supervisorTeamNudge ? (
           <div className="supervisor-team-nudge-banner" role="status">
             <div className="supervisor-team-nudge-copy">
-              <strong>已回報成功</strong>
-              <p>
-                事件「{supervisorTeamNudge.eventTitle}」轄下尚有 {supervisorTeamNudge.pendingPct}% 未回報，可前往團隊報表追蹤。
-              </p>
+              <strong>{ec.supervisorNudgeTitle}</strong>
+              <p>{ec.supervisorNudgeBody(supervisorTeamNudge.eventTitle, supervisorTeamNudge.pendingPct)}</p>
             </div>
             <div className="supervisor-team-nudge-actions">
               <button type="button" className="btn primary" onClick={onGoTeamDashboardFromNudge}>
-                團隊報表
+                {layoutNav.teamDash}
               </button>
               <button type="button" className="btn ghost" onClick={onDismissSupervisorNudge}>
-                關閉
+                {ec.close}
               </button>
             </div>
           </div>
@@ -1797,16 +1845,16 @@ export function MemberPriorityHomePage({
           <div className="employee-events-hero-text">
             <h2 className="employee-events-title">
               <Activity className="employee-events-title-icon" aria-hidden />
-              目前無須立即回報
+              {ec.idleHeroTitle}
             </h2>
-            <p className="employee-events-subtitle">若需補充資料請於下方進行中事件操作；可向下捲動檢視已結束事件。</p>
+            <p className="employee-events-subtitle">{ec.idleHeroSubtitle}</p>
           </div>
         </header>
 
         <div className="member-idle-history">
-          <h3 className="section-title member-idle-history-title">進行中</h3>
+          <h3 className="section-title member-idle-history-title">{ec.sectionOngoingEvents}</h3>
           {idleHistoryOngoing.length === 0 ? (
-            <p className="empty muted-text">尚無已回報且仍進行中的事件。</p>
+            <p className="empty muted-text">{ec.idleNoOngoingSupplemented}</p>
           ) : (
             <ul className="member-idle-history-list">
               {idleHistoryOngoing.map((row) => {
@@ -1821,7 +1869,7 @@ export function MemberPriorityHomePage({
                     <div className="member-idle-history-row-aside">
                       <StatusBadge status={lr.status} />
                       <button type="button" className="btn primary btn-sm" onClick={() => onSupplementEvent(row.event.id)}>
-                        補充或更新資訊
+                        {ec.supplementOrUpdate}
                       </button>
                     </div>
                   </li>
@@ -1830,9 +1878,9 @@ export function MemberPriorityHomePage({
             </ul>
           )}
 
-          <h3 className="section-title member-idle-history-title member-idle-history-title--closed">已結束</h3>
+          <h3 className="section-title member-idle-history-title member-idle-history-title--closed">{ec.sectionClosedEvents}</h3>
           {idleHistoryClosed.length === 0 ? (
-            <p className="empty muted-text">尚無已結束事件紀錄。</p>
+            <p className="empty muted-text">{ec.idleNoClosedHistory}</p>
           ) : (
             <ul className="member-idle-history-list">
               {idleHistoryClosed.map((row) => {
@@ -1842,7 +1890,7 @@ export function MemberPriorityHomePage({
                   <li key={row.event.id} className="member-idle-history-row member-idle-history-row--readonly">
                     <div className="member-idle-history-row-main">
                       <span className="member-idle-history-event-title">{row.event.title}</span>
-                      <span className="muted-text subtle">{formatEmployeeCardTime(lr.updatedAt)}</span>
+                      <span className="muted-text subtle">{formatEmployeeCardTime(lr.updatedAt, locale)}</span>
                     </div>
                     <StatusBadge status={lr.status} />
                   </li>
@@ -1857,7 +1905,7 @@ export function MemberPriorityHomePage({
             <span className="event-detail-card-icon">
               <Phone size={22} strokeWidth={1.8} aria-hidden />
             </span>
-            <h3>緊急聯絡</h3>
+            <h3>{ec.emergencyContactTitle}</h3>
           </div>
           <div className="emergency-inline emergency-inline--desktop">
             <a className="emergency-slot" href="tel:+886212345678">
@@ -1912,14 +1960,14 @@ export function MemberPriorityHomePage({
   }
 
   return (
-    <section className="page-section employee-events-page member-priority-home" aria-label="待回報事件">
+    <section className="page-section employee-events-page member-priority-home" aria-label={ec.priorityStackAria}>
       <header className="employee-events-hero">
         <div className="employee-events-hero-text">
           <h2 className="employee-events-title">
             <ShieldCheck className="employee-events-title-icon" aria-hidden />
-            立即回報
+            {ec.reportNowHeroTitle}
           </h2>
-          <p className="employee-events-subtitle">請先按下平安或需要協助完成首報；補充說明可於送出後再填寫。</p>
+          <p className="employee-events-subtitle">{ec.reportNowHeroSubtitle}</p>
         </div>
       </header>
 
@@ -1942,7 +1990,7 @@ export function MemberPriorityHomePage({
                     {row.event.title}
                   </h3>
                   <p className="member-priority-card-meta">
-                    {row.event.type} · {formatEmployeeCardTime(row.event.startAt)}
+                    {row.event.type} · {formatEmployeeCardTime(row.event.startAt, locale)}
                   </p>
                 </div>
               </div>

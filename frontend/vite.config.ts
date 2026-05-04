@@ -11,8 +11,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
+        injectRegister: false,
         registerType: 'autoUpdate',
-        devOptions: { enabled: true },
+        devOptions: { enabled: false },
         manifest: {
           name: 'Employee Safety & Response System',
           short_name: 'SafetyApp',
@@ -43,6 +44,9 @@ export default defineConfig(({ mode }) => {
         workbox: {
           navigateFallback: '/index.html',
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true,
         },
       }),
     ],
