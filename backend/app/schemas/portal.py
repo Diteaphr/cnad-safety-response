@@ -95,3 +95,26 @@ class ProfileUpdateIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=50)
+
+
+class AdminUserCreateIn(BaseModel):
+    """Admin creates a new user account."""
+
+    name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    employeeNo: Optional[str] = Field(default=None, max_length=50)
+    departmentId: Optional[str] = None
+    managerId: Optional[str] = None
+    roles: List[Literal["employee", "supervisor", "admin"]] = Field(default=["employee"])
+
+
+class AdminUserUpdateIn(BaseModel):
+    """Admin edits an existing user's details."""
+
+    name: str = Field(min_length=1, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    departmentId: Optional[str] = None
+    managerId: Optional[str] = None
+    roles: List[Literal["employee", "supervisor", "admin"]] = Field(min_length=1)

@@ -26,7 +26,7 @@ from app.repositories.event_repository import EventRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.portal import CreateEventIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, CreateEventIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
@@ -456,6 +456,104 @@ class PortalService:
         )
         db.commit()
         return self._profile_out(user)
+
+    # ------------------------------------------------------------------
+    # Admin: user management
+    # ------------------------------------------------------------------
+
+    def _parse_optional_uuid(self, value: str | None, *, field: str) -> uuid.UUID | None:
+        if not value:
+            return None
+        try:
+            return uuid.UUID(value.strip())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid {field}") from e
+
+    def admin_list_users(self, db: Session, actor_id: uuid.UUID) -> list[dict[str, Any]]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        return [self._profile_out(u) for u in self._users.list_all(db)]
+
+    def admin_create_user(
+        self, db: Session, actor_id: uuid.UUID, payload: AdminUserCreateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+
+        email = payload.email.strip().lower()
+        if self._users.get_by_email(db, email):
+            raise HTTPException(status_code=409, detail="Email already registered.")
+
+        dept_id = self._parse_optional_uuid(payload.departmentId, field="departmentId")
+        if dept_id and self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=400, detail="Department not found")
+
+        manager_id = self._parse_optional_uuid(payload.managerId, field="managerId")
+        if manager_id and self._users.get_by_id(db, manager_id) is None:
+            raise HTTPException(status_code=400, detail="Manager not found")
+
+        if payload.employeeNo and payload.employeeNo.strip():
+            emp_no = payload.employeeNo.strip()
+            if self._users.employee_no_exists(db, emp_no):
+                raise HTTPException(status_code=409, detail="Employee number already in use.")
+        else:
+            emp_no = f"EMP-{uuid.uuid4().hex[:12].upper()}"
+            while self._users.employee_no_exists(db, emp_no):
+                emp_no = f"EMP-{uuid.uuid4().hex[:12].upper()}"
+
+        user = User(
+            employee_no=emp_no,
+            name=payload.name.strip(),
+            email=email,
+            phone=payload.phone.strip() if payload.phone else None,
+            department_id=dept_id,
+            manager_id=manager_id,
+            status="active",
+            password_hash=hash_password(payload.password),
+        )
+        db.add(user)
+        db.flush()
+        self._users.set_roles(db, user.user_id, payload.roles)
+        db.commit()
+
+        full = self._users.get_by_id(db, user.user_id)
+        assert full is not None
+        return {"message": "User created.", "user": self._profile_out(full)}
+
+    def admin_update_user(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID, payload: AdminUserUpdateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+
+        if self._users.get_by_id(db, user_id) is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        dept_id = self._parse_optional_uuid(payload.departmentId, field="departmentId")
+        if dept_id and self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=400, detail="Department not found")
+
+        manager_id = self._parse_optional_uuid(payload.managerId, field="managerId")
+        if manager_id and self._users.get_by_id(db, manager_id) is None:
+            raise HTTPException(status_code=400, detail="Manager not found")
+
+        self._users.update_user_admin(
+            db,
+            user_id,
+            name=payload.name.strip(),
+            phone=payload.phone.strip() if payload.phone else None,
+            department_id=dept_id,
+            manager_id=manager_id,
+        )
+        self._users.set_roles(db, user_id, payload.roles)
+        db.commit()
+        # expire_all forces SQLAlchemy to re-query from DB rather than serve
+        # user_roles from the identity-map cache (needed when expire_on_commit=False)
+        db.expire_all()
+
+        full = self._users.get_by_id(db, user_id)
+        assert full is not None
+        return self._profile_out(full)
 
     def register(self, db: Session, payload: RegisterIn) -> dict[str, Any]:
         email = payload.email.strip().lower()
