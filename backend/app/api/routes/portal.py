@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.core.database import get_db
+from app.core.config import settings
+from app.core.database import SessionLocal, get_db
 from app.schemas.portal import CreateEventIn, DemoLoginIn, EventActionIn, LoginIn, RegisterIn, ReportIn
 from app.services.portal_service import PortalService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["portal"])
 
@@ -89,15 +93,42 @@ def create_event(
     return _portal.create_event(db, actor_id=actor, payload=payload)
 
 
+def _dispatch_activation_background(event_id: uuid.UUID) -> None:
+    """Run notification fan-out in a background task (dev mode without Pub/Sub)."""
+    from app.services.notification_dispatch import dispatch_activation_notifications
+    db = SessionLocal()
+    try:
+        dispatch_activation_notifications(db, event_id)
+    except Exception:
+        logger.exception("Background activation dispatch failed for event %s", event_id)
+    finally:
+        db.close()
+
+
 @router.post("/events/{event_id}/activate")
 def activate_event(
     event_id: str,
     actor: CurrentUser,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     body: EventActionIn | None = None,
 ):
     eid = _parse_uuid(event_id, name="event_id")
-    return _portal.activate_event(db, actor_id=actor, event_id=eid)
+    result = _portal.activate_event(db, actor_id=actor, event_id=eid)
+
+    if settings.use_gcp:
+        # Production: publish one trigger message to Pub/Sub.
+        # The /api/internal/notifications/dispatch endpoint handles the fan-out
+        # when Pub/Sub push delivers the message to Cloud Run.
+        from app.services.integrations.pubsub_placeholder import publish_notification_event
+        publish_notification_event({"kind": "activation", "event_id": str(eid)})
+    else:
+        # Dev: run notification fan-out in a background task.
+        # FastAPI sends the HTTP response first, then executes the task —
+        # mimicking Pub/Sub's async behaviour without requiring a real broker.
+        background_tasks.add_task(_dispatch_activation_background, eid)
+
+    return result
 
 
 @router.post("/events/{event_id}/close")

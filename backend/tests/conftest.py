@@ -37,6 +37,7 @@ from app.main import app
 from app.models.department import Department
 from app.models.event import Event
 from app.models.event_department import EventDepartment
+from app.models.notification import Notification
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
@@ -130,6 +131,21 @@ def roles(db) -> dict[str, Role]:
 
 
 @pytest.fixture
+def make_department(db):
+    """Factory fixture: create a Department row in the test DB."""
+    def _factory(name: str = "Test Dept") -> Department:
+        dept = Department(
+            department_id=uuid.uuid4(),
+            department_name=name,
+        )
+        db.add(dept)
+        db.commit()
+        db.refresh(dept)
+        return dept
+    return _factory
+
+
+@pytest.fixture
 def make_user(db, roles):
     """
     Factory fixture: call make_user(email=..., role=...) to get a User.
@@ -143,12 +159,15 @@ def make_user(db, roles):
         password: str = "password123",
         role: str = "employee",
         manager_id: uuid.UUID | None = None,
+        phone: str | None = None,
+        department_id: uuid.UUID | None = None,
     ) -> User:
         user = User(
             employee_no=f"T{uuid.uuid4().hex[:8].upper()}",
             name=name,
             email=email,
-            department_id=None,
+            phone=phone,
+            department_id=department_id,
             manager_id=manager_id,
             status="active",
             password_hash=hash_password(password),
@@ -180,6 +199,7 @@ def make_event(db):
         event_type: str = "Earthquake",
         status: str = "active",
         created_by: uuid.UUID | None = None,
+        department_ids: list[uuid.UUID] | None = None,
     ) -> Event:
         # events.created_by has a FK to users.user_id — create a real user if none given
         if created_by is None:
@@ -205,6 +225,9 @@ def make_event(db):
             start_time=datetime.now(timezone.utc),
         )
         db.add(event)
+        db.flush()
+        for dept_id in (department_ids or []):
+            db.add(EventDepartment(event_id=event.event_id, department_id=dept_id))
         db.commit()
         db.refresh(event)
         return event

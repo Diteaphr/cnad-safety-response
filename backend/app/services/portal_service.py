@@ -28,7 +28,6 @@ from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.portal import CreateEventIn, LoginIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
-from app.services.integrations.mock_notification_channels import send_fcm_mock
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
 
@@ -227,6 +226,11 @@ class PortalService:
         nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, event_id)
         assert full is not None
+
+        # Notification dispatch is intentionally NOT done here.
+        # The route handler (portal.py) triggers it via BackgroundTask (dev) or
+        # Pub/Sub publish (prod) after this method returns, keeping the service
+        # layer free of transport concerns.
         return {"message": "Event activated", "event": self._event_out(full, nm)}
 
     def close_event(self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID):
@@ -559,41 +563,12 @@ class PortalService:
             if "employee" in _role_names(u)
         ]
 
-        reports = self._responses.list_for_event(db, event_id)
-        latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
-        for r in reports:
-            prev = latest_by_user.get(r.user_id)
-            if prev is None or r.responded_at > prev.responded_at:
-                latest_by_user[r.user_id] = r
-
-        sent = 0
-        already_safe = 0
-
-        def _make_send_fn(target_user: User, event_title: str, eid: uuid.UUID):
-            return lambda: send_fcm_mock(
-                device_token=str(target_user.user_id),
-                title="安全確認提醒",
-                body=f"請盡快回報您的安全狀態：{event_title}",
-                data={"event_id": str(eid)},
-            )
-
-        for user in team_users:
-            lr = latest_by_user.get(user.user_id)
-            if lr is not None and lr.status == "safe":
-                already_safe += 1
-                continue
-            self._notif_svc.deliver_with_idempotency(
-                db,
-                event_id=event_id,
-                user_id=user.user_id,
-                channel="fcm_reminder",
-                send_fn=_make_send_fn(user, ev.title, event_id),
-            )
-            sent += 1
+        from app.services.notification_dispatch import dispatch_reminders
+        stats = dispatch_reminders(db, event_id, team_users)
 
         return {
             "message": "Reminders sent",
-            "sent": sent,
-            "already_safe": already_safe,
-            "total_team": len(team_users),
+            "sent": stats["sent"],
+            "already_safe": stats["already_safe"],
+            "total_team": stats["total"],
         }

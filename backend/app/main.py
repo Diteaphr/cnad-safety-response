@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, portal
+from app.api.routes import health, internal, portal
 from app.core.database import SessionLocal
 from app.seeding.seed_demo import run_if_empty
 
@@ -17,6 +17,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(portal.router)
+app.include_router(internal.router)
 
 
 @app.on_event("startup")
@@ -27,6 +28,19 @@ def _seed_demo_if_empty() -> None:
         run_if_empty(db)
     finally:
         db.close()
+
+
+@app.on_event("startup")
+def _start_scheduler() -> None:
+    """Start APScheduler for automated reminder scans (every 15 minutes)."""
+    from app.services.scheduler_service import start_scheduler
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def _stop_scheduler() -> None:
+    from app.services.scheduler_service import stop_scheduler
+    stop_scheduler()
 
 
 @app.get("/")

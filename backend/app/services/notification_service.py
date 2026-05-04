@@ -7,6 +7,8 @@ Local dev: pass send_fn from app.services.integrations.mock_notification_channel
 (send_fcm_mock / send_twilio_sms_mock). Production: swap for real providers.
 """
 
+from __future__ import annotations
+
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -89,6 +91,34 @@ class NotificationService:
             db.rollback()
             raise
         return row
+
+    def deliver_with_fallback(
+        self,
+        db: Session,
+        *,
+        event_id: uuid.UUID,
+        user_id: uuid.UUID,
+        primary_channel: str,
+        primary_send_fn: Callable[[], bool],
+        fallback_channel: str | None = None,
+        fallback_send_fn: Callable[[], bool] | None = None,
+    ) -> None:
+        """Send via primary channel; if it fails and a fallback is given, try that too."""
+        result = self.deliver_with_idempotency(
+            db,
+            event_id=event_id,
+            user_id=user_id,
+            channel=primary_channel,
+            send_fn=primary_send_fn,
+        )
+        if result.status == FAILED_STATUS and fallback_channel and fallback_send_fn:
+            self.deliver_with_idempotency(
+                db,
+                event_id=event_id,
+                user_id=user_id,
+                channel=fallback_channel,
+                send_fn=fallback_send_fn,
+            )
 
     def to_dict(self, n: Notification) -> dict[str, Any]:
         return {
