@@ -23,6 +23,7 @@ import {
   getAdminDashboardApi,
   getDemoAccounts,
   getDepartments,
+  getEventTypesApi,
   getEvents,
   getFailedNotificationsForEventApi,
   getMyNotificationsApi,
@@ -132,12 +133,13 @@ function App() {
     (async () => {
       try {
         setCatalogError(null);
-        const [accounts, deptRows, userRows, evRows, respRows] = await Promise.all([
+        const [accounts, deptRows, userRows, evRows, respRows, typeRows] = await Promise.all([
           getDemoAccounts(),
           getDepartments(),
           getUsers(),
           getEvents(),
           getReports(),
+          getEventTypesApi().catch(() => []),
         ]);
         if (cancelled) return;
         setDemoAccounts(accounts);
@@ -145,6 +147,7 @@ function App() {
         setUsers(userRows);
         setEvents(evRows);
         setResponses(respRows);
+        setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
         setCatalogLoaded(true);
       } catch (e) {
         if (!cancelled) {
@@ -178,9 +181,10 @@ function App() {
 
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
+  const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
   const [eventForm, setEventForm] = useState({
     title: '',
-    type: 'Earthquake' as EventItem['type'],
+    type: 'Earthquake',
     customType: '',
     description: '',
     startAt: new Date().toISOString().slice(0, 16),
@@ -834,17 +838,24 @@ function App() {
 
   const createEvent = async () => {
     if (!session.user) return;
-    const type = eventForm.type === 'Other' && eventForm.customType.trim() ? ('Other' as EventItem['type']) : eventForm.type;
+    const custom = eventForm.type.trim().toLowerCase() === 'other' ? eventForm.customType.trim() : '';
     try {
       const out = await createEventApi(session.user.id, {
         title: eventForm.title || 'Untitled Event',
-        type,
+        type: eventForm.type,
         description: eventForm.description,
         startAt: new Date(eventForm.startAt).toISOString(),
         targetDepartmentIds: departments.map((d) => d.id),
+        ...(custom ? { customTypeName: custom } : {}),
       });
       setEvents((prev) => [out.event, ...prev]);
       showToast({ tone: 'success', message: 'Event template saved. You can activate it when an incident starts.' });
+      try {
+        const typeRows = await getEventTypesApi();
+        setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
+      } catch {
+        /* ignore */
+      }
       await refreshOperationalData();
     } catch (e) {
       showToast({ tone: 'danger', message: e instanceof Error ? e.message : '建立失敗' });
@@ -1108,6 +1119,7 @@ function App() {
         {navKey === 'event-management' && (
           <EventManagementPage
             events={events}
+            eventTypeCatalog={eventTypeCatalog}
             eventForm={eventForm}
             setEventForm={setEventForm}
             onCreateEvent={createEvent}

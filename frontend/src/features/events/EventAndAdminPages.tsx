@@ -7,7 +7,7 @@ import type { ReactElement } from 'react';
 import type { FailedNotificationRow } from '../../api';
 import type { Department, EventItem, NotificationSummary, User } from '../../types';
 
-function typeLabel(ev: EventItem['type'], p: ReturnType<typeof getStrings>['portal']) {
+function typeLabel(ev: string, p: ReturnType<typeof getStrings>['portal']) {
   switch (ev) {
     case 'Earthquake':
       return p.eventTypeEarthquake;
@@ -86,8 +86,11 @@ export function EventSelectionPage({
   );
 }
 
+const BUILTIN_TYPE_ORDER = ['Earthquake', 'Typhoon', 'Fire', 'Other'] as const;
+
 export function EventManagementPage({
   events,
+  eventTypeCatalog,
   eventForm,
   setEventForm,
   onCreateEvent,
@@ -95,10 +98,12 @@ export function EventManagementPage({
   onClose,
 }: {
   events: EventItem[];
-  eventForm: { title: string; type: EventItem['type']; customType: string; description: string; startAt: string };
+  /** 來自 GET /api/event-types；null 時下拉僅顯示內建四類 */
+  eventTypeCatalog: { name: string }[] | null;
+  eventForm: { title: string; type: string; customType: string; description: string; startAt: string };
   setEventForm: (value: {
     title: string;
-    type: EventItem['type'];
+    type: string;
     customType: string;
     description: string;
     startAt: string;
@@ -109,6 +114,20 @@ export function EventManagementPage({
 }) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
+
+  const typeSelectRows = useMemo(() => {
+    if (!eventTypeCatalog?.length) {
+      return BUILTIN_TYPE_ORDER.map((name) => ({ name }));
+    }
+    const rank = (name: string) => {
+      const i = BUILTIN_TYPE_ORDER.indexOf(name as (typeof BUILTIN_TYPE_ORDER)[number]);
+      return i === -1 ? 100 : i;
+    };
+    return [...eventTypeCatalog].sort((a, b) => {
+      const d = rank(a.name) - rank(b.name);
+      return d !== 0 ? d : a.name.localeCompare(b.name);
+    });
+  }, [eventTypeCatalog]);
 
   return (
     <section className="page-section portal-event-mgmt">
@@ -121,14 +140,18 @@ export function EventManagementPage({
         </label>
         <label className="event-form-field">
           <span className="event-form-field-label">{p.formLabelEventType}</span>
-          <select value={eventForm.type} onChange={(e) => setEventForm({ ...eventForm, type: e.target.value as EventItem['type'] })}>
-            <option value="Earthquake">{p.eventTypeEarthquake}</option>
-            <option value="Typhoon">{p.eventTypeTyphoon}</option>
-            <option value="Fire">{p.eventTypeFire}</option>
-            <option value="Other">{p.eventTypeOther}</option>
+          <select
+            value={eventForm.type}
+            onChange={(e) => setEventForm({ ...eventForm, type: e.target.value })}
+          >
+            {typeSelectRows.map((row) => (
+              <option key={row.name} value={row.name}>
+                {typeLabel(row.name, p)}
+              </option>
+            ))}
           </select>
         </label>
-        {eventForm.type === 'Other' ? (
+        {eventForm.type.trim().toLowerCase() === 'other' ? (
           <label className="event-form-field">
             <span className="event-form-field-label muted-text">{p.formLabelCustomTypeDetail}</span>
             <input

@@ -1,5 +1,5 @@
 import { fetchWithTimeout, isProbablyTransientNetworkError, withRetries } from './lib/httpClient';
-import type { Department, EventItem, Role, SafetyResponse, User } from './types';
+import type { Department, EventItem, EventTypeCatalogItem, Role, SafetyResponse, User } from './types';
 
 /** `/api/dashboard/supervisor` 回傳之 team 項目 */
 export type SupervisorTeamMemberApi = {
@@ -167,6 +167,11 @@ export async function getDepartments(): Promise<Department[]> {
   return data.departments;
 }
 
+export async function getEventTypesApi(): Promise<EventTypeCatalogItem[]> {
+  const data = await apiFetch<{ eventTypes: EventTypeCatalogItem[] }>('/api/event-types');
+  return data.eventTypes;
+}
+
 export async function getUsers(): Promise<User[]> {
   const data = await apiFetch<{ users: User[] }>('/api/users');
   return data.users;
@@ -190,6 +195,8 @@ export async function createEventApi(
     description: string;
     startAt: string;
     targetDepartmentIds: string[];
+    /** 與 type=Other 併用：後端會先寫入 event_types 再建立事件 */
+    customTypeName?: string;
   },
 ): Promise<{ message: string; event: EventItem }> {
   return apiFetch('/api/events', {
@@ -201,6 +208,9 @@ export async function createEventApi(
       description: body.description,
       startAt: body.startAt,
       targetDepartmentIds: body.targetDepartmentIds,
+      ...(body.customTypeName != null && body.customTypeName !== ''
+        ? { customTypeName: body.customTypeName }
+        : {}),
     }),
   });
 }
