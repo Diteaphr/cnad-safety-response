@@ -16,7 +16,7 @@ class EventRepository:
         db: Session,
         *,
         title: str,
-        event_type: str,
+        event_type_id: uuid.UUID,
         description: Optional[str],
         status: str,
         created_by: uuid.UUID,
@@ -24,7 +24,7 @@ class EventRepository:
     ) -> Event:
         event = Event(
             title=title,
-            event_type=event_type,
+            event_type_id=event_type_id,
             description=description,
             status=status,
             created_by=created_by,
@@ -48,7 +48,10 @@ class EventRepository:
     def get_by_id(self, db: Session, event_id: uuid.UUID) -> Optional[Event]:
         stmt = (
             select(Event)
-            .options(selectinload(Event.event_departments))
+            .options(
+                selectinload(Event.event_departments),
+                selectinload(Event.event_type_row),
+            )
             .where(Event.event_id == event_id)
         )
         return db.execute(stmt).scalar_one_or_none()
@@ -56,7 +59,10 @@ class EventRepository:
     def list_all(self, db: Session) -> list[Event]:
         stmt = (
             select(Event)
-            .options(selectinload(Event.event_departments))
+            .options(
+                selectinload(Event.event_departments),
+                selectinload(Event.event_type_row),
+            )
             .order_by(Event.created_at.desc())
         )
         return list(db.scalars(stmt).all())

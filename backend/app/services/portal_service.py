@@ -23,6 +23,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.event_repository import EventRepository
+from app.repositories.event_type_repository import EventTypeRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
@@ -48,6 +49,7 @@ class PortalService:
         self._users = UserRepository()
         self._depts = DepartmentRepository()
         self._events = EventRepository()
+        self._event_types = EventTypeRepository()
         self._responses = SafetyResponseRepository()
         self._notifications = NotificationRepository()
         self._response_svc = SafetyResponseService()
@@ -84,8 +86,6 @@ class PortalService:
             first = name_map.get(event.event_departments[0].department_id)
         st = event.start_time or event.created_at
         et = event.event_type
-        if et not in ("Earthquake", "Typhoon", "Fire", "Other"):
-            et = "Other"
         return {
             "id": str(event.event_id),
             "title": event.title,
@@ -115,6 +115,17 @@ class PortalService:
             if r.responded_at.tzinfo is None
             else r.responded_at.isoformat(),
         }
+
+    def list_event_types(self, db: Session) -> list[dict[str, Any]]:
+        rows = self._event_types.list_all(db)
+        return [
+            {
+                "id": str(r.event_type_id),
+                "code": r.code,
+                "name": r.name,
+            }
+            for r in rows
+        ]
 
     def list_departments(self, db: Session) -> list[dict[str, Any]]:
         return [self._dept_out(d) for d in self._depts.list_all(db)]
@@ -201,10 +212,17 @@ class PortalService:
                 raise HTTPException(
                     status_code=400, detail="Invalid department id"
                 ) from e
+        custom = (payload.custom_type_name or "").strip()
+        if payload.type.strip().lower() == "other" and custom:
+            et = self._event_types.get_or_create_by_display_name(db, custom)
+        else:
+            et = self._event_types.get_by_label(db, payload.type)
+            if et is None:
+                raise HTTPException(status_code=400, detail="Unknown event type")
         ev = self._events.create(
             db,
             title=payload.title,
-            event_type=payload.type,
+            event_type_id=et.event_type_id,
             description=payload.description,
             status="draft",
             created_by=actor_id,

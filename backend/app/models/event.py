@@ -12,6 +12,8 @@ from sqlalchemy.sql import func
 from app.core.base import Base
 
 if TYPE_CHECKING:
+    from app.models.event_department import EventDepartment
+    from app.models.event_type import EventType
     from app.models.user import User
 
 
@@ -22,7 +24,11 @@ class Event(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     title: Mapped[str] = mapped_column(String, nullable=False)
-    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    event_type_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("event_types.event_type_id"),
+        nullable=False,
+    )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False)
     created_by: Mapped[uuid.UUID] = mapped_column(
@@ -37,9 +43,18 @@ class Event(Base):
         nullable=False,
     )
 
+    event_type_row: Mapped["EventType"] = relationship(
+        "EventType",
+        back_populates="events",
+    )
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
     event_departments: Mapped[list["EventDepartment"]] = relationship(
         "EventDepartment",
         back_populates="event",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def event_type(self) -> str:
+        """Display label for APIs that still expose event_type as a string."""
+        return self.event_type_row.name

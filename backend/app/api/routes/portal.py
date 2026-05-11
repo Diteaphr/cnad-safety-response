@@ -36,6 +36,11 @@ def get_departments(db: Session = Depends(get_db)):
     return {"departments": _portal.list_departments(db)}
 
 
+@router.get("/event-types")
+def list_event_types(db: Session = Depends(get_db)):
+    return {"eventTypes": _portal.list_event_types(db)}
+
+
 @router.get("/users")
 def get_users(db: Session = Depends(get_db)):
     return {"users": _portal.list_users(db)}
