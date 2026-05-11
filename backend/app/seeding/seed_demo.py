@@ -17,6 +17,7 @@ from app.core.base import Base
 from app.models.department import Department
 from app.models.event import Event
 from app.models.event_department import EventDepartment
+from app.models.event_type import EventType
 from app.models.role import Role
 from app.models.safety_response import SafetyResponse
 from app.models.user import User
@@ -117,11 +118,20 @@ def insert_demo_entities(db: Session) -> None:
         for rid in role_map[uid]:
             db.merge(UserRole(user_id=uid, role_id=rid))
 
+    for tid, code, name in (
+        (ids.ET_EARTHQUAKE, "earthquake", "Earthquake"),
+        (ids.ET_TYPHOON, "typhoon", "Typhoon"),
+        (ids.ET_FIRE, "fire", "Fire"),
+        (ids.ET_OTHER, "other", "Other"),
+    ):
+        db.merge(EventType(event_type_id=tid, code=code, name=name))
+    db.flush()
+
     ev_specs = [
         (
             ids.E_001,
             "Earthquake Safety Check",
-            "Earthquake",
+            ids.ET_EARTHQUAKE,
             "M5+ earthquake detected in northern region. Report your status now.",
             "active",
             datetime(2026, 5, 1, 15, 0, tzinfo=timezone.utc),
@@ -130,7 +140,7 @@ def insert_demo_entities(db: Session) -> None:
         (
             ids.E_004,
             "Fire Drill Check",
-            "Fire",
+            ids.ET_FIRE,
             "Scheduled fire evacuation drill.",
             "active",
             datetime(2026, 5, 3, 4, 30, tzinfo=timezone.utc),
@@ -139,7 +149,7 @@ def insert_demo_entities(db: Session) -> None:
         (
             ids.E_002,
             "Typhoon Safety Check",
-            "Typhoon",
+            ids.ET_TYPHOON,
             "Typhoon warning raised. Confirm current working location and safety.",
             "active",
             datetime(2026, 5, 3, 8, 0, tzinfo=timezone.utc),
@@ -148,7 +158,7 @@ def insert_demo_entities(db: Session) -> None:
         (
             ids.E_003,
             "Annual Evacuation Drill",
-            "Other",
+            ids.ET_OTHER,
             "Company-wide evacuation drill concluded.",
             "closed",
             datetime(2026, 3, 15, 6, 30, tzinfo=timezone.utc),
@@ -157,19 +167,19 @@ def insert_demo_entities(db: Session) -> None:
         (
             ids.E_007,
             "Flood Response Check",
-            "Other",
+            ids.ET_OTHER,
             "Heavy rainfall event — response window closed.",
             "closed",
             datetime(2026, 4, 20, 7, 45, tzinfo=timezone.utc),
             [ids.D_RD, ids.D_OPS, ids.D_FAC],
         ),
     ]
-    for eid, title, etype, desc, estatus, start_t, dept_ids in ev_specs:
+    for eid, title, etype_id, desc, estatus, start_t, dept_ids in ev_specs:
         db.merge(
             Event(
                 event_id=eid,
                 title=title,
-                event_type=etype,
+                event_type_id=etype_id,
                 description=desc,
                 status=estatus,
                 created_by=ids.U_04,
