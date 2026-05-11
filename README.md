@@ -75,8 +75,8 @@ Password: password
 
 ### What runs automatically
 
-- **Migrations:** `alembic upgrade head` runs inside the backend container on startup.
-- **Demo seed:** if the `users` table is **empty**, startup inserts demo departments, users, events, and sample responses once.
+- **Migrations:** `alembic upgrade head` runs inside the backend container on startup (includes `event_types` lookup table and `events.event_type_id` foreign key).
+- **Demo seed:** if the `users` table is **empty**, startup inserts demo departments, users, event type rows, events (each pointing at `event_types`), and sample responses once.
 
 ### Stop / reset
 
