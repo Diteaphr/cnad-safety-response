@@ -27,7 +27,7 @@ from app.repositories.event_type_repository import EventTypeRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DepartmentCreateIn, DepartmentUpdateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DepartmentCreateIn, DepartmentUpdateIn, EventTypeCreateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
@@ -513,6 +513,22 @@ class PortalService:
         self._users.update_password(db, user_id, new_hash=hash_password(default_password))
         db.commit()
         return {"message": "Password reset.", "temporaryPassword": default_password}
+
+    # ------------------------------------------------------------------
+    # Admin: event type management
+    # ------------------------------------------------------------------
+
+    def admin_create_event_type(
+        self, db: Session, actor_id: uuid.UUID, payload: EventTypeCreateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        name = payload.name.strip()
+        if self._event_types.get_by_label(db, name) is not None:
+            raise HTTPException(status_code=409, detail="Event type already exists")
+        row = self._event_types.get_or_create_by_display_name(db, name)
+        db.commit()
+        return {"id": str(row.event_type_id), "code": row.code, "name": row.name}
 
     # ------------------------------------------------------------------
     # Admin: department management

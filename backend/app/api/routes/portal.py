@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, DepartmentCreateIn, DepartmentUpdateIn, EventActionIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, DepartmentCreateIn, DepartmentUpdateIn, EventActionIn, EventTypeCreateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.services.portal_service import PortalService
 
 logger = logging.getLogger(__name__)
@@ -188,6 +188,15 @@ def admin_dashboard(
 ):
     eid = _parse_uuid(event_id, name="event_id") if event_id else None
     return _portal.admin_dashboard(db, actor, event_id=eid)
+
+
+@router.post("/admin/event-types")
+def admin_create_event_type(
+    payload: EventTypeCreateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.admin_create_event_type(db, actor, payload)
 
 
 @router.post("/admin/departments")
