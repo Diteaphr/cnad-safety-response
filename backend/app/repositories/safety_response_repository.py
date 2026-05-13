@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -75,3 +75,75 @@ class SafetyResponseRepository:
     def list_all(self, db: Session) -> list[SafetyResponse]:
         stmt = select(SafetyResponse)
         return list(db.scalars(stmt).all())
+
+    def latest_for_users(
+        self, db: Session, event_id: uuid.UUID, user_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, SafetyResponse]:
+        """Return the latest SafetyResponse per user for the given event (one query)."""
+        if not user_ids:
+            return {}
+        subq = (
+            select(
+                SafetyResponse.user_id,
+                func.max(SafetyResponse.responded_at).label("max_at"),
+            )
+            .where(
+                SafetyResponse.event_id == event_id,
+                SafetyResponse.user_id.in_(user_ids),
+            )
+            .group_by(SafetyResponse.user_id)
+            .subquery()
+        )
+        stmt = select(SafetyResponse).join(
+            subq,
+            (SafetyResponse.user_id == subq.c.user_id)
+            & (SafetyResponse.responded_at == subq.c.max_at),
+        )
+        return {r.user_id: r for r in db.scalars(stmt).all()}
+
+    def kpi_for_manager_subordinates(
+        self, db: Session, *, event_id: uuid.UUID, manager_id: uuid.UUID
+    ) -> dict[str, int]:
+        """
+        Return KPI counts for all employees recursively under manager_id.
+        Uses a single SQL query (recursive CTE + DISTINCT ON) — no User objects loaded.
+        """
+        row = db.execute(
+            text("""
+                WITH RECURSIVE subordinates(user_id) AS (
+                    SELECT user_id FROM users WHERE manager_id = :manager_id
+                    UNION ALL
+                    SELECT u.user_id FROM users u
+                    JOIN subordinates s ON u.manager_id = s.user_id
+                ),
+                employees AS (
+                    SELECT s.user_id FROM subordinates s
+                    JOIN user_roles ur ON ur.user_id = s.user_id
+                    JOIN roles r ON r.role_id = ur.role_id
+                    WHERE r.role_name = 'employee'
+                ),
+                latest AS (
+                    SELECT DISTINCT ON (sr.user_id) sr.user_id, sr.status
+                    FROM safety_responses sr
+                    WHERE sr.event_id = :event_id
+                      AND sr.user_id IN (SELECT user_id FROM employees)
+                    ORDER BY sr.user_id, sr.responded_at DESC
+                )
+                SELECT
+                    (SELECT COUNT(*) FROM employees)                              AS total,
+                    COALESCE(SUM(CASE WHEN status = 'safe'      THEN 1 END), 0)  AS safe_count,
+                    COALESCE(SUM(CASE WHEN status = 'need_help' THEN 1 END), 0)  AS need_help_count,
+                    COUNT(*)                                                      AS responded
+                FROM latest
+            """),
+            {"manager_id": manager_id, "event_id": event_id},
+        ).one()
+        total = int(row.total)
+        responded = int(row.responded)
+        return {
+            "safe": int(row.safe_count),
+            "need_help": int(row.need_help_count),
+            "responded": responded,
+            "total": total,
+            "pending": total - responded,
+        }

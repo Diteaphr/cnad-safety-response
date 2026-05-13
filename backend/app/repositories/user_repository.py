@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 
 from sqlalchemy import delete, func, select
@@ -42,6 +44,38 @@ class UserRepository:
             .order_by(User.name)
         )
         return list(db.scalars(stmt).unique().all())
+
+    def list_all_subordinates(self, db: Session, manager_id: uuid.UUID) -> list[User]:
+        """Return all subordinates transitively via recursive CTE on manager_id."""
+        base = select(User.user_id).where(User.manager_id == manager_id)
+        cte = base.cte(name="subordinates", recursive=True)
+        recursive_part = select(User.user_id).join(cte, User.manager_id == cte.c.user_id)
+        cte = cte.union_all(recursive_part)
+        stmt = (
+            select(User)
+            .options(selectinload(User.user_roles).selectinload(UserRole.role))
+            .where(User.user_id.in_(select(cte.c.user_id)))
+            .order_by(User.name)
+        )
+        return list(db.scalars(stmt).unique().all())
+
+    def is_subordinate_of(
+        self, db: Session, *, actor_id: uuid.UUID, target_id: uuid.UUID
+    ) -> bool:
+        """Return True if target_id is reachable from actor_id via manager_id (traverse upward from target)."""
+        base = (
+            select(User.manager_id.label("ancestor_id"))
+            .where(User.user_id == target_id, User.manager_id.isnot(None))
+        )
+        cte = base.cte(name="ancestors", recursive=True)
+        recursive_part = (
+            select(User.manager_id.label("ancestor_id"))
+            .join(cte, User.user_id == cte.c.ancestor_id)
+            .where(User.manager_id.isnot(None))
+        )
+        cte = cte.union_all(recursive_part)
+        stmt = select(func.count()).select_from(cte).where(cte.c.ancestor_id == actor_id)
+        return db.execute(stmt).scalar_one() > 0
 
     def user_has_role(self, db: Session, user_id: uuid.UUID, role_name: str) -> bool:
         stmt = (

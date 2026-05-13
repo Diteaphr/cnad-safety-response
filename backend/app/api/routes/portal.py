@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -127,7 +127,7 @@ def activate_event(
     actor: CurrentUser,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    body: EventActionIn | None = None,
+    body: Optional[EventActionIn] = None,
 ):
     eid = _parse_uuid(event_id, name="event_id")
     result = _portal.activate_event(db, actor_id=actor, event_id=eid)
@@ -185,17 +185,19 @@ def my_reports(actor: CurrentUser, db: Session = Depends(get_db)):
 def supervisor_dashboard(
     actor: CurrentUser,
     db: Session = Depends(get_db),
-    event_id: str | None = Query(default=None),
+    event_id: Optional[str] = Query(default=None),
+    view_as: Optional[str] = Query(default=None),
 ):
     eid = _parse_uuid(event_id, name="event_id") if event_id else None
-    return _portal.supervisor_dashboard(db, actor, event_id=eid)
+    vid = _parse_uuid(view_as, name="view_as") if view_as else None
+    return _portal.supervisor_dashboard(db, actor, event_id=eid, view_as=vid)
 
 
 @router.get("/dashboard/admin")
 def admin_dashboard(
     actor: CurrentUser,
     db: Session = Depends(get_db),
-    event_id: str | None = Query(default=None),
+    event_id: Optional[str] = Query(default=None),
 ):
     eid = _parse_uuid(event_id, name="event_id") if event_id else None
     return _portal.admin_dashboard(db, actor, event_id=eid)

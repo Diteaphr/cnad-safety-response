@@ -339,13 +339,29 @@ class PortalService:
         return [self._response_out(r) for r in rows]
 
     def supervisor_dashboard(
-        self, db: Session, user_id: uuid.UUID, event_id: uuid.UUID | None = None
+        self,
+        db: Session,
+        user_id: uuid.UUID,
+        event_id: uuid.UUID | None = None,
+        view_as: uuid.UUID | None = None,
     ) -> dict[str, Any]:
-        user = self._users.get_by_id(db, user_id)
-        if user is None:
+        actor = self._users.get_by_id(db, user_id)
+        if actor is None:
             raise HTTPException(status_code=404, detail="User not found")
-        if "supervisor" not in _role_names(user):
+        if "supervisor" not in _role_names(actor):
             raise HTTPException(status_code=403, detail="Supervisor only")
+
+        # view_as: allow drilling into a subordinate manager's team
+        if view_as is not None:
+            target = self._users.get_by_id(db, view_as)
+            if target is None:
+                raise HTTPException(status_code=404, detail="Target user not found")
+            if not self._users.is_subordinate_of(db, actor_id=user_id, target_id=view_as):
+                raise HTTPException(status_code=403, detail="Cannot view this team")
+            target_manager_id = view_as
+        else:
+            target_manager_id = user_id
+
         nm = self._depts.name_map(db)
         if event_id is not None:
             active_event = self._events.get_by_id(db, event_id)
@@ -355,62 +371,65 @@ class PortalService:
             events = [e for e in self._events.list_all(db) if e.status == "active"]
             events.sort(key=lambda e: e.created_at, reverse=True)
             active_event = events[0] if events else None
+
         if active_event is None:
             return {
                 "event": None,
-                "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0},
+                "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0, "total": 0},
                 "team": [],
+                "view_as": str(view_as) if view_as else None,
             }
-        team_users = [
-            u
-            for u in self._users.list_subordinates(db, user_id)
-            if "employee" in _role_names(u)
-        ]
-        team_ids = {u.user_id for u in team_users}
-        reports = self._responses.list_for_event(db, active_event.event_id)
-        latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
-        for r in reports:
-            if r.user_id not in team_ids:
-                continue
-            prev = latest_by_user.get(r.user_id)
-            if prev is None or r.responded_at > prev.responded_at:
-                latest_by_user[r.user_id] = r
 
-        def stats_for_users(ids_set: set[uuid.UUID]) -> dict[str, int]:
-            safe_c = need_c = 0
-            responded = 0
-            for uid in ids_set:
-                lr = latest_by_user.get(uid)
-                if lr is None:
-                    continue
-                responded += 1
-                if lr.status == "safe":
-                    safe_c += 1
-                elif lr.status == "need_help":
-                    need_c += 1
-            return {"safe": safe_c, "need_help": need_c, "responded": responded}
+        # KPI: SQL aggregate over ALL recursive subordinates — no User objects loaded
+        kpis = self._responses.kpi_for_manager_subordinates(
+            db, event_id=active_event.event_id, manager_id=target_manager_id
+        )
 
-        st = stats_for_users(team_ids)
+        # Team: direct reports only
+        direct_reports = self._users.list_subordinates(db, target_manager_id)
+        employee_ids = [u.user_id for u in direct_reports if "employee" in _role_names(u)]
+        latest_responses = self._responses.latest_for_users(
+            db, active_event.event_id, employee_ids
+        )
+
         team = []
-        for u in team_users:
-            lr = latest_by_user.get(u.user_id)
+        for u in direct_reports:
+            u_roles = _role_names(u)
             dname = nm.get(u.department_id, "-") if u.department_id else "-"
-            team.append(
-                {
+            if "supervisor" in u_roles:
+                sub_kpis = self._responses.kpi_for_manager_subordinates(
+                    db, event_id=active_event.event_id, manager_id=u.user_id
+                )
+                team.append({
                     "user_id": str(u.user_id),
                     "name": u.name,
                     "department": dname,
+                    "is_supervisor": True,
+                    "status": None,
+                    "reported_at": None,
+                    "needs_follow_up": sub_kpis["pending"] > 0 or sub_kpis["need_help"] > 0,
+                    "phone": u.phone,
+                    "sub_team_summary": sub_kpis,
+                })
+            else:
+                lr = latest_responses.get(u.user_id)
+                team.append({
+                    "user_id": str(u.user_id),
+                    "name": u.name,
+                    "department": dname,
+                    "is_supervisor": False,
                     "status": lr.status if lr else "pending",
                     "reported_at": lr.responded_at.isoformat() if lr else None,
                     "needs_follow_up": lr is None or lr.status == "need_help",
-                    "phone": u.phone or None,
-                }
-            )
-        pending = len(team_users) - st["responded"]
+                    "phone": u.phone,
+                    "sub_team_summary": None,
+                })
+
         return {
             "event": self._event_out(active_event, nm),
-            "kpis": {**st, "pending": max(0, pending)},
-            "team": sorted(team, key=lambda x: (x["status"] == "safe", x["name"])),
+            "kpis": kpis,
+            "team": sorted(team, key=lambda x: (not x["needs_follow_up"], x["name"])),
+            "view_as": str(view_as) if view_as else None,
         }
 
     def admin_dashboard(
@@ -954,7 +973,7 @@ class PortalService:
 
         team_users = [
             u
-            for u in self._users.list_subordinates(db, actor_id)
+            for u in self._users.list_all_subordinates(db, actor_id)
             if "employee" in _role_names(u)
         ]
 
