@@ -28,7 +28,7 @@ from app.repositories.event_type_repository import EventTypeRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, CreateEventIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DepartmentCreateIn, DepartmentUpdateIn, EventTypeCreateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
@@ -240,6 +240,49 @@ class PortalService:
         assert full is not None
         return {"message": "Event created", "event": self._event_out(full, nm)}
 
+    def update_event(
+        self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID, payload: CreateEventIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        ev = self._events.get_by_id(db, event_id)
+        if ev is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        if ev.status != "draft":
+            raise HTTPException(status_code=409, detail="Only draft events can be edited")
+        try:
+            st = _parse_iso(payload.startAt)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid startAt") from e
+        dids: list[uuid.UUID] = []
+        for s in payload.targetDepartmentIds:
+            try:
+                dids.append(uuid.UUID(s))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail="Invalid department id") from e
+        custom = (payload.custom_type_name or "").strip()
+        if payload.type.strip().lower() == "other" and custom:
+            et = self._event_types.get_or_create_by_display_name(db, custom)
+        else:
+            et = self._event_types.get_by_label(db, payload.type)
+            if et is None:
+                raise HTTPException(status_code=400, detail="Unknown event type")
+        self._events.update(
+            db,
+            event_id,
+            title=payload.title,
+            event_type_id=et.event_type_id,
+            description=payload.description,
+            start_time=st,
+        )
+        self._events.replace_departments(db, event_id, dids)
+        db.commit()
+        db.expire_all()
+        nm = self._depts.name_map(db)
+        full = self._events.get_by_id(db, event_id)
+        assert full is not None
+        return {"message": "Event updated", "event": self._event_out(full, nm)}
+
     def activate_event(self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID):
         if not self._users.user_has_role(db, actor_id, "admin"):
             raise HTTPException(status_code=403, detail="Admin only")
@@ -310,13 +353,29 @@ class PortalService:
         return [self._response_out(r) for r in rows]
 
     def supervisor_dashboard(
-        self, db: Session, user_id: uuid.UUID, event_id: uuid.UUID | None = None
+        self,
+        db: Session,
+        user_id: uuid.UUID,
+        event_id: uuid.UUID | None = None,
+        view_as: uuid.UUID | None = None,
     ) -> dict[str, Any]:
-        user = self._users.get_by_id(db, user_id)
-        if user is None:
+        actor = self._users.get_by_id(db, user_id)
+        if actor is None:
             raise HTTPException(status_code=404, detail="User not found")
-        if "supervisor" not in _role_names(user):
+        if "supervisor" not in _role_names(actor):
             raise HTTPException(status_code=403, detail="Supervisor only")
+
+        # view_as: allow drilling into a subordinate manager's team
+        if view_as is not None:
+            target = self._users.get_by_id(db, view_as)
+            if target is None:
+                raise HTTPException(status_code=404, detail="Target user not found")
+            if not self._users.is_subordinate_of(db, actor_id=user_id, target_id=view_as):
+                raise HTTPException(status_code=403, detail="Cannot view this team")
+            target_manager_id = view_as
+        else:
+            target_manager_id = user_id
+
         nm = self._depts.name_map(db)
         if event_id is not None:
             active_event = self._events.get_by_id(db, event_id)
@@ -326,62 +385,65 @@ class PortalService:
             events = [e for e in self._events.list_all(db) if e.status == "active"]
             events.sort(key=lambda e: e.created_at, reverse=True)
             active_event = events[0] if events else None
+
         if active_event is None:
             return {
                 "event": None,
-                "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0},
+                "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0, "total": 0},
                 "team": [],
+                "view_as": str(view_as) if view_as else None,
             }
-        team_users = [
-            u
-            for u in self._users.list_subordinates(db, user_id)
-            if "employee" in _role_names(u)
-        ]
-        team_ids = {u.user_id for u in team_users}
-        reports = self._responses.list_for_event(db, active_event.event_id)
-        latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
-        for r in reports:
-            if r.user_id not in team_ids:
-                continue
-            prev = latest_by_user.get(r.user_id)
-            if prev is None or r.responded_at > prev.responded_at:
-                latest_by_user[r.user_id] = r
 
-        def stats_for_users(ids_set: set[uuid.UUID]) -> dict[str, int]:
-            safe_c = need_c = 0
-            responded = 0
-            for uid in ids_set:
-                lr = latest_by_user.get(uid)
-                if lr is None:
-                    continue
-                responded += 1
-                if lr.status == "safe":
-                    safe_c += 1
-                elif lr.status == "need_help":
-                    need_c += 1
-            return {"safe": safe_c, "need_help": need_c, "responded": responded}
+        # KPI: SQL aggregate over ALL recursive subordinates — no User objects loaded
+        kpis = self._responses.kpi_for_manager_subordinates(
+            db, event_id=active_event.event_id, manager_id=target_manager_id
+        )
 
-        st = stats_for_users(team_ids)
+        # Team: direct reports only
+        direct_reports = self._users.list_subordinates(db, target_manager_id)
+        employee_ids = [u.user_id for u in direct_reports if "employee" in _role_names(u)]
+        latest_responses = self._responses.latest_for_users(
+            db, active_event.event_id, employee_ids
+        )
+
         team = []
-        for u in team_users:
-            lr = latest_by_user.get(u.user_id)
+        for u in direct_reports:
+            u_roles = _role_names(u)
             dname = nm.get(u.department_id, "-") if u.department_id else "-"
-            team.append(
-                {
+            if "supervisor" in u_roles:
+                sub_kpis = self._responses.kpi_for_manager_subordinates(
+                    db, event_id=active_event.event_id, manager_id=u.user_id
+                )
+                team.append({
                     "user_id": str(u.user_id),
                     "name": u.name,
                     "department": dname,
+                    "is_supervisor": True,
+                    "status": None,
+                    "reported_at": None,
+                    "needs_follow_up": sub_kpis["pending"] > 0 or sub_kpis["need_help"] > 0,
+                    "phone": u.phone,
+                    "sub_team_summary": sub_kpis,
+                })
+            else:
+                lr = latest_responses.get(u.user_id)
+                team.append({
+                    "user_id": str(u.user_id),
+                    "name": u.name,
+                    "department": dname,
+                    "is_supervisor": False,
                     "status": lr.status if lr else "pending",
                     "reported_at": lr.responded_at.isoformat() if lr else None,
                     "needs_follow_up": lr is None or lr.status == "need_help",
-                    "phone": u.phone or None,
-                }
-            )
-        pending = len(team_users) - st["responded"]
+                    "phone": u.phone,
+                    "sub_team_summary": None,
+                })
+
         return {
             "event": self._event_out(active_event, nm),
-            "kpis": {**st, "pending": max(0, pending)},
-            "team": sorted(team, key=lambda x: (x["status"] == "safe", x["name"])),
+            "kpis": kpis,
+            "team": sorted(team, key=lambda x: (not x["needs_follow_up"], x["name"])),
+            "view_as": str(view_as) if view_as else None,
         }
 
     def admin_dashboard(
@@ -493,6 +555,18 @@ class PortalService:
         db.commit()
         return self._profile_out(user)
 
+    def change_password(
+        self, db: Session, user_id: uuid.UUID, payload: ChangePasswordIn
+    ) -> dict[str, Any]:
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if not user.password_hash or not verify_password(payload.currentPassword, user.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        self._users.update_password(db, user_id, new_hash=hash_password(payload.newPassword))
+        db.commit()
+        return {"message": "Password changed successfully."}
+
     # ------------------------------------------------------------------
     # Admin: user management
     # ------------------------------------------------------------------
@@ -504,6 +578,112 @@ class PortalService:
             return uuid.UUID(value.strip())
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid {field}") from e
+
+    def admin_deactivate_user(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if actor_id == user_id:
+            raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.status == "inactive":
+            raise HTTPException(status_code=409, detail="Account is already inactive")
+        self._users.set_status(db, user_id, status="inactive")
+        db.commit()
+        return {"message": "Account deactivated."}
+
+    def admin_activate_user(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.status == "active":
+            raise HTTPException(status_code=409, detail="Account is already active")
+        self._users.set_status(db, user_id, status="active")
+        db.commit()
+        return {"message": "Account activated."}
+
+    def admin_reset_password(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._users.get_by_id(db, user_id) is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        default_password = "Welcome@1234"
+        self._users.update_password(db, user_id, new_hash=hash_password(default_password))
+        db.commit()
+        return {"message": "Password reset.", "temporaryPassword": default_password}
+
+    # ------------------------------------------------------------------
+    # Admin: event type management
+    # ------------------------------------------------------------------
+
+    def admin_create_event_type(
+        self, db: Session, actor_id: uuid.UUID, payload: EventTypeCreateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        name = payload.name.strip()
+        if self._event_types.get_by_label(db, name) is not None:
+            raise HTTPException(status_code=409, detail="Event type already exists")
+        row = self._event_types.get_or_create_by_display_name(db, name)
+        db.commit()
+        return {"id": str(row.event_type_id), "code": row.code, "name": row.name}
+
+    # ------------------------------------------------------------------
+    # Admin: department management
+    # ------------------------------------------------------------------
+
+    def admin_create_department(
+        self, db: Session, actor_id: uuid.UUID, payload: DepartmentCreateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        parent_id = self._parse_optional_uuid(payload.parentId, field="parentId")
+        if parent_id and self._depts.get_by_id(db, parent_id) is None:
+            raise HTTPException(status_code=400, detail="Parent department not found")
+        dept = self._depts.create(db, name=payload.name.strip(), parent_id=parent_id)
+        db.commit()
+        return self._dept_out(dept)
+
+    def admin_update_department(
+        self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID, payload: DepartmentUpdateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+        parent_id = self._parse_optional_uuid(payload.parentId, field="parentId")
+        if parent_id:
+            if self._depts.get_by_id(db, parent_id) is None:
+                raise HTTPException(status_code=400, detail="Parent department not found")
+            if parent_id == dept_id:
+                raise HTTPException(status_code=400, detail="Department cannot be its own parent")
+        dept = self._depts.update(db, dept_id, name=payload.name.strip(), parent_id=parent_id)
+        db.commit()
+        return self._dept_out(dept)
+
+    def admin_delete_department(
+        self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+        if self._depts.has_members(db, dept_id):
+            raise HTTPException(status_code=409, detail="Department still has members")
+        if self._depts.has_sub_departments(db, dept_id):
+            raise HTTPException(status_code=409, detail="Department still has sub-departments")
+        self._depts.delete(db, dept_id)
+        db.commit()
+        return {"message": "Department deleted."}
 
     def admin_list_users(self, db: Session, actor_id: uuid.UUID) -> list[dict[str, Any]]:
         if not self._users.user_has_role(db, actor_id, "admin"):
@@ -665,6 +845,11 @@ class PortalService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password.",
             )
+        if user.status != "active":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is inactive.",
+            )
         roles = _role_names(user)
         token = create_access_token(user.user_id, roles)
         return {
@@ -820,7 +1005,7 @@ class PortalService:
 
         team_users = [
             u
-            for u in self._users.list_subordinates(db, actor_id)
+            for u in self._users.list_all_subordinates(db, actor_id)
             if "employee" in _role_names(u)
         ]
 

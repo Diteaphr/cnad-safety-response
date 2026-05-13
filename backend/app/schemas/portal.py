@@ -138,3 +138,30 @@ class AdminUserUpdateIn(BaseModel):
     departmentId: Optional[str] = None
     managerId: Optional[str] = None
     roles: List[Literal["employee", "supervisor", "admin"]] = Field(min_length=1)
+
+
+class ChangePasswordIn(BaseModel):
+    """User changes their own password."""
+
+    currentPassword: str = Field(min_length=1, max_length=128)
+    newPassword: str = Field(min_length=8, max_length=128)
+
+
+class EventTypeCreateIn(BaseModel):
+    """Admin creates a new event type."""
+
+    name: str = Field(min_length=1, max_length=128)
+
+
+class DepartmentCreateIn(BaseModel):
+    """Admin creates a new department."""
+
+    name: str = Field(min_length=1, max_length=100)
+    parentId: Optional[str] = None
+
+
+class DepartmentUpdateIn(BaseModel):
+    """Admin updates an existing department."""
+
+    name: str = Field(min_length=1, max_length=100)
+    parentId: Optional[str] = None

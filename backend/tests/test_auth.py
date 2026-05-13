@@ -49,6 +49,18 @@ def test_login_unknown_email_401(client, roles):
     assert resp.status_code == 401
 
 
+def test_login_inactive_account_403(client, db, make_user):
+    from sqlalchemy import select
+    from app.models.user import User
+    make_user(email=_VALID["email"], password=_VALID["password"])
+    user = db.execute(select(User).where(User.email == _VALID["email"])).scalar_one()
+    user.status = "inactive"
+    db.commit()
+
+    resp = client.post(LOGIN, json={"email": _VALID["email"], "password": _VALID["password"]})
+    assert resp.status_code == 403
+
+
 def test_login_email_case_insensitive(client, make_user):
     make_user(email="alice@test.com", password="password123")
     resp = client.post(LOGIN, json={"email": "ALICE@TEST.COM", "password": _VALID["password"]})
