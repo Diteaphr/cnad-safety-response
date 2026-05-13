@@ -26,7 +26,7 @@ os.environ.setdefault("REDIS_ENABLED", "false")
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.base import Base
@@ -36,6 +36,7 @@ from app.core.passwords import hash_password
 from app.main import app
 from app.models.department import Department
 from app.models.event import Event
+from app.models.event_type import EventType
 from app.models.event_department import EventDepartment
 from app.models.notification import Notification
 from app.models.role import Role
@@ -49,6 +50,24 @@ _engine = create_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
 _Session = sessionmaker(bind=_engine, class_=Session, expire_on_commit=False)
 
 
+def _seed_four_event_types() -> None:
+    """events.event_type_id FK 需要 event_types 表內這四筆參考列（與 migration / ids.py 一致）。"""
+    from app.seeding import ids as seed_ids
+
+    sess = _Session()
+    try:
+        for tid, code, name in (
+            (seed_ids.ET_EARTHQUAKE, "earthquake", "Earthquake"),
+            (seed_ids.ET_TYPHOON, "typhoon", "Typhoon"),
+            (seed_ids.ET_FIRE, "fire", "Fire"),
+            (seed_ids.ET_OTHER, "other", "Other"),
+        ):
+            sess.merge(EventType(event_type_id=tid, code=code, name=name))
+        sess.commit()
+    finally:
+        sess.close()
+
+
 # ---------------------------------------------------------------------------
 # Session-scoped: create / drop tables once per pytest run
 # ---------------------------------------------------------------------------
@@ -56,6 +75,7 @@ _Session = sessionmaker(bind=_engine, class_=Session, expire_on_commit=False)
 @pytest.fixture(scope="session", autouse=True)
 def _create_tables():
     Base.metadata.create_all(bind=_engine)
+    _seed_four_event_types()
     yield
     Base.metadata.drop_all(bind=_engine)
     _engine.dispose()
@@ -72,6 +92,8 @@ def _clean_tables(_create_tables):
     with _engine.connect() as conn:
         conn.execute(text(f"TRUNCATE {table_names} CASCADE"))
         conn.commit()
+    # TRUNCATE 會清空 event_types；events 外鍵需要預設四筆類型列
+    _seed_four_event_types()
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +101,7 @@ def _clean_tables(_create_tables):
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def db():
+def db(_clean_tables):
     """A SQLAlchemy Session connected to the test database."""
     session = _Session()
     try:
@@ -215,10 +237,16 @@ def make_event(db):
             db.flush()
             created_by = placeholder.user_id
 
+        stmt = select(EventType).where(func.lower(EventType.name) == event_type.lower())
+        et = db.execute(stmt).scalar_one_or_none()
+        if et is None:
+            et = db.execute(
+                select(EventType).where(EventType.code == "other")
+            ).scalar_one()
         event = Event(
             event_id=uuid.uuid4(),
             title=title,
-            event_type=event_type,
+            event_type_id=et.event_type_id,
             description="Test event description",
             status=status,
             created_by=created_by,

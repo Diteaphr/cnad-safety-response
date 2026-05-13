@@ -13,17 +13,21 @@ import {
   UserRound,
   Users,
 } from 'lucide-react';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { useLocale } from '../locale/LocaleContext';
+import type { AppLocale } from '../locale/LocaleContext';
+import { getStrings, type ProfilePageStrings } from '../locale/strings';
 import type { Department, Role, ToastState, User } from '../types';
 import { ManagerContactDialog } from './ManagerContactDialog';
 import { initialsFromName } from './utils';
 
 const DIRECT_PREVIEW = 5;
 
-const ROLE_LABEL: Record<Role, string> = {
-  employee: '員工',
-  supervisor: '主管',
-  admin: '管理員',
-};
+function roleDisplay(role: Role, pp: ProfilePageStrings): string {
+  if (role === 'employee') return pp.roleEmployee;
+  if (role === 'supervisor') return pp.roleSupervisor;
+  return pp.roleAdmin;
+}
 
 function roleBadgeClass(role: Role): string {
   if (role === 'employee') return 'profile-settings-badge profile-settings-badge--employee';
@@ -85,12 +89,16 @@ export function ProfileSettingsPage({
   onNavigateToDirectReportsList: () => void;
   onNavigateToSubordinateHistory: (userId: string) => void;
 }) {
+  const { locale, setLocale } = useLocale();
+  const profileCopy = getStrings(locale).profile;
+  const pp = getStrings(locale).profilePage;
+  const [langConfirmOpen, setLangConfirmOpen] = useState(false);
+  const [pendingLocale, setPendingLocale] = useState<AppLocale | null>(null);
   const [managerDialogOpen, setManagerDialogOpen] = useState(false);
   const [pushMaster, setPushMaster] = useState(user.pushEnabled);
   const [pushEmergency, setPushEmergency] = useState(true);
   const [pushStatusReminder, setPushStatusReminder] = useState(true);
   const [pushEscalation, setPushEscalation] = useState(user.pushEnabled);
-  const [language, setLanguage] = useState('zh-Hant');
   const [timeZone, setTimeZone] = useState('Asia/Taipei');
 
   const deptLabel = (id: string) => departments.find((d) => d.id === id)?.name ?? '';
@@ -121,9 +129,9 @@ export function ProfileSettingsPage({
         <div className="employee-events-hero-text">
           <h2 className="employee-events-title">
             <Settings className="employee-events-title-icon" aria-hidden />
-            Profile &amp; Settings
+            {pp.pageTitle}
           </h2>
-          <p className="employee-events-subtitle">管理帳號、通知偏好與組織報告關係。</p>
+          <p className="employee-events-subtitle">{pp.pageSubtitle}</p>
         </div>
       </header>
 
@@ -132,8 +140,8 @@ export function ProfileSettingsPage({
           <div className="employee-events-section-intro profile-settings-panel-intro">
             <UserRound className="employee-events-intro-icon" size={22} aria-hidden />
             <div>
-              <h3>個人摘要</h3>
-              <p>聯絡方式與部門資訊。</p>
+              <h3>{pp.personalSummary}</h3>
+              <p>{pp.personalSummaryDesc}</p>
             </div>
           </div>
           <div className="profile-settings-summary-grid">
@@ -158,10 +166,10 @@ export function ProfileSettingsPage({
             <button
               type="button"
               className="btn ghost profile-settings-edit-btn"
-              onClick={() => showToast({ tone: 'info', message: '編輯功能於正式版開放' })}
+              onClick={() => showToast({ tone: 'info', message: pp.toastEditSoon })}
             >
               <Pencil size={16} aria-hidden />
-              編輯資料
+              {pp.editProfile}
             </button>
           </div>
         </article>
@@ -170,20 +178,20 @@ export function ProfileSettingsPage({
           <div className="employee-events-section-intro profile-settings-panel-intro">
             <Users className="employee-events-intro-icon" size={22} aria-hidden />
             <div>
-              <h3>角色與報告關係</h3>
-              <p>您在組織中的角色與上下線。</p>
+              <h3>{pp.rolesSection}</h3>
+              <p>{pp.rolesSectionDesc}</p>
             </div>
           </div>
           <div className="profile-settings-role-pills">
             {user.roles.map((r) => (
               <span key={r} className={roleBadgeClass(r)}>
-                {ROLE_LABEL[r]}
+                {roleDisplay(r, pp)}
               </span>
             ))}
           </div>
 
           <div className="profile-settings-subsection">
-            <h4 className="profile-settings-subheading">直屬主管</h4>
+            <h4 className="profile-settings-subheading">{pp.directManager}</h4>
             {manager ? (
               <ReportingPersonRow
                 person={manager}
@@ -191,17 +199,17 @@ export function ProfileSettingsPage({
                 onClick={() => setManagerDialogOpen(true)}
               />
             ) : (
-              <p className="profile-settings-empty">目前沒有指定直屬主管。</p>
+              <p className="profile-settings-empty">{pp.noManager}</p>
             )}
           </div>
 
           <div className="profile-settings-subsection profile-settings-subsection--divider">
             <h4 className="profile-settings-subheading">
-              直屬部屬
+              {pp.directReports}
               {directReports.length > 0 ? <span className="employee-events-group-count">{directReports.length}</span> : null}
             </h4>
             {directReports.length === 0 ? (
-              <p className="profile-settings-empty">目前沒有直屬部屬。</p>
+              <p className="profile-settings-empty">{pp.noReports}</p>
             ) : (
               <>
                 <div className="profile-settings-person-stack">
@@ -216,7 +224,7 @@ export function ProfileSettingsPage({
                 </div>
                 {hasMoreReports ? (
                   <button type="button" className="profile-settings-see-all btn ghost" onClick={onNavigateToDirectReportsList}>
-                    查看所有
+                    {pp.seeAll}
                     <ChevronRight size={16} aria-hidden />
                   </button>
                 ) : null}
@@ -229,39 +237,39 @@ export function ProfileSettingsPage({
           <div className="employee-events-section-intro profile-settings-panel-intro">
             <Bell className="employee-events-intro-icon" size={22} aria-hidden />
             <div>
-              <h3>通知</h3>
-              <p>選擇要接收的提醒類型。</p>
+              <h3>{pp.notificationsSection}</h3>
+              <p>{pp.notificationsSectionDesc}</p>
             </div>
           </div>
           <ul className="profile-settings-notify-list">
             <li>
               <div>
-                <p className="profile-settings-notify-title">推播總開關</p>
-                <p className="profile-settings-notify-desc">接收重要警訊與系統更新。</p>
+                <p className="profile-settings-notify-title">{pp.pushMaster}</p>
+                <p className="profile-settings-notify-desc">{pp.pushMasterDesc}</p>
               </div>
               {toggleRow(pushMaster, (v) => {
                 setPushMaster(v);
-                showToast({ tone: 'info', message: v ? '已開啟推播（原型）' : '已關閉推播（原型）' });
+                showToast({ tone: 'info', message: v ? pp.toastPushOn : pp.toastPushOff });
               })}
             </li>
             <li>
               <div>
-                <p className="profile-settings-notify-title">緊急事件警報</p>
-                <p className="profile-settings-notify-desc">新事件發布時通知。</p>
+                <p className="profile-settings-notify-title">{pp.pushEmergency}</p>
+                <p className="profile-settings-notify-desc">{pp.pushEmergencyDesc}</p>
               </div>
               {toggleRow(pushEmergency, setPushEmergency)}
             </li>
             <li>
               <div>
-                <p className="profile-settings-notify-title">狀態提醒</p>
-                <p className="profile-settings-notify-desc">提醒回報安全狀態。</p>
+                <p className="profile-settings-notify-title">{pp.pushReminder}</p>
+                <p className="profile-settings-notify-desc">{pp.pushReminderDesc}</p>
               </div>
               {toggleRow(pushStatusReminder, setPushStatusReminder)}
             </li>
             <li>
               <div>
-                <p className="profile-settings-notify-title">升級／團隊更新</p>
-                <p className="profile-settings-notify-desc">追蹤待回應與升級流程。</p>
+                <p className="profile-settings-notify-title">{pp.pushEscalation}</p>
+                <p className="profile-settings-notify-desc">{pp.pushEscalationDesc}</p>
               </div>
               {toggleRow(pushEscalation, setPushEscalation)}
             </li>
@@ -272,33 +280,42 @@ export function ProfileSettingsPage({
           <div className="employee-events-section-intro profile-settings-panel-intro">
             <Globe className="employee-events-intro-icon" size={22} aria-hidden />
             <div>
-              <h3>偏好與帳號</h3>
-              <p>語言、時區與密碼。</p>
+              <h3>{pp.prefsSection}</h3>
+              <p>{pp.prefsSectionDesc}</p>
             </div>
           </div>
           <div className="profile-settings-pref-grid">
             <label className="profile-settings-pref-field">
-              <span>語言</span>
-              <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+              <span>{pp.languageLabel}</span>
+              <select
+                value={locale}
+                onChange={(e) => {
+                  const v = e.target.value as AppLocale;
+                  if (v !== locale) {
+                    setPendingLocale(v);
+                    setLangConfirmOpen(true);
+                  }
+                }}
+              >
                 <option value="zh-Hant">繁體中文</option>
                 <option value="en">English</option>
               </select>
             </label>
             <label className="profile-settings-pref-field">
-              <span>時區</span>
+              <span>{pp.timeZoneLabel}</span>
               <select value={timeZone} onChange={(e) => setTimeZone(e.target.value)}>
-                <option value="Asia/Taipei">Asia/Taipei（UTC+08:00）</option>
-                <option value="UTC">UTC</option>
+                <option value="Asia/Taipei">{pp.timezoneTaipei}</option>
+                <option value="UTC">{pp.timezoneUtc}</option>
               </select>
             </label>
           </div>
           <button
             type="button"
             className="btn ghost profile-settings-password-btn"
-            onClick={() => showToast({ tone: 'info', message: '請聯繫 IT 或於正式版重設密碼' })}
+            onClick={() => showToast({ tone: 'info', message: pp.toastPasswordSoon })}
           >
             <Lock size={16} aria-hidden />
-            變更密碼
+            {pp.changePassword}
           </button>
         </article>
       </div>
@@ -312,6 +329,31 @@ export function ProfileSettingsPage({
         />
       ) : null}
 
+      <ConfirmModal
+        open={langConfirmOpen && pendingLocale !== null}
+        title={profileCopy.languageConfirmTitle}
+        description={pendingLocale ? profileCopy.languageConfirmBody(pendingLocale) : ''}
+        cancelText={profileCopy.cancel}
+        confirmText={profileCopy.confirm}
+        confirmTone="primary"
+        onCancel={() => {
+          setLangConfirmOpen(false);
+          setPendingLocale(null);
+        }}
+        onConfirm={() => {
+          const next = pendingLocale;
+          if (next) {
+            setLocale(next);
+            showToast({
+              tone: 'info',
+              message: getStrings(next).profilePage.languageApplied,
+            });
+          }
+          setLangConfirmOpen(false);
+          setPendingLocale(null);
+        }}
+      />
+
       <div className="profile-settings-signout-wrap">
         <button
           type="button"
@@ -321,7 +363,7 @@ export function ProfileSettingsPage({
           }}
         >
           <LogOut size={16} aria-hidden />
-          登出
+          {pp.signOut}
         </button>
       </div>
     </section>

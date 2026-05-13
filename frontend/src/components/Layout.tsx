@@ -1,29 +1,44 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Menu } from 'lucide-react';
+import { useLocale } from '../locale/LocaleContext';
+import type { AppLocale } from '../locale/LocaleContext';
+import { getStrings } from '../locale/strings';
 import type { NavKey, Role } from '../types';
 
-const navByRole: Record<Role, Array<{ key: NavKey; label: string }>> = {
-  employee: [
-    { key: 'member-home', label: '首頁' },
-    { key: 'profile', label: 'Profile' },
-  ],
-  supervisor: [
-    { key: 'member-home', label: '我的狀態' },
-    { key: 'team-dashboard-home', label: '團隊報表' },
-    { key: 'notifications', label: 'Reminders' },
-    { key: 'profile', label: 'Profile' },
-  ],
-  admin: [
-    { key: 'admin-dashboard', label: 'Overview' },
-    { key: 'event-management', label: 'Events' },
-    { key: 'user-management', label: 'Users' },
-    { key: 'notifications', label: 'Notifications' },
-    { key: 'profile', label: 'Profile' },
-  ],
-};
-
 const NARROW_SIDEBAR_MEDIA = '(max-width: 980px)';
+
+function navLabelsForRole(locale: AppLocale, role: Role): Array<{ key: NavKey; label: string }> {
+  const { layoutNav: L } = getStrings(locale);
+  if (role === 'employee') {
+    return [
+      { key: 'member-home', label: L.empHome },
+      { key: 'profile', label: L.profile },
+    ];
+  }
+  if (role === 'supervisor') {
+    return [
+      { key: 'member-home', label: L.supervisorHome },
+      { key: 'team-dashboard-home', label: L.teamDash },
+      { key: 'notifications', label: L.reminders },
+      { key: 'profile', label: L.profile },
+    ];
+  }
+  return [
+    { key: 'admin-dashboard', label: L.adminOverview },
+    { key: 'event-management', label: L.adminEvents },
+    { key: 'user-management', label: L.adminUsers },
+    { key: 'notifications', label: L.adminNotifications },
+    { key: 'profile', label: L.profile },
+  ];
+}
+
+function roleChipLabel(locale: AppLocale, role: Role): string {
+  const { layoutChrome } = getStrings(locale);
+  if (role === 'employee') return layoutChrome.roleEmployee;
+  if (role === 'supervisor') return layoutChrome.roleSupervisor;
+  return layoutChrome.roleAdmin;
+}
 
 export function Layout({
   currentRole,
@@ -42,12 +57,14 @@ export function Layout({
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const { locale } = useLocale();
+  const { layoutChrome } = getStrings(locale);
+  const navItems = useMemo(() => navLabelsForRole(locale, currentRole), [locale, currentRole]);
   const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
   const [online, setOnline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine);
   const [isNarrowViewport, setIsNarrowViewport] = useState(
     () => typeof window !== 'undefined' && window.matchMedia(NARROW_SIDEBAR_MEDIA).matches,
   );
-  const navItems = navByRole[currentRole];
 
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine);
@@ -108,7 +125,7 @@ export function Layout({
     <div className="app-frame">
       {!online ? (
         <div className="offline-bar" role="status">
-          目前離線：已快取的資料仍可操作；請恢復連線後再試送出。
+          {layoutChrome.offlineBanner}
         </div>
       ) : null}
       <header className="app-mobile-shell-header">
@@ -122,24 +139,19 @@ export function Layout({
           <Menu size={20} strokeWidth={2.25} aria-hidden />
           <span className="sr-only">Toggle menu</span>
         </button>
-        <span className="app-mobile-shell-title">Safety Connect</span>
+        <span className="app-mobile-shell-title">{layoutChrome.mobileAppTitle}</span>
       </header>
 
-      <button
-        type="button"
-        className={`sidebar-drawer-overlay${sidebarDrawerOpen ? ' is-visible' : ''}`}
-        aria-label="Close menu"
-        tabIndex={-1}
-        onClick={() => setSidebarDrawerOpen(false)}
-      />
+      {/* Main must precede sidebar in DOM so narrow layouts stack content under the shell header */}
+      <main className="content">{children}</main>
 
       <aside
         id="app-sidebar-drawer"
         className={`sidebar${sidebarDrawerOpen ? ' is-drawer-open' : ''}`}
         {...(isNarrowViewport ? { 'aria-hidden': !sidebarDrawerOpen } : {})}
       >
-        <h1>Employee Safety & Response</h1>
-        <p className="muted">Emergency response operations center</p>
+        <h1>{layoutChrome.sidebarHeadline}</h1>
+        <p className="muted">{layoutChrome.sidebarSub}</p>
         <nav>
           {navItems.map((item) => (
             <button
@@ -154,7 +166,7 @@ export function Layout({
         </nav>
         {roleOptions.length > 1 ? (
           <div className="role-switch">
-            <p>Switch role</p>
+            <p>{layoutChrome.switchRole}</p>
             <div>
               {roleOptions.map((role) => (
                 <button
@@ -163,18 +175,24 @@ export function Layout({
                   onClick={() => pickRoleFromSidebar(role)}
                   type="button"
                 >
-                  {role}
+                  {roleChipLabel(locale, role)}
                 </button>
               ))}
             </div>
           </div>
         ) : null}
         <button className="btn ghost logout" onClick={logoutFromSidebar} type="button">
-          Logout
+          {layoutChrome.logout}
         </button>
       </aside>
 
-      <main className="content">{children}</main>
+      <button
+        type="button"
+        className={`sidebar-drawer-overlay${sidebarDrawerOpen ? ' is-visible' : ''}`}
+        aria-label="Close menu"
+        tabIndex={-1}
+        onClick={() => setSidebarDrawerOpen(false)}
+      />
     </div>
   );
 }

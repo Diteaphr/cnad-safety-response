@@ -23,6 +23,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.event_repository import EventRepository
+from app.repositories.event_type_repository import EventTypeRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
@@ -47,6 +48,7 @@ class PortalService:
         self._users = UserRepository()
         self._depts = DepartmentRepository()
         self._events = EventRepository()
+        self._event_types = EventTypeRepository()
         self._responses = SafetyResponseRepository()
         self._notifications = NotificationRepository()
         self._response_svc = SafetyResponseService()
@@ -65,6 +67,8 @@ class PortalService:
             "roles": rcast,
             "pushEnabled": True,
             "managerId": str(user.manager_id) if user.manager_id else None,
+            "employeeCode": user.employee_no,
+            "phone": user.phone or None,
         }
 
     def _dept_out(self, d) -> dict[str, Any]:
@@ -81,8 +85,6 @@ class PortalService:
             first = name_map.get(event.event_departments[0].department_id)
         st = event.start_time or event.created_at
         et = event.event_type
-        if et not in ("Earthquake", "Typhoon", "Fire", "Other"):
-            et = "Other"
         return {
             "id": str(event.event_id),
             "title": event.title,
@@ -112,6 +114,17 @@ class PortalService:
             if r.responded_at.tzinfo is None
             else r.responded_at.isoformat(),
         }
+
+    def list_event_types(self, db: Session) -> list[dict[str, Any]]:
+        rows = self._event_types.list_all(db)
+        return [
+            {
+                "id": str(r.event_type_id),
+                "code": r.code,
+                "name": r.name,
+            }
+            for r in rows
+        ]
 
     def list_departments(self, db: Session) -> list[dict[str, Any]]:
         return [self._dept_out(d) for d in self._depts.list_all(db)]
@@ -198,10 +211,17 @@ class PortalService:
                 raise HTTPException(
                     status_code=400, detail="Invalid department id"
                 ) from e
+        custom = (payload.custom_type_name or "").strip()
+        if payload.type.strip().lower() == "other" and custom:
+            et = self._event_types.get_or_create_by_display_name(db, custom)
+        else:
+            et = self._event_types.get_by_label(db, payload.type)
+            if et is None:
+                raise HTTPException(status_code=400, detail="Unknown event type")
         ev = self._events.create(
             db,
             title=payload.title,
-            event_type=payload.type,
+            event_type_id=et.event_type_id,
             description=payload.description,
             status="draft",
             created_by=actor_id,
@@ -340,6 +360,7 @@ class PortalService:
                     "status": lr.status if lr else "pending",
                     "reported_at": lr.responded_at.isoformat() if lr else None,
                     "needs_follow_up": lr is None or lr.status == "need_help",
+                    "phone": u.phone or None,
                 }
             )
         pending = len(team_users) - st["responded"]
@@ -674,6 +695,77 @@ class PortalService:
             raise HTTPException(status_code=404, detail="User not found")
         rows = self._notifications.list_for_user(db, user_id)
         return [self._notif_out(r) for r in rows]
+
+    def failed_notifications_for_event(
+        self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID
+    ) -> list[dict[str, Any]]:
+        actor = self._users.get_by_id(db, actor_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if "admin" not in _role_names(actor):
+            raise HTTPException(status_code=403, detail="Admin only")
+
+        ev = self._events.get_by_id(db, event_id)
+        if ev is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        rows = self._notifications.list_failed_for_event(db, event_id, channel_contains="reminder")
+        out: list[dict[str, Any]] = []
+        for n in rows:
+            u = self._users.get_by_id(db, n.user_id)
+            out.append(
+                {
+                    "id": str(n.notification_id),
+                    "eventId": str(n.event_id),
+                    "userId": str(n.user_id),
+                    "userName": u.name if u else "Unknown",
+                    "department": (u.department.name if (u and u.department) else None),
+                    "channel": n.channel,
+                    "status": n.status,
+                    "sentAt": n.sent_at.isoformat() if n.sent_at else None,
+                }
+            )
+        return out
+
+    def retry_failed_notification(
+        self, db: Session, *, actor_id: uuid.UUID, notification_id: uuid.UUID
+    ) -> dict[str, Any]:
+        actor = self._users.get_by_id(db, actor_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if "admin" not in _role_names(actor):
+            raise HTTPException(status_code=403, detail="Admin only")
+
+        row = self._notifications.get_by_id(db, notification_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Notification not found")
+
+        target_user = self._users.get_by_id(db, row.user_id)
+        ev = self._events.get_by_id(db, row.event_id)
+        if target_user is None or ev is None:
+            raise HTTPException(status_code=404, detail="Notification target context not found")
+
+        def _retry_send() -> bool:
+            title = "安全確認提醒"
+            body = f"請盡快回報您的安全狀態：{ev.title}"
+            if "sms" in row.channel.lower():
+                title = "簡訊提醒"
+                body = f"請回報活動「{ev.title}」的安全狀態"
+            return send_fcm_mock(
+                device_token=str(target_user.user_id),
+                title=title,
+                body=body,
+                data={"event_id": str(ev.event_id), "retry": "true"},
+            )
+
+        updated = self._notif_svc.deliver_with_idempotency(
+            db,
+            event_id=row.event_id,
+            user_id=row.user_id,
+            channel=row.channel,
+            send_fn=_retry_send,
+        )
+        return self._notif_out(updated)
 
     # ------------------------------------------------------------------
     # Supervisor: send reminders

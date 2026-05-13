@@ -1,17 +1,36 @@
+import { Activity } from 'lucide-react';
 import { EmployeeTable } from '../../components/EmployeeTable';
-import { StatCard } from '../../components/StatCard';
 import { StatusBadge } from '../../components/StatusBadge';
+import { DashboardShellHeader } from '../../components/dashboard/DashboardShellHeader';
+import { EventOverviewCard } from '../../components/dashboard/EventOverviewCard';
+import { DashboardAnalyticsHero } from '../../components/dashboard/DashboardAnalyticsHero';
+import { ResponseDistributionBar } from '../../components/dashboard/ResponseDistributionBar';
+import { deriveEventUiStatus } from '../../components/dashboard/deriveEventUiStatus';
+import type { DashboardStrings } from '../../locale/strings';
+import { getStrings } from '../../locale/strings';
+import { useLocale } from '../../locale/LocaleContext';
 import type { Department, EventItem } from '../../types';
+
+function formatSynced(strings: DashboardStrings, ts: number | null, locale: string): string | null {
+  if (ts === null) return null;
+  const d = new Date(ts);
+  return `${strings.lastSynced}: ${d.toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')}`;
+}
 
 export function TeamDashboardHomePage({
   activeRows,
   closedRows,
   onOpenEvent,
+  dashboardFreshAt,
 }: {
   activeRows: Array<{ event: EventItem; teamCounts: { total: number; safe: number; needHelp: number; pending: number } }>;
   closedRows: Array<{ event: EventItem; teamCounts: { total: number; safe: number; needHelp: number; pending: number } }>;
   onOpenEvent: (eventId: string) => void;
+  dashboardFreshAt: number | null;
 }) {
+  const { locale } = useLocale();
+  const { dash } = getStrings(locale);
+
   const renderCard = (
     row: { event: EventItem; teamCounts: { total: number; safe: number; needHelp: number; pending: number } },
     variant: 'active' | 'closed',
@@ -22,6 +41,7 @@ export function TeamDashboardHomePage({
       ? Math.round(((teamCounts.safe + teamCounts.needHelp) / teamCounts.total) * 100)
       : 0;
     const alertHigh = variant === 'active' && teamCounts.total > 0 && teamCounts.pending / teamCounts.total >= 0.3;
+    const statusLabel = event.status === 'active' ? dash.ongoing : dash.closed;
     return (
       <button
         key={event.id}
@@ -32,14 +52,16 @@ export function TeamDashboardHomePage({
         <div className="team-dash-event-card-top">
           <strong className="team-dash-event-title">{event.title}</strong>
           <span className="muted-text team-dash-event-meta">
-            {event.type} · {event.status === 'active' ? '進行中' : '已結束'}
+            {event.type} · {statusLabel}
           </span>
         </div>
         <div className="team-dash-event-stats">
           <span>
-            未回報 {teamCounts.pending} / {teamCounts.total}（{pctPending}%）
+            {dash.kpiNoResponse} {teamCounts.pending} / {teamCounts.total}（{pctPending}%）
           </span>
-          <span className="muted-text">已回報進度 {rate}%</span>
+          <span className="muted-text">
+            {dash.responseRateCenter} {rate}%
+          </span>
         </div>
         <div className="progress-track team-dash-progress">
           <div className="progress-fill" style={{ width: `${rate}%` }} />
@@ -49,23 +71,31 @@ export function TeamDashboardHomePage({
   };
 
   return (
-    <section className="page-section team-dashboard-home">
-      <header className="team-dashboard-home-header">
-        <h2>團隊報表</h2>
-        <p className="muted-text">進行中的事件列於最上方；點選卡片檢視轄下回報細節。</p>
+    <section className="page-section team-dashboard-home dash-board-surface">
+      <DashboardShellHeader
+        brandName={dash.brand}
+        backLabel={dash.backToEvents}
+        onBack={() => {}}
+        showBack={false}
+        lastSyncedFormatted={formatSynced(dash, dashboardFreshAt, locale)}
+        syncOk
+      />
+      <header className="dash-page-title-block">
+        <h2>{dash.teamHomeTitle}</h2>
+        <p className="muted-text">{dash.teamHomeSubtitle}</p>
       </header>
       <section className="team-dashboard-home-section">
-        <h3 className="section-title">進行中</h3>
+        <h3 className="section-title">{dash.ongoing}</h3>
         {activeRows.length === 0 ? (
-          <p className="empty muted-text">目前沒有進行中且需追蹤轄下回報的事件。</p>
+          <p className="empty muted-text">{dash.emptyBody}</p>
         ) : (
           <div className="team-dash-event-list">{activeRows.map((r) => renderCard(r, 'active'))}</div>
         )}
       </section>
       <section className="team-dashboard-home-section team-dashboard-home-section--closed">
-        <h3 className="section-title">已結束</h3>
+        <h3 className="section-title">{dash.closed}</h3>
         {closedRows.length === 0 ? (
-          <p className="empty muted-text">尚無已結束事件。</p>
+          <p className="empty muted-text">{dash.noRows}</p>
         ) : (
           <div className="team-dash-event-list">{closedRows.map((r) => renderCard(r, 'closed'))}</div>
         )}
@@ -75,6 +105,7 @@ export function TeamDashboardHomePage({
 }
 
 export function SupervisorDashboardPage({
+  event,
   stats,
   rows,
   filter,
@@ -87,11 +118,11 @@ export function SupervisorDashboardPage({
   contactedMap,
   onToggleContacted,
   pendingRatioHigh,
-  allRespondedBanner,
   dashMismatchHint,
   dashboardFreshAt,
   hideBulkTeamActions = false,
 }: {
+  event: EventItem | null;
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
   rows: Array<{
     id: string;
@@ -113,12 +144,13 @@ export function SupervisorDashboardPage({
   contactedMap: Record<string, boolean>;
   onToggleContacted: (userId: string) => void;
   pendingRatioHigh: boolean;
-  allRespondedBanner: boolean;
   dashMismatchHint: string | null;
   dashboardFreshAt: number | null;
-  /** 主管關懷視角：隱藏大量發送提醒／匯出（非 Admin 維運） */
   hideBulkTeamActions?: boolean;
 }) {
+  const { locale } = useLocale();
+  const { dash } = getStrings(locale);
+
   const filtered = rows
     .filter((row) => (filter === 'all' ? true : row.status === filter))
     .filter((row) => row.name.toLowerCase().includes(searchText.toLowerCase()))
@@ -126,108 +158,111 @@ export function SupervisorDashboardPage({
   const urgentRows = rows.filter((row) => row.status === 'need_help');
   const urgentUncontacted = urgentRows.filter((row) => !contactedMap[row.id]);
   const pendingRows = rows.filter((row) => row.status === 'pending');
-
   const tableRows = filtered;
-  const pctSafeShare = stats.total ? Math.round((stats.safe / stats.total) * 100) : 0;
-  const pctNeedShare = stats.total ? Math.round((stats.needHelp / stats.total) * 100) : 0;
-  const pctPendingShare = stats.total ? Math.round((stats.pending / stats.total) * 100) : 0;
+
+  const uiStatus = deriveEventUiStatus(event, {
+    total: stats.total,
+    safe: stats.safe,
+    needHelp: stats.needHelp,
+    pending: stats.pending,
+  });
+  const statusLabel = dash.statusLabels[uiStatus];
+  const eventTitle = event?.title ?? '—';
+  const typeLabel = event?.type ?? '—';
+  const description = event?.description?.trim() || dash.eventDescriptionFallback;
+  const updatedLine = dashboardFreshAt
+    ? new Date(dashboardFreshAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')
+    : null;
+
+  const filterTabs: Array<{ key: typeof filter; label: string }> = [
+    { key: 'all', label: dash.filterAll },
+    { key: 'need_help', label: dash.filterNeedHelp },
+    { key: 'pending', label: dash.filterPending },
+    { key: 'safe', label: dash.filterSafe },
+  ];
 
   return (
-    <section className="page-section">
-      <button className="btn ghost" onClick={onBackToEvents} type="button">
-        ← Back to Events
-      </button>
-      <h2>Supervisor Dashboard</h2>
-      {dashMismatchHint ? <p className="muted-text supervisor-dash-scope-hint">{dashMismatchHint}</p> : null}
-      {dashboardFreshAt ? (
-        <p className="muted-text supervisor-dash-sync-time">
-          Snapshot synced · {new Date(dashboardFreshAt).toLocaleString()}
-        </p>
-      ) : null}
-      {pendingRatioHigh ? (
-        <p className="supervisor-priority-alert" role="status">
-          逾三成部屬仍未回報，請優先聯繫並確認現況。
-        </p>
-      ) : null}
-      {allRespondedBanner ? (
-        <p className="muted-text supervisor-all-clear" role="status">
-          回報已完成：所有部屬皆已送出狀態。
-        </p>
-      ) : null}
-      {stats.total === 0 ? <p className="muted-text">尚無可監看的部屬資料。</p> : null}
+    <section className="page-section dash-board-surface supervisor-dash-page">
+      <DashboardShellHeader
+        brandName={dash.brand}
+        backLabel={dash.backToEvents}
+        onBack={onBackToEvents}
+        lastSyncedFormatted={formatSynced(dash, dashboardFreshAt, locale)}
+        syncOk
+      />
 
-      <div className="panel supervisor-overview">
-        <h3 className="section-title">Response Snapshot</h3>
-        <div className="dashboard-top">
-          <div className="stat-grid">
-            <StatCard label="Total Employees" value={stats.total} />
-            <StatCard label="Safe" value={stats.safe} tone="safe" />
-            <StatCard label="Need Help" value={stats.needHelp} tone="danger" />
-            <StatCard label="No Response" value={stats.pending} tone="warning" />
-            <StatCard label="Response Rate" value={`${stats.responseRate}%`} tone="primary" />
-          </div>
-          <div className="dashboard-visual">
-            <div
-              className="pie-chart"
-              style={{
-                background: `conic-gradient(#2ba95a 0 ${(stats.safe / Math.max(stats.total, 1)) * 100}%, #d53d3f ${(stats.safe / Math.max(stats.total, 1)) * 100}% ${((stats.safe + stats.needHelp) / Math.max(stats.total, 1)) * 100}%, #f2c04a ${((stats.safe + stats.needHelp) / Math.max(stats.total, 1)) * 100}% 100%)`,
-              }}
-            />
-            <div className="pie-legend">
-              <span>
-                <i className="dot safe" /> Safe: {stats.safe}
-              </span>
-              <span>
-                <i className="dot danger" /> Need Help: {stats.needHelp}
-              </span>
-              <span>
-                <i className="dot pending" /> No Response: {stats.pending}
-              </span>
-            </div>
-          </div>
-        </div>
-        {stats.total > 0 ? (
-          <p className="supervisor-share-line muted-text">
-            三態百分比：平安 {pctSafeShare}% · 需協助 {pctNeedShare}% · 未回報 {pctPendingShare}%（對照上列人數；進度條為已回報佔總員額）。
-          </p>
-        ) : null}
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${stats.responseRate}%` }} />
-        </div>
+      <div className="dash-page-heading">
+        <h1>{dash.supervisorTitle}</h1>
+        <p className="muted-text">{dash.supervisorSubtitle}</p>
       </div>
 
-      <div className="grid-2">
-        <section className={`panel supervisor-need-help-panel${urgentUncontacted.length > 5 ? ' supervisor-need-help-many' : ''}`}>
-          <h3 className="section-title">Immediate Attention · Need Help</h3>
+      {dashMismatchHint ? <p className="dash-scope-hint muted-text">{dashMismatchHint}</p> : null}
+      {pendingRatioHigh ? (
+        <p className="supervisor-priority-alert" role="status">
+          {dash.highPendingWarn}
+        </p>
+      ) : null}
+      <EventOverviewCard
+        icon={<Activity size={26} />}
+        typeLabel={typeLabel}
+        title={eventTitle}
+        uiStatus={uiStatus}
+        statusLabel={statusLabel}
+        description={description}
+        lastUpdatedFormatted={updatedLine ? `${dash.asOf} ${updatedLine}` : null}
+      />
+
+      <div className="dash-panel-elevated dash-hero-wrap">
+        <DashboardAnalyticsHero
+          responseRate={stats.responseRate}
+          safe={stats.safe}
+          needHelp={stats.needHelp}
+          pending={stats.pending}
+          total={stats.total}
+          rateLabel={dash.responseRateCenter}
+          strings={dash}
+        />
+      </div>
+
+      <div className="dash-panel-elevated dash-dist-panel">
+        <h3 className="dash-subsection-title">{dash.distribution}</h3>
+        <ResponseDistributionBar strings={dash} safe={stats.safe} needHelp={stats.needHelp} pending={stats.pending} />
+      </div>
+
+      <div className="grid-2 dash-need-grid">
+        <section className="dash-panel-elevated supervisor-need-help-panel">
+          <h3 className="dash-subsection-title">{dash.immediateAttention}</h3>
           {urgentRows.length === 0 ? (
-            <p className="empty">尚無標記為需要協助人員。</p>
+            <p className="empty">{dash.noRows}</p>
           ) : (
             urgentRows.map((row) => {
               const reached = contactedMap[row.id] ?? false;
+              const tel = row.phone?.replace(/\s/g, '') ?? '';
               return (
-                <article key={row.id} className="list-item supervisor-need-item">
-                  <div>
-                    <strong>{row.name}</strong>
-                    <p className="muted-text">
-                      {row.department}
+                <article key={row.id} className="list-item supervisor-need-item dash-need-row-slim">
+                  <div className="dash-need-slim-main">
+                    <strong className="dash-need-slim-name">{row.name}</strong>
+                    <span className="muted-text dash-need-slim-dept">{row.department}</span>
+                    <span className="dash-need-slim-phone">
+                      {dash.phoneLabel}：
                       {row.phone ? (
-                        <>
-                          {' '}
-                          ·{' '}
-                          <a href={`tel:${row.phone.replace(/\s/g, '')}`}>{row.phone}</a>
-                        </>
-                      ) : null}
-                    </p>
-                    {(row.note || row.locationLine) ? <p>{[row.locationLine, row.note].filter(Boolean).join(' · ')}</p> : null}
+                        <a href={tel ? `tel:${tel}` : undefined}>{row.phone}</a>
+                      ) : (
+                        <span className="muted-text">{dash.noPhone}</span>
+                      )}
+                    </span>
+                    {row.note || row.locationLine ? (
+                      <span className="dash-need-slim-extra muted-text">{[row.locationLine, row.note].filter(Boolean).join(' · ')}</span>
+                    ) : null}
                   </div>
-                  <div className="supervisor-need-help-actions">
+                  <div className="dash-need-slim-aside">
                     <StatusBadge status="need_help" />
                     <button
                       type="button"
                       className={`btn ghost btn-sm supervisor-contact-flag${reached ? ' is-reached' : ''}`}
                       onClick={() => onToggleContacted(row.id)}
                     >
-                      {reached ? '已聯繫' : '標記為已聯繫'}
+                      {reached ? dash.contacted : dash.markContacted}
                     </button>
                   </div>
                 </article>
@@ -236,14 +271,14 @@ export function SupervisorDashboardPage({
           )}
           {urgentUncontacted.length > 5 ? (
             <p className="supervisor-many-alert" role="alert">
-              仍有 {urgentUncontacted.length} 位需協助人員未完成聯繫確認。
+              {dash.manyUncontacted(urgentUncontacted.length)}
             </p>
           ) : null}
         </section>
-        <section className="panel">
-          <h3 className="section-title">Pending Follow-up</h3>
+        <section className="dash-panel-elevated">
+          <h3 className="dash-subsection-title">{dash.pendingFollowUp}</h3>
           {pendingRows.length === 0 ? (
-            <p className="empty">All employees responded.</p>
+            <p className="empty">{dash.allRespondedNote}</p>
           ) : (
             pendingRows.map((row) => (
               <article key={row.id} className="list-item">
@@ -259,36 +294,41 @@ export function SupervisorDashboardPage({
             {!hideBulkTeamActions ? (
               <>
                 <button className="btn warning" onClick={onSendReminder} type="button">
-                  Send Reminder
+                  {dash.sendReminder}
                 </button>
                 <button className="btn ghost" onClick={onExport} type="button">
-                  Export / Email
+                  {dash.export}
                 </button>
               </>
             ) : (
-              <p className="muted-text small">請以電話或其他管道聯繫未回報同仁；本檢視不提供批次通知。</p>
+              <p className="muted-text small">{dash.teamActionsNote}</p>
             )}
           </div>
         </section>
       </div>
 
-      <div className="toolbar">
+      <div className="dash-toolbar toolbar">
         <div className="tabs">
-          {(['all', 'need_help', 'pending', 'safe'] as const).map((item) => (
-            <button key={item} className={filter === item ? 'pill active' : 'pill'} onClick={() => setFilter(item)} type="button">
-              {item}
+          {filterTabs.map(({ key, label }) => (
+            <button key={key} className={filter === key ? 'pill active' : 'pill'} onClick={() => setFilter(key)} type="button">
+              {label}
             </button>
           ))}
         </div>
-        <input placeholder="Search employee" value={searchText} onChange={(e) => setSearchText(e.target.value)} />
+        <input placeholder={dash.searchPlaceholder} value={searchText} onChange={(e) => setSearchText(e.target.value)} />
       </div>
-      <h3 className="section-title">Detailed Employee List</h3>
-      {tableRows.length === 0 ? <p className="empty">尚無回報資料</p> : <EmployeeTable rows={tableRows} />}
+
+      <div className="dash-panel-plain">
+        <h3 className="dash-subsection-title">{dash.detailedList}</h3>
+        <p className="muted-text dash-table-foot">{dash.employeeTableFootnote(tableRows.length, rows.length)}</p>
+        {tableRows.length === 0 ? <p className="empty">{dash.noRows}</p> : <EmployeeTable rows={tableRows} />}
+      </div>
     </section>
   );
 }
 
 export function AdminDashboardPage({
+  event,
   stats,
   rows,
   departments: deptList,
@@ -297,41 +337,82 @@ export function AdminDashboardPage({
   dashMismatchHint,
   onBackToEvents,
 }: {
+  event: EventItem | null;
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
-  rows: Array<{ id: string; name: string; department: string; status: 'safe' | 'need_help' | 'pending'; note?: string }>;
+  rows: Array<{ id: string; name: string; department: string; status: 'safe' | 'need_help' | 'pending'; note?: string; phone?: string }>;
   departments: Department[];
   deptBreakdown?: Array<{ department: string; safe: number; need_help: number; pending: number }>;
   dashboardFreshAt: number | null;
   dashMismatchHint: string | null;
   onBackToEvents: () => void;
 }) {
+  const { locale } = useLocale();
+  const { dash } = getStrings(locale);
+
   const critical = rows.filter((row) => row.status === 'need_help');
   const pending = rows.filter((row) => row.status === 'pending');
+
+  const uiStatus = deriveEventUiStatus(event, {
+    total: stats.total,
+    safe: stats.safe,
+    needHelp: stats.needHelp,
+    pending: stats.pending,
+  });
+  const statusLabel = dash.statusLabels[uiStatus];
+  const eventTitle = event?.title ?? '—';
+  const typeLabel = event?.type ?? '—';
+  const description = event?.description?.trim() || dash.eventDescriptionFallback;
+  const updatedLine = dashboardFreshAt
+    ? new Date(dashboardFreshAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')
+    : null;
+
   return (
-    <section className="page-section">
-      <button className="btn ghost" onClick={onBackToEvents} type="button">
-        ← Back to Events
-      </button>
-      <h2>Admin Dashboard</h2>
-      {dashMismatchHint ? <p className="muted-text supervisor-dash-scope-hint">{dashMismatchHint}</p> : null}
-      {dashboardFreshAt ? (
-        <p className="muted-text supervisor-dash-sync-time">
-          Snapshot synced · {new Date(dashboardFreshAt).toLocaleString()}
-        </p>
-      ) : null}
-      <section className="panel">
-        <h3 className="section-title">Global Status Overview</h3>
-        {stats.total === 0 ? <p className="empty">尚無回報資料</p> : null}
-        <div className="stat-grid">
-          <StatCard label="Global Safe" value={stats.safe} tone="safe" />
-          <StatCard label="Global Need Help" value={stats.needHelp} tone="danger" />
-          <StatCard label="Global No Response" value={stats.pending} tone="warning" />
-          <StatCard label="Response Rate" value={`${stats.responseRate}%`} tone="primary" />
-        </div>
-      </section>
+    <section className="page-section dash-board-surface admin-dash-page">
+      <DashboardShellHeader
+        brandName={dash.brand}
+        backLabel={dash.backToEvents}
+        onBack={onBackToEvents}
+        lastSyncedFormatted={formatSynced(dash, dashboardFreshAt, locale)}
+        syncOk
+      />
+
+      <div className="dash-page-heading">
+        <h1>{dash.adminTitle}</h1>
+        <p className="muted-text">{dash.adminSubtitle}</p>
+      </div>
+
+      {dashMismatchHint ? <p className="dash-scope-hint muted-text">{dashMismatchHint}</p> : null}
+
+      <EventOverviewCard
+        icon={<Activity size={26} />}
+        typeLabel={typeLabel}
+        title={eventTitle}
+        uiStatus={uiStatus}
+        statusLabel={statusLabel}
+        description={description}
+        lastUpdatedFormatted={updatedLine ? `${dash.asOf} ${updatedLine}` : null}
+      />
+
+      <div className="dash-panel-elevated dash-hero-wrap">
+        <DashboardAnalyticsHero
+          responseRate={stats.responseRate}
+          safe={stats.safe}
+          needHelp={stats.needHelp}
+          pending={stats.pending}
+          total={stats.total}
+          rateLabel={dash.responseRateCenter}
+          strings={dash}
+        />
+      </div>
+
+      <div className="dash-panel-elevated dash-dist-panel">
+        <h3 className="dash-subsection-title">{dash.distribution}</h3>
+        <ResponseDistributionBar strings={dash} safe={stats.safe} needHelp={stats.needHelp} pending={stats.pending} />
+      </div>
+
       <div className="grid-2">
-        <section className="panel">
-          <h3 className="section-title">Department Response Ranking</h3>
+        <section className="dash-panel-elevated">
+          <h3 className="dash-subsection-title">{dash.deptRanking}</h3>
           <div className="list">
             {deptBreakdown?.length ? (
               deptBreakdown.map((row) => {
@@ -341,7 +422,8 @@ export function AdminDashboardPage({
                   <div className="list-item" key={row.department}>
                     <span>{row.department}</span>
                     <strong>
-                      回報率 {rate}% · 平安 {row.safe} / 協助 {row.need_help} / 未回 {row.pending}
+                      {rate}% · {dash.kpiSafe} {row.safe} / {dash.kpiNeedHelp} {row.need_help} / {dash.kpiNoResponse}{' '}
+                      {row.pending}
                     </strong>
                   </div>
                 );
@@ -361,33 +443,52 @@ export function AdminDashboardPage({
             )}
           </div>
         </section>
-        <section className="panel">
-          <h3 className="section-title">Critical Alerts</h3>
-          {critical.length === 0 ? <p className="empty">No employees currently marked Need Help.</p> : critical.map((row) => (
-            <div className="list-item" key={row.id}>
-              <div>
-                <strong>{row.name}</strong>
-                <p>{row.department}</p>
-              </div>
-              <StatusBadge status="need_help" />
-            </div>
-          ))}
+        <section className="dash-panel-elevated supervisor-need-help-panel">
+          <h3 className="dash-subsection-title">{dash.criticalAlerts}</h3>
+          {critical.length === 0 ? (
+            <p className="empty">{dash.noRows}</p>
+          ) : (
+            critical.map((row) => {
+              const tel = row.phone?.replace(/\s/g, '') ?? '';
+              return (
+                <div className="list-item dash-need-row-slim dash-admin-critical-card" key={row.id}>
+                  <div className="dash-need-slim-main">
+                    <strong className="dash-need-slim-name">{row.name}</strong>
+                    <span className="muted-text dash-need-slim-dept">{row.department}</span>
+                    <span className="dash-need-slim-phone">
+                      {dash.phoneLabel}：
+                      {row.phone ? (
+                        <a href={tel ? `tel:${tel}` : undefined}>{row.phone}</a>
+                      ) : (
+                        <span className="muted-text">{dash.noPhone}</span>
+                      )}
+                    </span>
+                  </div>
+                  <StatusBadge status="need_help" />
+                </div>
+              );
+            })
+          )}
         </section>
       </div>
       <div className="grid-2">
-        <section className="panel">
-          <h3 className="section-title">No Response Queue</h3>
-          {pending.length === 0 ? <p className="empty">No pending responders.</p> : pending.map((row) => (
-            <div className="list-item" key={`pending-${row.id}`}>
-              <div>
-                <strong>{row.name}</strong>
-                <p>{row.department}</p>
+        <section className="dash-panel-elevated">
+          <h3 className="dash-subsection-title">{dash.noResponseQueue}</h3>
+          {pending.length === 0 ? (
+            <p className="empty">{dash.allRespondedNote}</p>
+          ) : (
+            pending.map((row) => (
+              <div className="list-item" key={`pending-${row.id}`}>
+                <div>
+                  <strong>{row.name}</strong>
+                  <p>{row.department}</p>
+                </div>
+                <StatusBadge status="pending" />
               </div>
-              <StatusBadge status="pending" />
-            </div>
-          ))}
+            ))
+          )}
         </section>
-        <section className="map-placeholder">Map / Location Overview (Prototype Placeholder)</section>
+        <section className="map-placeholder dash-map-placeholder">{dash.mapPlaceholder}</section>
       </div>
     </section>
   );

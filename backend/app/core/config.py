@@ -15,8 +15,9 @@ _gcp_key = BASE_DIR / ".secrets" / "gcp-key.json"
 class Settings(BaseSettings):
     env: str = "development"
 
+    # 與 root docker-compose（主機 15432）及 backend/.env.example 一致；本機直連 5432 請在 .env 覆寫。
     database_url: str = (
-        "postgresql+psycopg://user:password@localhost:5432/employee_safety"
+        "postgresql+psycopg://user:password@localhost:15432/employee_safety"
     )
     redis_url: str = "redis://localhost:6379/0"
     redis_enabled: bool = True

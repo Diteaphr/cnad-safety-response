@@ -4,62 +4,68 @@ This document explicitly defines the system architecture, sequence flows, and en
 
 ## 1. Entity-Relationship (ER) Diagram
 
-This diagram maps precisely to the SQLAlchemy Domain Models defined in `app/models/domain_models.py`.
+This diagram aligns with the SQLAlchemy models under `backend/app/models/` (UUID primary keys in the codebase).
 
 ```mermaid
 erDiagram
     Department ||--o{ User : "has many (employees)"
     User ||--o| Department : "manager of (optional)"
+    EventType ||--o{ Event : "categorizes"
     Event ||--o{ SafetyResponse : "receives"
     User ||--o{ SafetyResponse : "submits"
     User ||--o{ NotificationLog : "receives"
     Event ||--o{ NotificationLog : "triggers"
 
     User {
-        int id PK
+        uuid user_id PK
         string employee_no UK
         string name
         string email
-        int department_id FK
-        enum role "admin, supervisor, employee"
-        boolean is_active
+        uuid department_id FK
+        string status
     }
 
     Department {
-        int id PK
+        uuid department_id PK
+        string department_name
+        uuid parent_department_id FK
+    }
+
+    EventType {
+        uuid event_type_id PK
+        string code UK
         string name
-        int manager_id FK
     }
 
     Event {
-        int id PK
+        uuid event_id PK
         string title
         string description
-        enum event_type "Earthquake, Fire, Test"
-        enum status "active, closed"
+        uuid event_type_id FK
+        string status
         datetime created_at
     }
 
     SafetyResponse {
-        int id PK
-        int event_id FK
-        int user_id FK
-        enum status "safe, need_help"
-        float location_lat
-        float location_lng
+        uuid response_id PK
+        uuid event_id FK
+        uuid user_id FK
+        string status "safe, need_help"
         string comment
-        datetime reported_at
+        datetime responded_at
     }
 
     NotificationLog {
-        int id PK
-        int event_id FK
-        int user_id FK
+        uuid notification_id PK
+        uuid event_id FK
+        uuid user_id FK
         string channel "FCM, SMS"
         string status "sent, failed"
         datetime sent_at
     }
 ```
+
+The `EventType` SQLAlchemy model maps to the PostgreSQL table **`event_types`**.
 
 ## 2. System Architecture Diagram
 

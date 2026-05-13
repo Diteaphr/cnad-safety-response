@@ -1,5 +1,5 @@
 import { fetchWithTimeout, isProbablyTransientNetworkError, withRetries } from './lib/httpClient';
-import type { Department, EventItem, Role, SafetyResponse, User } from './types';
+import type { Department, EventItem, EventTypeCatalogItem, Role, SafetyResponse, User } from './types';
 
 /** `/api/dashboard/supervisor` 回傳之 team 項目 */
 export type SupervisorTeamMemberApi = {
@@ -9,6 +9,7 @@ export type SupervisorTeamMemberApi = {
   status: string;
   reported_at: string | null;
   needs_follow_up: boolean;
+  phone?: string | null;
 };
 
 export type SupervisorDashboardApi = {
@@ -33,6 +34,17 @@ export type AdminDashboardApi = {
 export type PortalNotificationRow = {
   id: string;
   eventId: string;
+  channel: string;
+  status: string;
+  sentAt: string | null;
+};
+
+export type FailedNotificationRow = {
+  id: string;
+  eventId: string;
+  userId: string;
+  userName: string;
+  department: string | null;
   channel: string;
   status: string;
   sentAt: string | null;
@@ -155,6 +167,11 @@ export async function getDepartments(): Promise<Department[]> {
   return data.departments;
 }
 
+export async function getEventTypesApi(): Promise<EventTypeCatalogItem[]> {
+  const data = await apiFetch<{ eventTypes: EventTypeCatalogItem[] }>('/api/event-types');
+  return data.eventTypes;
+}
+
 export async function getUsers(): Promise<User[]> {
   const data = await apiFetch<{ users: User[] }>('/api/users');
   return data.users;
@@ -178,6 +195,8 @@ export async function createEventApi(
     description: string;
     startAt: string;
     targetDepartmentIds: string[];
+    /** 與 type=Other 併用：後端會先寫入 event_types 再建立事件 */
+    customTypeName?: string;
   },
 ): Promise<{ message: string; event: EventItem }> {
   return apiFetch('/api/events', {
@@ -189,6 +208,9 @@ export async function createEventApi(
       description: body.description,
       startAt: body.startAt,
       targetDepartmentIds: body.targetDepartmentIds,
+      ...(body.customTypeName != null && body.customTypeName !== ''
+        ? { customTypeName: body.customTypeName }
+        : {}),
     }),
   });
 }
@@ -267,12 +289,20 @@ export async function submitReportApi(payload: {
   );
 }
 
-export async function getSupervisorDashboardApi(): Promise<SupervisorDashboardApi> {
-  return apiFetch<SupervisorDashboardApi>('/api/dashboard/supervisor');
+export async function getSupervisorDashboardApi(eventId?: string): Promise<SupervisorDashboardApi> {
+  const q =
+    eventId && eventId.trim() !== ''
+      ? `?event_id=${encodeURIComponent(eventId.trim())}`
+      : '';
+  return apiFetch<SupervisorDashboardApi>(`/api/dashboard/supervisor${q}`);
 }
 
-export async function getAdminDashboardApi(): Promise<AdminDashboardApi> {
-  return apiFetch<AdminDashboardApi>('/api/dashboard/admin');
+export async function getAdminDashboardApi(eventId?: string): Promise<AdminDashboardApi> {
+  const q =
+    eventId && eventId.trim() !== ''
+      ? `?event_id=${encodeURIComponent(eventId.trim())}`
+      : '';
+  return apiFetch<AdminDashboardApi>(`/api/dashboard/admin${q}`);
 }
 
 export async function getMyNotificationsApi(): Promise<{ notifications: PortalNotificationRow[] }> {
@@ -286,6 +316,16 @@ export async function sendEventRemindersApi(eventId: string): Promise<{
   total_team: number;
 }> {
   return apiFetch(`/api/events/${encodeURIComponent(eventId)}/reminders`, {
+    method: 'POST',
+  });
+}
+
+export async function getFailedNotificationsForEventApi(eventId: string): Promise<{ rows: FailedNotificationRow[] }> {
+  return apiFetch(`/api/events/${encodeURIComponent(eventId)}/notifications/failed`);
+}
+
+export async function retryFailedNotificationApi(notificationId: string): Promise<{ notification: PortalNotificationRow }> {
+  return apiFetch(`/api/notifications/${encodeURIComponent(notificationId)}/retry`, {
     method: 'POST',
   });
 }

@@ -40,6 +40,11 @@ def get_departments(db: Session = Depends(get_db)):
     return {"departments": _portal.list_departments(db)}
 
 
+@router.get("/event-types")
+def list_event_types(db: Session = Depends(get_db)):
+    return {"eventTypes": _portal.list_event_types(db)}
+
+
 @router.get("/users")
 def get_users(db: Session = Depends(get_db)):
     return {"users": _portal.list_users(db)}
@@ -227,3 +232,23 @@ def update_my_profile(
 @router.get("/notifications/me")
 def my_notifications(actor: CurrentUser, db: Session = Depends(get_db)):
     return {"notifications": _portal.notifications_for_user(db, actor)}
+
+
+@router.get("/events/{event_id}/notifications/failed")
+def failed_notifications_for_event(
+    event_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    eid = _parse_uuid(event_id, name="event_id")
+    return {"rows": _portal.failed_notifications_for_event(db, actor_id=actor, event_id=eid)}
+
+
+@router.post("/notifications/{notification_id}/retry")
+def retry_notification(
+    notification_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    nid = _parse_uuid(notification_id, name="notification_id")
+    return {"notification": _portal.retry_failed_notification(db, actor_id=actor, notification_id=nid)}

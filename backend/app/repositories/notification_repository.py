@@ -11,6 +11,10 @@ from app.models.notification import Notification
 
 
 class NotificationRepository:
+    def get_by_id(self, db: Session, notification_id: uuid.UUID) -> Optional[Notification]:
+        stmt = select(Notification).where(Notification.notification_id == notification_id)
+        return db.execute(stmt).scalar_one_or_none()
+
     def get_by_event_user_channel(
         self, db: Session, event_id: uuid.UUID, user_id: uuid.UUID, channel: str
     ) -> Optional[Notification]:
@@ -29,6 +33,18 @@ class NotificationRepository:
             .where(Notification.user_id == user_id)
             .order_by(Notification.sent_at.desc())
         )
+        return list(db.scalars(stmt).all())
+
+    def list_failed_for_event(
+        self, db: Session, event_id: uuid.UUID, *, channel_contains: str | None = None
+    ) -> list[Notification]:
+        stmt = (
+            select(Notification)
+            .where(Notification.event_id == event_id, Notification.status == "failed")
+            .order_by(Notification.sent_at.desc().nulls_last(), Notification.notification_id.desc())
+        )
+        if channel_contains:
+            stmt = stmt.where(Notification.channel.ilike(f"%{channel_contains}%"))
         return list(db.scalars(stmt).all())
 
     def create_or_update_status(

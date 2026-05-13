@@ -41,10 +41,18 @@ export interface Department {
   parentId: string | null;
 }
 
+/** GET /api/event-types — 對應資料庫 event_types 表（events.event_type_id） */
+export interface EventTypeCatalogItem {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface EventItem {
   id: string;
   title: string;
-  type: 'Earthquake' | 'Typhoon' | 'Fire' | 'Other';
+  /** 內建為 Earthquake / Typhoon / Fire / Other，自訂類型為後端回傳的顯示名 */
+  type: string;
   description: string;
   targetDepartmentIds: string[];
   status: 'draft' | 'active' | 'closed';
