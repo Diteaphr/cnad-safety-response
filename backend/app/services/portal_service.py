@@ -770,6 +770,11 @@ class PortalService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password.",
             )
+        if user.status != "active":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is inactive.",
+            )
         roles = _role_names(user)
         token = create_access_token(user.user_id, roles)
         return {
