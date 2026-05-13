@@ -14,6 +14,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.base import Base
+from app.core.passwords import hash_password
 from app.models.department import Department
 from app.models.event import Event
 from app.models.event_department import EventDepartment
@@ -80,6 +81,7 @@ def insert_demo_entities(db: Session) -> None:
 
     # Insert order must satisfy fk_users_manager_id (manager row must exist first).
     users_spec = [
+        (ids.U_08, "ADM002", "Test Admin", "testadmin@company.com", ids.D_OPS, None, None),
         (ids.U_04, "ADM001", "Admin User", "admin@company.com", ids.D_OPS, None, "+886-2-7000-0001"),
         (ids.U_02, "EMP002", "Jeffery Liao", "jeffery@company.com", ids.D_RD, ids.U_04, "+886-912-555-202"),
         (ids.U_03, "EMP003", "Kelly Lin", "kelly@company.com", ids.D_HR, ids.U_04, "+886-912-555-203"),
@@ -97,11 +99,15 @@ def insert_demo_entities(db: Session) -> None:
         ids.U_05: [role_employee],
         ids.U_06: [role_employee],
         ids.U_07: [role_employee],
+        ids.U_08: [role_admin],
     }
+
+    _TEST_ADMIN_PASSWORD = hash_password("admin1234")
 
     for spec in users_spec:
         uid, emp_no, name, email, dept_id, mgr_id = spec[:6]
         phone_val = spec[6] if len(spec) > 6 else None
+        pw = _TEST_ADMIN_PASSWORD if uid == ids.U_08 else None
         db.merge(
             User(
                 user_id=uid,
@@ -112,6 +118,7 @@ def insert_demo_entities(db: Session) -> None:
                 manager_id=mgr_id,
                 status="active",
                 phone=phone_val,
+                password_hash=pw,
             )
         )
         db.flush()
