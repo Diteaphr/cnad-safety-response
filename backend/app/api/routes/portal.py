@@ -67,7 +67,7 @@ def demo_accounts():
 
 @router.post("/auth/register")
 def register_account(payload: RegisterIn, db: Session = Depends(get_db)):
-    return _portal.register(db, payload)
+    raise HTTPException(status_code=403, detail="Registration is disabled.")
 
 
 @router.post("/auth/login")
@@ -89,13 +89,38 @@ def bootstrap(actor: CurrentUser, db: Session = Depends(get_db)):
     return _portal.bootstrap(db, actor)
 
 
+def _dispatch_activation_background(event_id: uuid.UUID) -> None:
+    """Run notification fan-out in a background task (dev mode without Pub/Sub)."""
+    from app.services.notification_dispatch import dispatch_activation_notifications
+    db = SessionLocal()
+    try:
+        dispatch_activation_notifications(db, event_id)
+    except Exception:
+        logger.exception("Background activation dispatch failed for event %s", event_id)
+    finally:
+        db.close()
+
+
+def _schedule_activation_dispatch(event_id: uuid.UUID, background_tasks: BackgroundTasks) -> None:
+    if settings.use_gcp:
+        from app.services.integrations.pubsub_placeholder import publish_notification_event
+
+        publish_notification_event({"kind": "activation", "event_id": str(event_id)})
+    else:
+        background_tasks.add_task(_dispatch_activation_background, event_id)
+
+
 @router.post("/events")
 def create_event(
     payload: CreateEventIn,
     actor: CurrentUser,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    return _portal.create_event(db, actor_id=actor, payload=payload)
+    result = _portal.create_event(db, actor_id=actor, payload=payload)
+    eid = _parse_uuid(result["event"]["id"], name="event_id")
+    _schedule_activation_dispatch(eid, background_tasks)
+    return result
 
 
 @router.put("/events/{event_id}")
@@ -109,18 +134,6 @@ def update_event(
     return _portal.update_event(db, actor_id=actor, event_id=eid, payload=payload)
 
 
-def _dispatch_activation_background(event_id: uuid.UUID) -> None:
-    """Run notification fan-out in a background task (dev mode without Pub/Sub)."""
-    from app.services.notification_dispatch import dispatch_activation_notifications
-    db = SessionLocal()
-    try:
-        dispatch_activation_notifications(db, event_id)
-    except Exception:
-        logger.exception("Background activation dispatch failed for event %s", event_id)
-    finally:
-        db.close()
-
-
 @router.post("/events/{event_id}/activate")
 def activate_event(
     event_id: str,
@@ -131,19 +144,8 @@ def activate_event(
 ):
     eid = _parse_uuid(event_id, name="event_id")
     result = _portal.activate_event(db, actor_id=actor, event_id=eid)
-
-    if settings.use_gcp:
-        # Production: publish one trigger message to Pub/Sub.
-        # The /api/internal/notifications/dispatch endpoint handles the fan-out
-        # when Pub/Sub push delivers the message to Cloud Run.
-        from app.services.integrations.pubsub_placeholder import publish_notification_event
-        publish_notification_event({"kind": "activation", "event_id": str(eid)})
-    else:
-        # Dev: run notification fan-out in a background task.
-        # FastAPI sends the HTTP response first, then executes the task —
-        # mimicking Pub/Sub's async behaviour without requiring a real broker.
-        background_tasks.add_task(_dispatch_activation_background, eid)
-
+    if result.get("dispatched"):
+        _schedule_activation_dispatch(eid, background_tasks)
     return result
 
 

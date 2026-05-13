@@ -931,6 +931,26 @@ textarea { min-height: 90px; resize: vertical; }
 .event-card-meta-row > span {
   line-height: 1.35;
 }
+.event-card-meta-row--with-close {
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px 14px;
+}
+.event-card-meta-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+}
+.event-card-meta-text > span {
+  line-height: 1.35;
+}
+.event-card-close-btn {
+  flex-shrink: 0;
+  align-self: center;
+}
 .event-state {
   padding: 4px 8px;
   border-radius: 999px;
@@ -3839,11 +3859,80 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 }
 
 .portal-event-picker {
+  position: relative;
   align-content: start;
   justify-items: stretch;
   align-self: stretch;
   margin-top: 0;
   margin-bottom: auto;
+}
+
+.portal-admin-fab {
+  position: fixed;
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  right: max(24px, env(safe-area-inset-right, 0px));
+  z-index: 40;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #1a5fb4, #0d3a82);
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(13, 58, 130, 0.35);
+  cursor: pointer;
+}
+.portal-admin-fab:hover {
+  filter: brightness(1.06);
+}
+
+.dash-page-heading .admin-dash-dept-chips {
+  margin-top: 12px;
+}
+.admin-dash-dept-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.admin-dash-dept-chips .event-filter-chip {
+  cursor: pointer;
+  font: inherit;
+}
+
+.admin-create-event-modal {
+  width: min(520px, 100%);
+  max-height: min(88vh, 720px);
+  overflow-y: auto;
+}
+.admin-create-event-modal h3 {
+  margin-top: 0;
+}
+
+.dash-dept-ranking-hint {
+  margin: 0 0 10px;
+}
+
+.dash-dept-ranking-list .dash-dept-rank-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  border-radius: 10px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.dash-dept-ranking-list .dash-dept-rank-row:hover {
+  background: rgba(20, 58, 98, 0.06);
+}
+.dash-dept-ranking-list .dash-dept-rank-row.is-active {
+  box-shadow: inset 0 0 0 2px rgba(26, 95, 180, 0.45);
+  background: rgba(26, 95, 180, 0.08);
 }
 
 .portal-event-picker > h2,

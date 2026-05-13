@@ -90,6 +90,26 @@ def test_admin_create_user_basic(client, make_user):
     assert "employee" in user["roles"]
     assert "password" not in user
     assert "password_hash" not in user
+    assert "temporaryPassword" not in resp.json()
+
+
+def test_admin_create_user_omitted_password_generates_temp(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+
+    resp = client.post(
+        ADMIN_USERS,
+        json={"name": "Gen", "email": "genuser@test.com"},
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "temporaryPassword" in body
+    tp = body["temporaryPassword"]
+    assert isinstance(tp, str) and len(tp) >= 8
+
+    login = client.post("/api/auth/login", json={"email": "genuser@test.com", "password": tp})
+    assert login.status_code == 200
 
 
 def test_admin_create_user_with_department_and_manager(client, make_user, make_department):

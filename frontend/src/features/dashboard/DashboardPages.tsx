@@ -336,6 +336,9 @@ export function AdminDashboardPage({
   dashboardFreshAt,
   dashMismatchHint,
   onBackToEvents,
+  selectedDepartment,
+  onSelectDepartment,
+  deptRankingSourceRows,
 }: {
   event: EventItem | null;
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
@@ -345,10 +348,16 @@ export function AdminDashboardPage({
   dashboardFreshAt: number | null;
   dashMismatchHint: string | null;
   onBackToEvents: () => void;
+  /** When set, dashboard KPIs and lists are scoped to this department name (admin only). */
+  selectedDepartment: string | null;
+  onSelectDepartment: (departmentName: string | null) => void;
+  /** Full event roster for department ranking fallback (when API breakdown is empty). Keeps % correct while `rows` is filtered. */
+  deptRankingSourceRows?: Array<{ id: string; name: string; department: string; status: 'safe' | 'need_help' | 'pending'; note?: string; phone?: string }>;
 }) {
   const { locale } = useLocale();
   const { dash } = getStrings(locale);
 
+  const rankingRows = deptRankingSourceRows ?? rows;
   const critical = rows.filter((row) => row.status === 'need_help');
   const pending = rows.filter((row) => row.status === 'pending');
 
@@ -379,6 +388,33 @@ export function AdminDashboardPage({
       <div className="dash-page-heading">
         <h1>{dash.adminTitle}</h1>
         <p className="muted-text">{dash.adminSubtitle}</p>
+        {selectedDepartment ? (
+          <p className="dash-scope-hint muted-text">{dash.adminDeptFilteredSubtitle(selectedDepartment)}</p>
+        ) : null}
+        <div className="admin-dash-dept-chips" role="group" aria-label={dash.deptRanking}>
+          <button
+            type="button"
+            className={`event-filter-chip${selectedDepartment === null ? ' is-active' : ''}`}
+            onClick={() => onSelectDepartment(null)}
+          >
+            {dash.deptFilterAll}
+          </button>
+          {[...deptList]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((d) => {
+              const active = selectedDepartment === d.name;
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  className={`event-filter-chip${active ? ' is-active' : ''}`}
+                  onClick={() => onSelectDepartment(active ? null : d.name)}
+                >
+                  {d.name}
+                </button>
+              );
+            })}
+        </div>
       </div>
 
       {dashMismatchHint ? <p className="dash-scope-hint muted-text">{dashMismatchHint}</p> : null}
@@ -413,31 +449,44 @@ export function AdminDashboardPage({
       <div className="grid-2">
         <section className="dash-panel-elevated">
           <h3 className="dash-subsection-title">{dash.deptRanking}</h3>
-          <div className="list">
+          <p className="muted-text small dash-dept-ranking-hint">{dash.deptRankingHint}</p>
+          <div className="list dash-dept-ranking-list">
             {deptBreakdown?.length ? (
               deptBreakdown.map((row) => {
                 const headcount = row.safe + row.need_help + row.pending;
                 const rate = headcount ? Math.round(((row.safe + row.need_help) / headcount) * 100) : 0;
+                const active = selectedDepartment === row.department;
                 return (
-                  <div className="list-item" key={row.department}>
+                  <button
+                    type="button"
+                    className={`list-item dash-dept-rank-row${active ? ' is-active' : ''}`}
+                    key={row.department}
+                    onClick={() => onSelectDepartment(active ? null : row.department)}
+                  >
                     <span>{row.department}</span>
                     <strong>
                       {rate}% · {dash.kpiSafe} {row.safe} / {dash.kpiNeedHelp} {row.need_help} / {dash.kpiNoResponse}{' '}
                       {row.pending}
                     </strong>
-                  </div>
+                  </button>
                 );
               })
             ) : (
               deptList.map((dept) => {
-                const deptRows = rows.filter((r) => r.department === dept.name);
+                const deptRows = rankingRows.filter((r) => r.department === dept.name);
                 const responded = deptRows.filter((r) => r.status !== 'pending').length;
                 const rate = deptRows.length ? Math.round((responded / deptRows.length) * 100) : 0;
+                const active = selectedDepartment === dept.name;
                 return (
-                  <div className="list-item" key={dept.id}>
+                  <button
+                    type="button"
+                    className={`list-item dash-dept-rank-row${active ? ' is-active' : ''}`}
+                    key={dept.id}
+                    onClick={() => onSelectDepartment(active ? null : dept.name)}
+                  >
                     <span>{dept.name}</span>
                     <strong>{rate}%</strong>
-                  </div>
+                  </button>
                 );
               })
             )}

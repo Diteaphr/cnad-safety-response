@@ -22,6 +22,7 @@ class UserOut(BaseModel):
     roles: List[Literal["employee", "supervisor", "admin"]]
     pushEnabled: bool = True
     managerId: Optional[str] = None
+    needsProfileCompletion: bool = False
 
 
 class EventItemOut(BaseModel):
@@ -30,7 +31,7 @@ class EventItemOut(BaseModel):
     type: str
     description: str
     targetDepartmentIds: List[str]
-    status: Literal["draft", "active", "closed"]
+    status: Literal["active", "closed"]
     startAt: str
     cardDepartment: Optional[str] = None
     venue: Optional[str] = None
@@ -121,7 +122,7 @@ class AdminUserCreateIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: Optional[str] = Field(default=None, min_length=8, max_length=128)
     phone: Optional[str] = Field(default=None, max_length=50)
     employeeNo: Optional[str] = Field(default=None, max_length=50)
     departmentId: Optional[str] = None

@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ConfirmModal } from './components/ConfirmModal';
 import { Layout } from './components/Layout';
 import { Toast } from './components/Toast';
 import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
 import { DirectReportsListPage } from './profile/DirectReportsListPage';
+import { ProfileOnboardingPage } from './profile/ProfileOnboardingPage';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
-import { LoginPage, RegisterPage, RoleSelectionPage } from './features/auth/AuthScreens';
+import { LoginPage, RoleSelectionPage } from './features/auth/AuthScreens';
 import { SupervisorDashboardPage, AdminDashboardPage, TeamDashboardHomePage } from './features/dashboard/DashboardPages';
-import { EventManagementPage, EventSelectionPage, NotificationPage, UserManagementPage } from './features/events/EventAndAdminPages';
+import {
+  EventManagementPage,
+  EventSelectionPage,
+  GlobalNotificationInboxPage,
+  UserManagementPage,
+} from './features/events/EventAndAdminPages';
 import {
   EmployeeHomePage,
   MemberPriorityHomePage,
@@ -15,7 +20,6 @@ import {
   type MemberHomeRow,
 } from './features/member/memberScreens';
 import {
-  activateEventApi,
   clearAccessToken,
   closeEventApi,
   createEventApi,
@@ -25,29 +29,20 @@ import {
   getDepartments,
   getEventTypesApi,
   getEvents,
-  getFailedNotificationsForEventApi,
   getMyNotificationsApi,
   getReports,
   getSupervisorDashboardApi,
   getUsers,
   loginDemoUserApi,
   loginWithEmailApi,
-  retryFailedNotificationApi,
   submitReportApi,
   sendEventRemindersApi,
   type AdminDashboardApi,
   type DemoAccount,
-  type FailedNotificationRow,
   type PortalNotificationRow,
   type SupervisorDashboardApi,
 } from './api';
-import {
-  appendReminderAudit,
-  buildNotificationPageSummary,
-  loadContactedMap,
-  reminderHistoryForEvent,
-  saveContactedMap,
-} from './lib/eventLocalPersist';
+import { appendReminderAudit, loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
 import { useLocale } from './locale/LocaleContext';
 import { getStrings } from './locale/strings';
@@ -60,8 +55,6 @@ import type {
   ToastState,
   User,
 } from './types';
-
-type AuthMode = 'login' | 'register';
 
 interface SessionState {
   isLoggedIn: boolean;
@@ -86,7 +79,6 @@ function App() {
   );
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -108,20 +100,15 @@ function App() {
   const [supervisorDashboard, setSupervisorDashboard] = useState<SupervisorDashboardApi | null>(null);
   const [adminDashboard, setAdminDashboard] = useState<AdminDashboardApi | null>(null);
   const [myNotifications, setMyNotifications] = useState<PortalNotificationRow[]>([]);
-  const [failedNotificationRows, setFailedNotificationRows] = useState<FailedNotificationRow[]>([]);
-  const [loadingFailedRows, setLoadingFailedRows] = useState(false);
   const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<number | null>(null);
   const [contactedByEvent, setContactedByEvent] = useState<Record<string, Record<string, boolean>>>({});
-  const [auditEpoch, setAuditEpoch] = useState(0);
-  const [showActivateModal, setShowActivateModal] = useState(false);
-  const [eventToActivate, setEventToActivate] = useState<string | null>(null);
   const [selectedEmployeeEventId, setSelectedEmployeeEventId] = useState('');
   const [selectedSupervisorEventId, setSelectedSupervisorEventId] = useState('');
   const [selectedAdminEventId, setSelectedAdminEventId] = useState('');
-  const [selectedNotificationEventId, setSelectedNotificationEventId] = useState('');
   const eventsSelectionInitialized = useRef(false);
   const supervisorDashEventIdRef = useRef('');
   const adminDashEventIdRef = useRef('');
+  const [adminDepartmentFilter, setAdminDepartmentFilter] = useState<string | null>(null);
 
   const demoAccountsForLogin = useMemo(
     () => (demoAccounts.length > 0 ? demoAccounts : demoAccountsFallbackSeeded),
@@ -169,7 +156,6 @@ function App() {
     setSelectedEmployeeEventId(id);
     setSelectedSupervisorEventId(id);
     setSelectedAdminEventId(id);
-    setSelectedNotificationEventId(id);
   }, [events]);
 
   useEffect(() => {
@@ -194,7 +180,11 @@ function App() {
 
   const employeeAccessibleEvents = useMemo(() => {
     if (!employeeDeptId) return [];
-    return events.filter((event) => event.status !== 'draft' && event.targetDepartmentIds.includes(employeeDeptId));
+    return events.filter((event) => {
+      if (event.status !== 'active' && event.status !== 'closed') return false;
+      const tids = event.targetDepartmentIds;
+      return tids.length === 0 || tids.includes(employeeDeptId);
+    });
   }, [events, employeeDeptId]);
 
   const subordinateUserIds = useMemo(
@@ -350,7 +340,6 @@ function App() {
       return 'member-home';
     }
     if (navKey === 'admin-event-detail') return 'admin-dashboard';
-    if (navKey === 'notifications-event-detail') return 'notifications';
     if (navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history') return 'profile';
     return navKey;
   }, [navKey, supervisorOpenedDetailFrom]);
@@ -536,6 +525,11 @@ function App() {
     scopedClientRows,
   ]);
 
+  const adminEventDetailRows = useMemo(() => {
+    if (!adminDepartmentFilter) return employeeRows;
+    return employeeRows.filter((r) => r.department === adminDepartmentFilter);
+  }, [adminDepartmentFilter, employeeRows]);
+
   const stats = useMemo(() => {
     if (session.currentRole === 'supervisor' && supervisorViewAligned && supervisorDashboard) {
       const kpis = supervisorDashboard.kpis;
@@ -545,6 +539,15 @@ function App() {
       const pending = kpis.pending;
       const responseRate = totalTeam ? Math.round(((safe + needHelp) / totalTeam) * 100) : 0;
       return { total: totalTeam, safe, needHelp, pending, responseRate };
+    }
+    if (session.currentRole === 'admin' && adminDepartmentFilter) {
+      const scoped = employeeRows.filter((r) => r.department === adminDepartmentFilter);
+      const total = scoped.length;
+      const safe = scoped.filter((r) => r.status === 'safe').length;
+      const needHelp = scoped.filter((r) => r.status === 'need_help').length;
+      const pending = scoped.filter((r) => r.status === 'pending').length;
+      const responseRate = total ? Math.round(((safe + needHelp) / total) * 100) : 0;
+      return { total, safe, needHelp, pending, responseRate };
     }
     if (session.currentRole === 'admin' && adminViewAligned && adminDashboard) {
       const kpis = adminDashboard.kpis;
@@ -561,7 +564,16 @@ function App() {
     const pending = total - safe - needHelp;
     const responseRate = total ? Math.round(((safe + needHelp) / total) * 100) : 0;
     return { total, safe, needHelp, pending, responseRate };
-  }, [session.currentRole, supervisorViewAligned, supervisorDashboard, adminViewAligned, adminDashboard, scopedClientRows]);
+  }, [
+    session.currentRole,
+    supervisorViewAligned,
+    supervisorDashboard,
+    adminViewAligned,
+    adminDashboard,
+    adminDepartmentFilter,
+    employeeRows,
+    scopedClientRows,
+  ]);
 
   const showToast = useCallback((next: ToastState) => {
     setToast(next);
@@ -606,13 +618,20 @@ function App() {
   }, [session.isLoggedIn, session.currentRole, refreshOperationalData]);
 
   useEffect(() => {
+    setAdminDepartmentFilter(null);
+  }, [selectedAdminEventId]);
+
+  useEffect(() => {
+    if (navKey !== 'admin-event-detail') setAdminDepartmentFilter(null);
+  }, [navKey]);
+
+  useEffect(() => {
     if (!session.isLoggedIn || session.currentRole === null) return undefined;
     const watchNav =
       navKey === 'supervisor-event-detail' ||
       navKey === 'team-dashboard-home' ||
       navKey === 'admin-event-detail' ||
-      navKey === 'notifications' ||
-      navKey === 'notifications-event-detail';
+      navKey === 'notifications';
     if (!watchNav) return undefined;
     const tid = window.setInterval(() => void refreshOperationalData(), 28_000);
     return () => window.clearInterval(tid);
@@ -674,7 +693,6 @@ function App() {
           alreadySafe: out.already_safe,
           totalTeam: out.total_team,
         });
-        setAuditEpoch((n) => n + 1);
         showToast({
           tone: 'success',
           message: `${out.message}: dispatched ${out.sent} · skipped safe ${out.already_safe}`,
@@ -836,8 +854,8 @@ function App() {
     }
   };
 
-  const createEvent = async () => {
-    if (!session.user) return;
+  const createEvent = async (): Promise<boolean> => {
+    if (!session.user) return false;
     const custom = eventForm.type.trim().toLowerCase() === 'other' ? eventForm.customType.trim() : '';
     try {
       const out = await createEventApi(session.user.id, {
@@ -849,7 +867,10 @@ function App() {
         ...(custom ? { customTypeName: custom } : {}),
       });
       setEvents((prev) => [out.event, ...prev]);
-      showToast({ tone: 'success', message: 'Event template saved. You can activate it when an incident starts.' });
+      showToast({
+        tone: 'success',
+        message: 'Event is live. Activation notifications were sent to targeted employees.',
+      });
       try {
         const typeRows = await getEventTypesApi();
         setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
@@ -857,31 +878,10 @@ function App() {
         /* ignore */
       }
       await refreshOperationalData();
+      return true;
     } catch (e) {
       showToast({ tone: 'danger', message: e instanceof Error ? e.message : '建立失敗' });
-    }
-  };
-
-  const requestActivateEvent = (eventId: string) => {
-    setEventToActivate(eventId);
-    setShowActivateModal(true);
-  };
-
-  const activateEvent = async () => {
-    if (!eventToActivate || !session.user) return;
-    try {
-      const out = await activateEventApi(session.user.id, eventToActivate);
-      await refreshOperationalData();
-      const activatedId = out.event.id;
-      setSelectedAdminEventId(activatedId);
-      setSelectedSupervisorEventId(activatedId);
-      setSelectedEmployeeEventId(activatedId);
-      setSelectedNotificationEventId(activatedId);
-      setShowActivateModal(false);
-      setEventToActivate(null);
-      showToast({ tone: 'warning', message: 'Event activated. Notifications will be sent to target users.' });
-    } catch (e) {
-      showToast({ tone: 'danger', message: e instanceof Error ? e.message : '啟用失敗' });
+      return false;
     }
   };
 
@@ -896,73 +896,11 @@ function App() {
     }
   };
 
-  const notificationLiveSummary = useMemo(() => {
-    const eid = selectedNotificationEventId;
-    const evt = events.find((x) => x.id === eid);
-    const tids = evt?.targetDepartmentIds ?? [];
-    const targeted = users.filter(
-      (u) => u.roles.includes('employee') && (tids.length === 0 || tids.includes(u.departmentId)),
-    ).length;
-    const uniq = new Set(responses.filter((r) => r.eventId === eid).map((r) => r.userId));
-    const hist = reminderHistoryForEvent(eid);
-    const rowsMine = myNotifications.filter((n) => n.eventId === eid);
-    return buildNotificationPageSummary({
-      reminderHistory: hist,
-      apiRowsSameUser: rowsMine.map((r) => ({ channel: r.channel, status: r.status })),
-      targetedEmployeeCountForEvent: targeted,
-      responsesCountForEvent: uniq.size,
-    });
-  }, [events, users, responses, selectedNotificationEventId, myNotifications, auditEpoch]);
-
-  const reloadFailedNotificationRows = useCallback(async () => {
-    if (!session.isLoggedIn || session.currentRole !== 'admin' || !selectedNotificationEventId) {
-      setFailedNotificationRows([]);
-      return;
-    }
-    setLoadingFailedRows(true);
-    try {
-      const out = await getFailedNotificationsForEventApi(selectedNotificationEventId);
-      setFailedNotificationRows(out.rows);
-    } catch {
-      setFailedNotificationRows([]);
-    } finally {
-      setLoadingFailedRows(false);
-    }
-  }, [session.isLoggedIn, session.currentRole, selectedNotificationEventId]);
-
-  useEffect(() => {
-    if (navKey !== 'notifications-event-detail') return;
-    void reloadFailedNotificationRows();
-  }, [navKey, reloadFailedNotificationRows]);
-
   const contactedForSupervisorRow = contactedByEvent[selectedSupervisorEventId] ?? {};
 
   const pendingRatioHigh =
     session.currentRole === 'supervisor' && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
   if (!session.isLoggedIn) {
-    if (authMode === 'register') {
-      return (
-        <RegisterPage
-          departments={departments}
-          loading={!catalogLoaded}
-          error={catalogError}
-          onRegisterSuccess={(user) => {
-            mergeUserIntoList(user);
-            const roles = user.roles;
-            const initialRole = roles[0];
-            setSession({
-              isLoggedIn: true,
-              user,
-              availableRoles: roles,
-              currentRole: roles.length === 1 ? initialRole : null,
-            });
-            setNavKey(roleDefaultNav[initialRole]);
-            setAuthMode('login');
-          }}
-          onBack={() => setAuthMode('login')}
-        />
-      );
-    }
     return (
       <LoginPage
         accounts={demoAccountsForLogin}
@@ -970,13 +908,28 @@ function App() {
         error={catalogError}
         onLogin={handleLogin}
         onEmailLogin={handleEmailLogin}
-        onGoRegister={() => setAuthMode('register')}
       />
     );
   }
 
   if (!session.currentRole) {
     return <RoleSelectionPage roles={session.availableRoles} onPickRole={pickRole} />;
+  }
+
+  if (session.user?.needsProfileCompletion) {
+    return (
+      <>
+        <ProfileOnboardingPage
+          user={session.user}
+          showToast={showToast}
+          onCompleted={(nextUser) => {
+            mergeUserIntoList(nextUser);
+            setSession((prev) => ({ ...prev, user: nextUser }));
+          }}
+        />
+        <Toast toast={toast} />
+      </>
+    );
   }
 
   return (
@@ -1102,67 +1055,43 @@ function App() {
               setSelectedAdminEventId(eventId);
               setNavKey('admin-event-detail');
             }}
+            adminQuickCreate={{
+              eventForm,
+              setEventForm,
+              eventTypeCatalog,
+              onSubmitCreate: async () => {
+                const ok = await createEvent();
+                if (ok) setNavKey('event-management');
+                return ok;
+              },
+            }}
           />
         )}
         {navKey === 'admin-event-detail' && (
           <AdminDashboardPage
             event={selectedAdminEvent}
             stats={stats}
-            rows={employeeRows}
+            rows={adminEventDetailRows}
             departments={departments}
             deptBreakdown={adminViewAligned && adminDashboard ? adminDashboard.departments : undefined}
+            deptRankingSourceRows={employeeRows}
             dashboardFreshAt={dashboardUpdatedAt}
             dashMismatchHint={adminDashMismatchHint}
             onBackToEvents={() => setNavKey('admin-dashboard')}
+            selectedDepartment={adminDepartmentFilter}
+            onSelectDepartment={setAdminDepartmentFilter}
           />
         )}
-        {navKey === 'event-management' && (
-          <EventManagementPage
-            events={events}
-            eventTypeCatalog={eventTypeCatalog}
-            eventForm={eventForm}
-            setEventForm={setEventForm}
-            onCreateEvent={createEvent}
-            onActivate={requestActivateEvent}
-            onClose={closeEvent}
+        {navKey === 'event-management' && <EventManagementPage events={events} onClose={closeEvent} />}
+        {navKey === 'user-management' && (
+          <UserManagementPage
+            users={users}
+            departments={departments}
+            showToast={showToast}
+            onUserCreated={(u) => mergeUserIntoList(u)}
           />
         )}
-        {navKey === 'user-management' && <UserManagementPage users={users} departments={departments} />}
-        {navKey === 'notifications' && (
-          <EventSelectionPage
-            variant="notification"
-            events={events}
-            selectedEventId={selectedNotificationEventId}
-            onSelectEvent={(eventId) => {
-              setSelectedNotificationEventId(eventId);
-              setNavKey('notifications-event-detail');
-            }}
-          />
-        )}
-        {navKey === 'notifications-event-detail' && (
-          <NotificationPage
-            summary={notificationLiveSummary}
-            failedRows={failedNotificationRows}
-            loadingFailed={loadingFailedRows}
-            canSendReminder={session.currentRole === 'supervisor'}
-            canManageFailed={session.currentRole === 'admin'}
-            onSendReminder={() => dispatchRemindersForEvent(selectedNotificationEventId)}
-            onRefreshFailed={() => void reloadFailedNotificationRows()}
-            onRetryFailed={(notificationId) => {
-              if (session.currentRole !== 'admin') return;
-              void (async () => {
-                try {
-                  await retryFailedNotificationApi(notificationId);
-                  await reloadFailedNotificationRows();
-                  showToast({ tone: 'success', message: '已重送該筆失敗通知。' });
-                } catch (e) {
-                  showToast({ tone: 'danger', message: e instanceof Error ? e.message : '重送失敗' });
-                }
-              })();
-            }}
-            onBackToEvents={() => setNavKey('notifications')}
-          />
-        )}
+        {navKey === 'notifications' && <GlobalNotificationInboxPage rows={myNotifications} />}
         {navKey === 'profile' && (
           <ProfileSettingsPage
             user={session.user!}
@@ -1171,6 +1100,10 @@ function App() {
             departments={departments}
             showToast={showToast}
             onLogout={logout}
+            onProfileUpdated={(nextUser) => {
+              mergeUserIntoList(nextUser);
+              setSession((prev) => (prev.user ? { ...prev, user: nextUser } : prev));
+            }}
             onNavigateToDirectReportsList={() => setNavKey('profile-direct-reports-list')}
             onNavigateToSubordinateHistory={(userId) => {
               setProfileSubordinateUserId(userId);
@@ -1202,14 +1135,6 @@ function App() {
         ) : null}
       </Layout>
 
-      <ConfirmModal
-        open={showActivateModal}
-        title="Activate Emergency Event?"
-        description="Activating this event will send push notifications immediately to targeted departments."
-        confirmText="Activate and Send"
-        onCancel={() => setShowActivateModal(false)}
-        onConfirm={activateEvent}
-      />
       <Toast toast={toast} />
     </>
   );

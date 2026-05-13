@@ -18,7 +18,11 @@ export function DirectReportEventHistoryPage({
 
   const rows = useMemo(() => {
     const list = events
-      .filter((e) => e.status !== 'draft' && e.targetDepartmentIds.includes(subordinate.departmentId))
+      .filter(
+        (e) =>
+          (e.status === 'active' || e.status === 'closed') &&
+          (e.targetDepartmentIds.length === 0 || e.targetDepartmentIds.includes(subordinate.departmentId)),
+      )
       .map((event) => {
         const latest = responses
           .filter((r) => r.eventId === event.id && r.userId === subordinate.id)

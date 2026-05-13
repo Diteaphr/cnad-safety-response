@@ -2,10 +2,12 @@ import { EventCard } from '../../components/EventCard';
 import { StatCard } from '../../components/StatCard';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { FailedNotificationRow } from '../../api';
+import { adminCreateUserApi, type PortalNotificationRow } from '../../api';
 import type { Department, EventItem, NotificationSummary, User } from '../../types';
+import { Plus } from 'lucide-react';
 
 function typeLabel(ev: string, p: ReturnType<typeof getStrings>['portal']) {
   switch (ev) {
@@ -22,10 +24,92 @@ function typeLabel(ev: string, p: ReturnType<typeof getStrings>['portal']) {
   }
 }
 
-function statusChip(status: EventItem['status'], p: ReturnType<typeof getStrings>['portal']) {
-  if (status === 'draft') return p.eventChipDraft;
+function statusChip(status: EventItem['status'] | 'draft', p: ReturnType<typeof getStrings>['portal']) {
   if (status === 'active') return p.eventChipActive;
   return p.eventChipClosed;
+}
+
+const BUILTIN_TYPE_ORDER = ['Earthquake', 'Typhoon', 'Fire', 'Other'] as const;
+
+function AdminQuickCreateFormFields({
+  p,
+  eventForm,
+  setEventForm,
+  eventTypeCatalog,
+}: {
+  p: ReturnType<typeof getStrings>['portal'];
+  eventForm: { title: string; type: string; customType: string; description: string; startAt: string };
+  setEventForm: (value: {
+    title: string;
+    type: string;
+    customType: string;
+    description: string;
+    startAt: string;
+  }) => void;
+  eventTypeCatalog: { name: string }[] | null;
+}) {
+  const typeSelectRows = useMemo(() => {
+    if (!eventTypeCatalog?.length) {
+      return BUILTIN_TYPE_ORDER.map((name) => ({ name }));
+    }
+    const rank = (name: string) => {
+      const i = BUILTIN_TYPE_ORDER.indexOf(name as (typeof BUILTIN_TYPE_ORDER)[number]);
+      return i === -1 ? 100 : i;
+    };
+    return [...eventTypeCatalog].sort((a, b) => {
+      const d = rank(a.name) - rank(b.name);
+      return d !== 0 ? d : a.name.localeCompare(b.name);
+    });
+  }, [eventTypeCatalog]);
+
+  return (
+    <div className="event-form admin-quick-create-form">
+      <label className="event-form-field">
+        <span className="event-form-field-label">{p.placeholderEventTitle}</span>
+        <input
+          value={eventForm.title}
+          onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
+          placeholder={p.placeholderEventTitle}
+        />
+      </label>
+      <label className="event-form-field">
+        <span className="event-form-field-label">{p.formLabelEventType}</span>
+        <select value={eventForm.type} onChange={(e) => setEventForm({ ...eventForm, type: e.target.value })}>
+          {typeSelectRows.map((row) => (
+            <option key={row.name} value={row.name}>
+              {typeLabel(row.name, p)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {eventForm.type.trim().toLowerCase() === 'other' ? (
+        <label className="event-form-field">
+          <span className="event-form-field-label muted-text">{p.formLabelCustomTypeDetail}</span>
+          <input
+            value={eventForm.customType}
+            onChange={(e) => setEventForm({ ...eventForm, customType: e.target.value })}
+            placeholder={p.placeholderCustomType}
+          />
+        </label>
+      ) : null}
+      <label className="event-form-field">
+        <span className="event-form-field-label">{p.placeholderDescription}</span>
+        <textarea
+          value={eventForm.description}
+          onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
+          placeholder={p.placeholderDescription}
+        />
+      </label>
+      <label className="event-form-field">
+        <span className="event-form-field-label">{p.datetimeLabel}</span>
+        <input
+          type="datetime-local"
+          value={eventForm.startAt}
+          onChange={(e) => setEventForm({ ...eventForm, startAt: e.target.value })}
+        />
+      </label>
+    </div>
+  );
 }
 
 export function EventSelectionPage({
@@ -33,31 +117,115 @@ export function EventSelectionPage({
   events,
   selectedEventId,
   onSelectEvent,
+  adminQuickCreate,
 }: {
   variant: 'admin' | 'notification';
   events: EventItem[];
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
+  /** Admin FAB: full create form in modal; on success navigates to event list (no form on that page). */
+  adminQuickCreate?: {
+    eventForm: { title: string; type: string; customType: string; description: string; startAt: string };
+    setEventForm: (value: {
+      title: string;
+      type: string;
+      customType: string;
+      description: string;
+      startAt: string;
+    }) => void;
+    eventTypeCatalog: { name: string }[] | null;
+    onSubmitCreate: () => Promise<boolean>;
+  };
 }) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
   const title = variant === 'admin' ? p.adminGlobalEventCenter : p.notificationEventCenter;
-  const [statusFilter, setStatusFilter] = useState<'all' | EventItem['status']>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all');
   const filteredEvents = useMemo(
     () => (statusFilter === 'all' ? events : events.filter((ev) => ev.status === statusFilter)),
     [events, statusFilter],
   );
 
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const createSubmittingRef = useRef(false);
+  useEffect(() => {
+    createSubmittingRef.current = createSubmitting;
+  }, [createSubmitting]);
+
+  useEffect(() => {
+    if (!createModalOpen) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !createSubmittingRef.current) setCreateModalOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [createModalOpen]);
+
+  const submitQuickCreate = async () => {
+    if (!adminQuickCreate) return;
+    setCreateSubmitting(true);
+    try {
+      const ok = await adminQuickCreate.onSubmitCreate();
+      if (ok) setCreateModalOpen(false);
+    } finally {
+      setCreateSubmitting(false);
+    }
+  };
+
   return (
     <section className="page-section portal-event-picker">
+      {variant === 'admin' && adminQuickCreate && createModalOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !createSubmitting && setCreateModalOpen(false)}
+        >
+          <div
+            className="modal admin-create-event-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-create-event-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="admin-create-event-title">{p.adminOverviewCreateTitle}</h3>
+            <p className="muted-text small">{p.adminOverviewCreateBody}</p>
+            <AdminQuickCreateFormFields
+              p={p}
+              eventForm={adminQuickCreate.eventForm}
+              setEventForm={adminQuickCreate.setEventForm}
+              eventTypeCatalog={adminQuickCreate.eventTypeCatalog}
+            />
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                disabled={createSubmitting}
+                onClick={() => setCreateModalOpen(false)}
+              >
+                {p.adminCreateModalCancel}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={createSubmitting}
+                onClick={() => void submitQuickCreate()}
+              >
+                {createSubmitting ? '…' : p.createEventButton}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <h2>{title}</h2>
       <div className="event-filter-chips" role="tablist" aria-label={p.eventFilterLabel}>
-        {([
-          ['all', p.filterAll],
-          ['active', p.filterActive],
-          ['draft', p.filterDraft],
-          ['closed', p.filterClosed],
-        ] as const).map(([key, label]) => (
+        {(
+          [
+            ['all', p.filterAll],
+            ['active', p.filterActive],
+            ['closed', p.filterClosed],
+          ] as const
+        ).map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -82,109 +250,44 @@ export function EventSelectionPage({
           </button>
         ))}
       </div>
+      {variant === 'admin' && adminQuickCreate ? (
+        <button
+          type="button"
+          className="portal-admin-fab"
+          onClick={() => setCreateModalOpen(true)}
+          aria-label={p.fabCreateEventAria}
+          aria-haspopup="dialog"
+        >
+          <Plus size={26} strokeWidth={2.4} aria-hidden />
+        </button>
+      ) : null}
     </section>
   );
 }
 
-const BUILTIN_TYPE_ORDER = ['Earthquake', 'Typhoon', 'Fire', 'Other'] as const;
-
 export function EventManagementPage({
   events,
-  eventTypeCatalog,
-  eventForm,
-  setEventForm,
-  onCreateEvent,
-  onActivate,
   onClose,
 }: {
   events: EventItem[];
-  /** 來自 GET /api/event-types；null 時下拉僅顯示內建四類 */
-  eventTypeCatalog: { name: string }[] | null;
-  eventForm: { title: string; type: string; customType: string; description: string; startAt: string };
-  setEventForm: (value: {
-    title: string;
-    type: string;
-    customType: string;
-    description: string;
-    startAt: string;
-  }) => void;
-  onCreateEvent: () => void;
-  onActivate: (eventId: string) => void;
   onClose: (eventId: string) => void;
 }) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
 
-  const typeSelectRows = useMemo(() => {
-    if (!eventTypeCatalog?.length) {
-      return BUILTIN_TYPE_ORDER.map((name) => ({ name }));
-    }
-    const rank = (name: string) => {
-      const i = BUILTIN_TYPE_ORDER.indexOf(name as (typeof BUILTIN_TYPE_ORDER)[number]);
-      return i === -1 ? 100 : i;
-    };
-    return [...eventTypeCatalog].sort((a, b) => {
-      const d = rank(a.name) - rank(b.name);
-      return d !== 0 ? d : a.name.localeCompare(b.name);
-    });
-  }, [eventTypeCatalog]);
-
   return (
     <section className="page-section portal-event-mgmt">
       <h2>{p.eventManagement}</h2>
       <p className="muted-text">{p.eventManagementIntro}</p>
-      <div className="panel event-form">
-        <label className="event-form-field">
-          <span className="event-form-field-label">{p.placeholderEventTitle}</span>
-          <input value={eventForm.title} onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })} placeholder={p.placeholderEventTitle} />
-        </label>
-        <label className="event-form-field">
-          <span className="event-form-field-label">{p.formLabelEventType}</span>
-          <select
-            value={eventForm.type}
-            onChange={(e) => setEventForm({ ...eventForm, type: e.target.value })}
-          >
-            {typeSelectRows.map((row) => (
-              <option key={row.name} value={row.name}>
-                {typeLabel(row.name, p)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {eventForm.type.trim().toLowerCase() === 'other' ? (
-          <label className="event-form-field">
-            <span className="event-form-field-label muted-text">{p.formLabelCustomTypeDetail}</span>
-            <input
-              value={eventForm.customType}
-              onChange={(e) => setEventForm({ ...eventForm, customType: e.target.value })}
-              placeholder={p.placeholderCustomType}
-            />
-          </label>
-        ) : null}
-        <label className="event-form-field">
-          <span className="event-form-field-label">{p.placeholderDescription}</span>
-          <textarea value={eventForm.description} onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })} placeholder={p.placeholderDescription} />
-        </label>
-        <label className="event-form-field">
-          <span className="event-form-field-label">{p.datetimeLabel}</span>
-          <input type="datetime-local" value={eventForm.startAt} onChange={(e) => setEventForm({ ...eventForm, startAt: e.target.value })} />
-        </label>
-        <button className="btn primary" onClick={onCreateEvent} type="button">
-          {p.createEventButton}
-        </button>
-      </div>
       <div className="list event-mgmt-list">
         {events.map((event) => (
           <div key={event.id} className="panel event-mgmt-card">
-            <EventCard event={event} />
-            <div className="row-actions">
-              <button className="btn warning" onClick={() => onActivate(event.id)} type="button">
-                {p.activateButton}
-              </button>
-              <button className="btn ghost" onClick={() => onClose(event.id)} type="button">
-                {p.closeEventButton}
-              </button>
-            </div>
+            <EventCard
+              event={event}
+              managementClose={
+                event.status === 'active' ? { onClose: () => onClose(event.id), label: p.closeEventButton } : undefined
+              }
+            />
           </div>
         ))}
       </div>
@@ -192,7 +295,17 @@ export function EventManagementPage({
   );
 }
 
-export function UserManagementPage({ users: userList, departments: deptList }: { users: User[]; departments: Department[] }) {
+export function UserManagementPage({
+  users: userList,
+  departments: deptList,
+  showToast,
+  onUserCreated,
+}: {
+  users: User[];
+  departments: Department[];
+  showToast: (t: { tone: 'success' | 'warning' | 'danger' | 'info'; message: string }) => void;
+  onUserCreated: (user: User) => void;
+}) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
   const subordinateRows = userList.filter((user) => user.managerId);
@@ -213,12 +326,78 @@ export function UserManagementPage({ users: userList, departments: deptList }: {
         ...renderDepartmentTree(department.id, depth + 1),
       ];
     });
+
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newDeptId, setNewDeptId] = useState(deptList[0]?.id ?? '');
+  const [creating, setCreating] = useState(false);
+
+  const submitNewUser = async () => {
+    const name = newName.trim();
+    const email = newEmail.trim();
+    if (!name || !email) {
+      showToast({ tone: 'danger', message: 'Name and email are required.' });
+      return;
+    }
+    if (!newDeptId) {
+      showToast({ tone: 'danger', message: 'Select a department.' });
+      return;
+    }
+    setCreating(true);
+    try {
+      const out = await adminCreateUserApi({ name, email, departmentId: newDeptId });
+      onUserCreated(out.user);
+      setNewName('');
+      setNewEmail('');
+      if (out.temporaryPassword) {
+        showToast({ tone: 'success', message: p.userMgmtTempPassword(out.temporaryPassword) });
+      } else {
+        showToast({ tone: 'success', message: out.message });
+      }
+    } catch (e) {
+      showToast({ tone: 'danger', message: e instanceof Error ? e.message : 'Create failed' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <section className="page-section portal-user-mgmt">
       <h2>{p.userDeptManagement}</h2>
       <div className="grid-2">
         <section className="panel">
-          <h3>{p.employees}</h3>
+          <h3>{p.userMgmtAddAccount}</h3>
+          <div className="event-form" style={{ marginTop: 12 }}>
+            <label className="event-form-field">
+              <span className="event-form-field-label">{p.userMgmtNamePlaceholder}</span>
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={p.userMgmtNamePlaceholder} disabled={creating} />
+            </label>
+            <label className="event-form-field">
+              <span className="event-form-field-label">{p.userMgmtEmailPlaceholder}</span>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder={p.userMgmtEmailPlaceholder}
+                disabled={creating}
+                autoComplete="off"
+              />
+            </label>
+            <label className="event-form-field">
+              <span className="event-form-field-label">{p.userMgmtDeptLabel}</span>
+              <select value={newDeptId} onChange={(e) => setNewDeptId(e.target.value)} disabled={creating || deptList.length === 0}>
+                {deptList.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="btn primary" disabled={creating || deptList.length === 0} onClick={() => void submitNewUser()}>
+              {creating ? '…' : p.userMgmtCreateSubmit}
+            </button>
+          </div>
+          <h3 style={{ marginTop: 24 }}>{p.employees}</h3>
           {userList.map((user) => (
             <div className="list-item" key={user.id}>
               <div>
@@ -240,6 +419,47 @@ export function UserManagementPage({ users: userList, departments: deptList }: {
             </div>
           ))}
         </section>
+      </div>
+    </section>
+  );
+}
+
+export function GlobalNotificationInboxPage({ rows }: { rows: PortalNotificationRow[] }) {
+  const { locale } = useLocale();
+  const p = getStrings(locale).portal;
+  const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
+  const sorted = useMemo(
+    () =>
+      [...rows].sort((a, b) => {
+        const ta = a.sentAt ? new Date(a.sentAt).getTime() : 0;
+        const tb = b.sentAt ? new Date(b.sentAt).getTime() : 0;
+        return tb - ta;
+      }),
+    [rows],
+  );
+
+  return (
+    <section className="page-section portal-notifications-inbox">
+      <h2>{p.notificationInboxTitle}</h2>
+      <p className="muted-text">{p.notificationInboxIntro}</p>
+      <div className="list" style={{ marginTop: 16 }}>
+        {sorted.length === 0 ? (
+          <p className="empty">{p.notificationInboxEmpty}</p>
+        ) : (
+          sorted.map((row) => (
+            <article className="list-item" key={row.id}>
+              <div>
+                <strong>{row.eventTitle?.trim() ? row.eventTitle : row.eventId}</strong>
+                <p>
+                  {p.notificationInboxChannelLabel}: {row.channel} · {p.notificationInboxStatusLabel}: {row.status}
+                </p>
+                <p className="muted-text">
+                  {row.sentAt ? new Date(row.sentAt).toLocaleString(localeTag) : p.notSentYet}
+                </p>
+              </div>
+            </article>
+          ))
+        )}
       </div>
     </section>
   );
