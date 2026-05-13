@@ -4,6 +4,7 @@ Portal API — business logic for frontend SPA (three-layer: called only from AP
 
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import datetime, timezone
 from typing import Any, List, Optional
@@ -31,6 +32,10 @@ from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, CreateEvent
 from app.schemas.response import SafetyResponseCreate
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
+
+
+def _needs_profile_completion(user: User) -> bool:
+    return not (user.phone and str(user.phone).strip())
 
 
 def _parse_iso(dt: str) -> datetime:
@@ -69,6 +74,7 @@ class PortalService:
             "managerId": str(user.manager_id) if user.manager_id else None,
             "employeeCode": user.employee_no,
             "phone": user.phone or None,
+            "needsProfileCompletion": _needs_profile_completion(user),
         }
 
     def _dept_out(self, d) -> dict[str, Any]:
@@ -223,7 +229,7 @@ class PortalService:
             title=payload.title,
             event_type_id=et.event_type_id,
             description=payload.description,
-            status="draft",
+            status="active",
             created_by=actor_id,
             start_time=st,
         )
@@ -240,8 +246,12 @@ class PortalService:
         ev = self._events.get_by_id(db, event_id)
         if ev is None:
             raise HTTPException(status_code=404, detail="Event not found")
-        self._events.close_all_active_except(db, event_id)
-        self._events.set_status(db, event_id, "active")
+        if ev.status == "closed":
+            raise HTTPException(status_code=400, detail="Cannot activate a closed event")
+        dispatched = False
+        if ev.status != "active":
+            self._events.set_status(db, event_id, "active")
+            dispatched = True
         db.commit()
         nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, event_id)
@@ -251,7 +261,11 @@ class PortalService:
         # The route handler (portal.py) triggers it via BackgroundTask (dev) or
         # Pub/Sub publish (prod) after this method returns, keeping the service
         # layer free of transport concerns.
-        return {"message": "Event activated", "event": self._event_out(full, nm)}
+        return {
+            "message": "Event activated" if dispatched else "Already active",
+            "event": self._event_out(full, nm),
+            "dispatched": dispatched,
+        }
 
     def close_event(self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID):
         if not self._users.user_has_role(db, actor_id, "admin"):
@@ -456,6 +470,7 @@ class PortalService:
             "departmentId": str(user.department_id) if user.department_id else None,
             "managerId": str(user.manager_id) if user.manager_id else None,
             "roles": rcast,
+            "needsProfileCompletion": _needs_profile_completion(user),
         }
 
     def get_profile(self, db: Session, user_id: uuid.UUID) -> dict[str, Any]:
@@ -522,6 +537,14 @@ class PortalService:
             while self._users.employee_no_exists(db, emp_no):
                 emp_no = f"EMP-{uuid.uuid4().hex[:12].upper()}"
 
+        raw_pw = (payload.password or "").strip()
+        temporary_password: str | None = None
+        if raw_pw:
+            pw_plain = raw_pw
+        else:
+            temporary_password = secrets.token_urlsafe(16)
+            pw_plain = temporary_password
+
         user = User(
             employee_no=emp_no,
             name=payload.name.strip(),
@@ -530,7 +553,7 @@ class PortalService:
             department_id=dept_id,
             manager_id=manager_id,
             status="active",
-            password_hash=hash_password(payload.password),
+            password_hash=hash_password(pw_plain),
         )
         db.add(user)
         db.flush()
@@ -539,7 +562,10 @@ class PortalService:
 
         full = self._users.get_by_id(db, user.user_id)
         assert full is not None
-        return {"message": "User created.", "user": self._profile_out(full)}
+        out: dict[str, Any] = {"message": "User created.", "user": self._profile_out(full)}
+        if temporary_password is not None:
+            out["temporaryPassword"] = temporary_password
+        return out
 
     def admin_update_user(
         self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID, payload: AdminUserUpdateIn
@@ -694,7 +720,13 @@ class PortalService:
         if self._users.get_by_id(db, user_id) is None:
             raise HTTPException(status_code=404, detail="User not found")
         rows = self._notifications.list_for_user(db, user_id)
-        return [self._notif_out(r) for r in rows]
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            d = self._notif_out(r)
+            ev = self._events.get_by_id(db, r.event_id)
+            d["eventTitle"] = ev.title if ev else ""
+            out.append(d)
+        return out
 
     def failed_notifications_for_event(
         self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID

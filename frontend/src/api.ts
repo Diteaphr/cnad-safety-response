@@ -37,6 +37,7 @@ export type PortalNotificationRow = {
   channel: string;
   status: string;
   sentAt: string | null;
+  eventTitle?: string;
 };
 
 export type FailedNotificationRow = {
@@ -188,7 +189,7 @@ export async function getReports(): Promise<SafetyResponse[]> {
 }
 
 export async function createEventApi(
-  actorUserId: string,
+  _actorUserId: string,
   body: {
     title: string;
     type: EventItem['type'];
@@ -201,7 +202,6 @@ export async function createEventApi(
 ): Promise<{ message: string; event: EventItem }> {
   return apiFetch('/api/events', {
     method: 'POST',
-    headers: { 'X-User-Id': actorUserId },
     body: JSON.stringify({
       title: body.title,
       type: body.type,
@@ -215,33 +215,87 @@ export async function createEventApi(
   });
 }
 
-export async function activateEventApi(actorUserId: string, eventId: string): Promise<{ message: string; event: EventItem }> {
-  return apiFetch(`/api/events/${encodeURIComponent(eventId)}/activate`, {
-    method: 'POST',
-    headers: { 'X-User-Id': actorUserId },
-    body: JSON.stringify({}),
-  });
-}
-
-export async function closeEventApi(actorUserId: string, eventId: string): Promise<{ message: string; event: EventItem }> {
+export async function closeEventApi(_actorUserId: string, eventId: string): Promise<{ message: string; event: EventItem }> {
   return apiFetch(`/api/events/${encodeURIComponent(eventId)}/close`, {
     method: 'POST',
-    headers: { 'X-User-Id': actorUserId },
   });
 }
 
-export async function registerApi(body: {
+function mapProfileToUser(data: {
+  id: string;
   name: string;
   email: string;
-  password: string;
-  departmentId?: string;
-  phone?: string;
+  phone?: string | null;
+  departmentId?: string | null;
+  managerId?: string | null;
+  roles: Role[];
   employeeNo?: string;
-}): Promise<{ message: string; user: User }> {
-  return apiFetch('/api/auth/register', {
-    method: 'POST',
+  needsProfileCompletion?: boolean;
+}): User {
+  return {
+    id: data.id,
+    name: data.name,
+    email: data.email,
+    departmentId: data.departmentId ?? '',
+    roles: data.roles,
+    pushEnabled: true,
+    managerId: data.managerId,
+    employeeCode: data.employeeNo,
+    phone: data.phone ?? undefined,
+    needsProfileCompletion: data.needsProfileCompletion,
+  };
+}
+
+export async function updateMyProfileApi(body: { name: string; phone?: string | null }): Promise<User> {
+  const data = await apiFetch<{
+    id: string;
+    name: string;
+    email: string;
+    phone?: string | null;
+    departmentId?: string | null;
+    managerId?: string | null;
+    roles: Role[];
+    employeeNo?: string;
+    needsProfileCompletion?: boolean;
+  }>('/api/users/me', {
+    method: 'PUT',
     body: JSON.stringify(body),
   });
+  return mapProfileToUser(data);
+}
+
+export async function adminCreateUserApi(body: {
+  name: string;
+  email: string;
+  password?: string;
+  departmentId: string;
+  roles?: Role[];
+}): Promise<{ message: string; user: User; temporaryPassword?: string }> {
+  const data = await apiFetch<{
+    message: string;
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      phone?: string | null;
+      departmentId?: string | null;
+      managerId?: string | null;
+      roles: Role[];
+      employeeNo?: string;
+      needsProfileCompletion?: boolean;
+    };
+    temporaryPassword?: string;
+  }>('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: body.name,
+      email: body.email,
+      departmentId: body.departmentId,
+      roles: body.roles ?? ['employee'],
+      ...(body.password ? { password: body.password } : {}),
+    }),
+  });
+  return { message: data.message, user: mapProfileToUser(data.user), temporaryPassword: data.temporaryPassword };
 }
 
 export async function loginWithEmailApi(body: {

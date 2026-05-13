@@ -12,7 +12,6 @@ export type NavKey =
   | 'event-management'
   | 'user-management'
   | 'notifications'
-  | 'notifications-event-detail'
   | 'profile'
   | 'profile-direct-reports-list'
   | 'profile-direct-report-history';
@@ -33,6 +32,8 @@ export interface User {
   phone?: string;
   /** Teams / 即時訊息 ID（選填） */
   teamsUsername?: string;
+  /** 後端：缺少電話等必填聯絡資料時為 true，需先完成引導頁 */
+  needsProfileCompletion?: boolean;
 }
 
 export interface Department {
@@ -55,7 +56,7 @@ export interface EventItem {
   type: string;
   description: string;
   targetDepartmentIds: string[];
-  status: 'draft' | 'active' | 'closed';
+  status: 'active' | 'closed';
   startAt: string;
   /** 列表卡上顯示的部門／單位（如 R&D） */
   cardDepartment?: string;

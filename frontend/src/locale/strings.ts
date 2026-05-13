@@ -45,6 +45,9 @@ export type DashboardStrings = {
   noRows: string;
   globalOverview: string;
   deptRanking: string;
+  deptRankingHint: string;
+  deptFilterAll: string;
+  adminDeptFilteredSubtitle: (deptName: string) => string;
   criticalAlerts: string;
   noResponseQueue: string;
   mapPlaceholder: string;
@@ -125,6 +128,23 @@ export type ProfilePageStrings = {
   roleAdmin: string;
   /** Toast after language applied */
   languageApplied: string;
+  onboardingTitle: string;
+  onboardingSubtitle: string;
+  onboardingNameLabel: string;
+  onboardingPhoneLabel: string;
+  onboardingPhonePlaceholder: string;
+  onboardingNoSkip: string;
+  onboardingContinue: string;
+  onboardingPhoneRequired: string;
+  onboardingSuccess: string;
+  onboardingError: string;
+  profileEditNameLabel: string;
+  profileEditPhoneLabel: string;
+  profileEditPhoneHint: string;
+  profileSave: string;
+  profileCancelEdit: string;
+  profileUpdatedToast: string;
+  profileSaveError: string;
 };
 
 export type EmployeeReportStrings = {
@@ -286,6 +306,23 @@ export type PortalStrings = {
   loading: string;
   na: string;
   notSentYet: string;
+  notificationInboxTitle: string;
+  notificationInboxIntro: string;
+  notificationInboxEmpty: string;
+  notificationInboxEventLabel: string;
+  notificationInboxChannelLabel: string;
+  notificationInboxStatusLabel: string;
+  fabCreateEventAria: string;
+  userMgmtAddAccount: string;
+  userMgmtCreateSubmit: string;
+  userMgmtNamePlaceholder: string;
+  userMgmtEmailPlaceholder: string;
+  userMgmtDeptLabel: string;
+  userMgmtTempPassword: (pw: string) => string;
+  adminOverviewCreateTitle: string;
+  adminOverviewCreateBody: string;
+  adminOverviewCreateCta: string;
+  adminCreateModalCancel: string;
 };
 
 /** Copy for dashboards + profile confirmations (minimal i18n layer). */
@@ -371,6 +408,9 @@ const dashZh: DashboardStrings = {
   noRows: '尚無符合的資料',
   globalOverview: '整體狀態',
   deptRanking: '部門回報排名',
+  deptRankingHint: '點選部門可僅檢視該部門儀表與名單；再點「全部部門」恢復全公司視角。',
+  deptFilterAll: '全部部門',
+  adminDeptFilteredSubtitle: (deptName) => `目前篩選：${deptName}（僅顯示該部門員工）`,
   criticalAlerts: '緊急名單',
   noResponseQueue: '未回報佇列',
   mapPlaceholder: '地圖／位置總覽（原型占位）',
@@ -446,6 +486,9 @@ const dashEn: DashboardStrings = {
   noRows: 'No matching rows',
   globalOverview: 'Global status overview',
   deptRanking: 'Department ranking',
+  deptRankingHint: 'Click a department to drill into that department’s dashboard and lists. Use “All departments” to reset.',
+  deptFilterAll: 'All departments',
+  adminDeptFilteredSubtitle: (deptName) => `Filtered to: ${deptName} (employees in this department only)`,
   criticalAlerts: 'Critical alerts',
   noResponseQueue: 'No-response queue',
   mapPlaceholder: 'Map / location overview (prototype)',
@@ -531,6 +574,23 @@ const profilePageZh: ProfilePageStrings = {
   roleSupervisor: '主管',
   roleAdmin: '管理員',
   languageApplied: '介面語言已更新。',
+  onboardingTitle: '完成個人資料',
+  onboardingSubtitle: '為了在緊急時能聯絡到您，請補齊以下資料。此步驟無法略過。',
+  onboardingNameLabel: '姓名',
+  onboardingPhoneLabel: '手機／電話',
+  onboardingPhonePlaceholder: '例：+886912345678',
+  onboardingNoSkip: '請填寫並儲存後才能進入系統。',
+  onboardingContinue: '儲存並繼續',
+  onboardingPhoneRequired: '請填寫電話或手機號碼。',
+  onboardingSuccess: '已更新個人資料。',
+  onboardingError: '無法儲存，請稍後再試。',
+  profileEditNameLabel: '姓名',
+  profileEditPhoneLabel: '手機／電話',
+  profileEditPhoneHint: '用於緊急聯絡與簡訊備援；可留空。',
+  profileSave: '儲存',
+  profileCancelEdit: '取消',
+  profileUpdatedToast: '個人資料已更新。',
+  profileSaveError: '無法儲存，請稍後再試。',
 };
 
 const profilePageEn: ProfilePageStrings = {
@@ -572,13 +632,31 @@ const profilePageEn: ProfilePageStrings = {
   roleSupervisor: 'Supervisor',
   roleAdmin: 'Admin',
   languageApplied: 'Display language updated.',
+  onboardingTitle: 'Complete your profile',
+  onboardingSubtitle:
+    'We need a reliable phone number to reach you during emergencies. This step cannot be skipped.',
+  onboardingNameLabel: 'Name',
+  onboardingPhoneLabel: 'Phone',
+  onboardingPhonePlaceholder: 'e.g. +14155550100',
+  onboardingNoSkip: 'Save your details to continue into the app.',
+  onboardingContinue: 'Save and continue',
+  onboardingPhoneRequired: 'Please enter a phone number.',
+  onboardingSuccess: 'Profile updated.',
+  onboardingError: 'Could not save. Please try again.',
+  profileEditNameLabel: 'Name',
+  profileEditPhoneLabel: 'Phone',
+  profileEditPhoneHint: 'Used for emergencies and SMS fallback. You may leave this blank.',
+  profileSave: 'Save',
+  profileCancelEdit: 'Cancel',
+  profileUpdatedToast: 'Profile saved.',
+  profileSaveError: 'Could not save. Please try again.',
 };
 
 const layoutNavZh: LayoutNavStrings = {
   empHome: '首頁',
   supervisorHome: '我的狀態',
   teamDash: '團隊報表',
-  reminders: '提醒',
+  reminders: '通知',
   profile: '帳號與設定',
   adminOverview: '總覽',
   adminEvents: '事件',
@@ -590,7 +668,7 @@ const layoutNavEn: LayoutNavStrings = {
   empHome: 'Home',
   supervisorHome: 'My status',
   teamDash: 'Team dashboards',
-  reminders: 'Reminders',
+  reminders: 'Inbox',
   profile: 'Profile',
   adminOverview: 'Overview',
   adminEvents: 'Events',
@@ -627,7 +705,7 @@ const portalZh: PortalStrings = {
   notificationEventCenter: '通知／提醒事件中心',
   eventManagement: '事件管理',
   eventManagementIntro:
-    '此處為可重複使用的事件模板與排程紀錄。管理員每次都會手動建立完整內容，僅在實際事件發生時啟用。',
+    '此頁僅列出事件；請於「總覽」按右下角 + 在彈出視窗建立新事件（建立後會帶您回到此列表）。',
   userDeptManagement: '使用者與部門管理',
   employees: '員工',
   departmentHierarchy: '部門階層',
@@ -682,6 +760,23 @@ const portalZh: PortalStrings = {
   loading: '載入中…',
   na: '未填',
   notSentYet: '尚未成功送達',
+  notificationInboxTitle: '通知收件匣',
+  notificationInboxIntro: '您收到的推播／簡訊紀錄（唯讀）。',
+  notificationInboxEmpty: '尚無通知紀錄。',
+  notificationInboxEventLabel: '事件',
+  notificationInboxChannelLabel: '管道',
+  notificationInboxStatusLabel: '狀態',
+  fabCreateEventAria: '建立事件',
+  userMgmtAddAccount: '新增帳號',
+  userMgmtCreateSubmit: '建立帳號',
+  userMgmtNamePlaceholder: '姓名',
+  userMgmtEmailPlaceholder: 'Email',
+  userMgmtDeptLabel: '部門',
+  userMgmtTempPassword: (pw) => `系統已產生暫時密碼（請轉交使用者並請其登入後變更）：${pw}`,
+  adminOverviewCreateTitle: '建立新事件',
+  adminOverviewCreateBody: '事件建立後立即生效，並向目標部門員工送出通知。',
+  adminOverviewCreateCta: '前往建立事件',
+  adminCreateModalCancel: '關閉',
 };
 
 const portalEn: PortalStrings = {
@@ -689,7 +784,7 @@ const portalEn: PortalStrings = {
   notificationEventCenter: 'Notification Event Center',
   eventManagement: 'Event Management',
   eventManagementIntro:
-    'These are reusable event templates and scheduled incidents. Admins fill in details manually each time and activate only when a real incident occurs.',
+    'This page lists events only. On Overview, tap + and complete the popup to create an event (you return here after a successful save).',
   userDeptManagement: 'User & department management',
   employees: 'Employees',
   departmentHierarchy: 'Department hierarchy',
@@ -745,6 +840,23 @@ const portalEn: PortalStrings = {
   loading: 'Loading…',
   na: 'N/A',
   notSentYet: 'Not delivered yet',
+  notificationInboxTitle: 'Notification inbox',
+  notificationInboxIntro: 'Push and SMS records for your account (read-only).',
+  notificationInboxEmpty: 'No notifications yet.',
+  notificationInboxEventLabel: 'Event',
+  notificationInboxChannelLabel: 'Channel',
+  notificationInboxStatusLabel: 'Status',
+  fabCreateEventAria: 'Create event',
+  userMgmtAddAccount: 'Add account',
+  userMgmtCreateSubmit: 'Create account',
+  userMgmtNamePlaceholder: 'Name',
+  userMgmtEmailPlaceholder: 'Email',
+  userMgmtDeptLabel: 'Department',
+  userMgmtTempPassword: (pw) => `Temporary password generated (share securely; user should change after login): ${pw}`,
+  adminOverviewCreateTitle: 'Create a new event',
+  adminOverviewCreateBody: 'New events go live immediately and send activation notices to targeted employees.',
+  adminOverviewCreateCta: 'Go to create event',
+  adminCreateModalCancel: 'Close',
 };
 
 const statusBadgeZh: StatusBadgeStrings = {

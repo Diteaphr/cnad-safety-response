@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bell,
   Building2,
@@ -10,6 +10,7 @@ import {
   Pencil,
   Settings,
   LogOut,
+  Phone,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import { useLocale } from '../locale/LocaleContext';
 import type { AppLocale } from '../locale/LocaleContext';
 import { getStrings, type ProfilePageStrings } from '../locale/strings';
 import type { Department, Role, ToastState, User } from '../types';
+import { updateMyProfileApi } from '../api';
 import { ManagerContactDialog } from './ManagerContactDialog';
 import { initialsFromName } from './utils';
 
@@ -77,6 +79,7 @@ export function ProfileSettingsPage({
   departments,
   showToast,
   onLogout,
+  onProfileUpdated,
   onNavigateToDirectReportsList,
   onNavigateToSubordinateHistory,
 }: {
@@ -86,6 +89,7 @@ export function ProfileSettingsPage({
   departments: Department[];
   showToast: (t: ToastState) => void;
   onLogout: () => void;
+  onProfileUpdated: (next: User) => void;
   onNavigateToDirectReportsList: () => void;
   onNavigateToSubordinateHistory: (userId: string) => void;
 }) {
@@ -95,6 +99,10 @@ export function ProfileSettingsPage({
   const [langConfirmOpen, setLangConfirmOpen] = useState(false);
   const [pendingLocale, setPendingLocale] = useState<AppLocale | null>(null);
   const [managerDialogOpen, setManagerDialogOpen] = useState(false);
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [editName, setEditName] = useState(user.name);
+  const [editPhone, setEditPhone] = useState(user.phone ?? '');
+  const [profileSaving, setProfileSaving] = useState(false);
   const [pushMaster, setPushMaster] = useState(user.pushEnabled);
   const [pushEmergency, setPushEmergency] = useState(true);
   const [pushStatusReminder, setPushStatusReminder] = useState(true);
@@ -102,6 +110,13 @@ export function ProfileSettingsPage({
   const [timeZone, setTimeZone] = useState('Asia/Taipei');
 
   const deptLabel = (id: string) => departments.find((d) => d.id === id)?.name ?? '';
+
+  useEffect(() => {
+    if (!profileEditing) {
+      setEditName(user.name);
+      setEditPhone(user.phone ?? '');
+    }
+  }, [user.name, user.phone, profileEditing]);
 
   const manager = useMemo(() => {
     if (!user.managerId) return null;
@@ -149,28 +164,105 @@ export function ProfileSettingsPage({
               <span className="profile-settings-summary-avatar">{initialsFromName(user.name)}</span>
             </div>
             <div className="profile-settings-summary-fields">
-              <p className="profile-settings-summary-name">{user.name}</p>
-              <p className="profile-settings-summary-line">
-                <Mail size={14} aria-hidden />
-                {user.email}
-              </p>
-              <p className="profile-settings-summary-line">
-                <Building2 size={14} aria-hidden />
-                {departmentName}
-              </p>
-              <p className="profile-settings-summary-line">
-                <IdCard size={14} aria-hidden />
-                {user.employeeCode ?? user.id.toUpperCase()}
-              </p>
+              {profileEditing ? (
+                <div className="profile-settings-edit-form">
+                  <label className="event-form-field">
+                    <span className="event-form-field-label">{pp.profileEditNameLabel}</span>
+                    <input value={editName} onChange={(e) => setEditName(e.target.value)} autoComplete="name" disabled={profileSaving} />
+                  </label>
+                  <label className="event-form-field">
+                    <span className="event-form-field-label">{pp.profileEditPhoneLabel}</span>
+                    <input
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      inputMode="tel"
+                      autoComplete="tel"
+                      disabled={profileSaving}
+                      placeholder={pp.onboardingPhonePlaceholder}
+                    />
+                  </label>
+                  <p className="muted-text" style={{ fontSize: '0.82rem' }}>
+                    {pp.profileEditPhoneHint}
+                  </p>
+                  <div className="row-actions" style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={profileSaving || !editName.trim()}
+                      onClick={() => void (async () => {
+                        const name = editName.trim();
+                        if (!name) return;
+                        setProfileSaving(true);
+                        try {
+                          const next = await updateMyProfileApi({
+                            name,
+                            phone: editPhone.trim() ? editPhone.trim() : null,
+                          });
+                          onProfileUpdated(next);
+                          setProfileEditing(false);
+                          showToast({ tone: 'success', message: pp.profileUpdatedToast });
+                        } catch (e) {
+                          showToast({
+                            tone: 'danger',
+                            message: e instanceof Error ? e.message : pp.profileSaveError,
+                          });
+                        } finally {
+                          setProfileSaving(false);
+                        }
+                      })()}
+                    >
+                      {profileSaving ? '…' : pp.profileSave}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      disabled={profileSaving}
+                      onClick={() => {
+                        setProfileEditing(false);
+                        setEditName(user.name);
+                        setEditPhone(user.phone ?? '');
+                      }}
+                    >
+                      {pp.profileCancelEdit}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="profile-settings-summary-name">{user.name}</p>
+                  <p className="profile-settings-summary-line">
+                    <Mail size={14} aria-hidden />
+                    {user.email}
+                  </p>
+                  <p className="profile-settings-summary-line">
+                    <Building2 size={14} aria-hidden />
+                    {departmentName}
+                  </p>
+                  <p className="profile-settings-summary-line">
+                    <IdCard size={14} aria-hidden />
+                    {user.employeeCode ?? user.id.toUpperCase()}
+                  </p>
+                  <p className="profile-settings-summary-line">
+                    <Phone size={14} aria-hidden />
+                    {user.phone?.trim() ? user.phone : <span className="muted-text">—</span>}
+                  </p>
+                </>
+              )}
             </div>
-            <button
-              type="button"
-              className="btn ghost profile-settings-edit-btn"
-              onClick={() => showToast({ tone: 'info', message: pp.toastEditSoon })}
-            >
-              <Pencil size={16} aria-hidden />
-              {pp.editProfile}
-            </button>
+            {!profileEditing ? (
+              <button
+                type="button"
+                className="btn ghost profile-settings-edit-btn"
+                onClick={() => {
+                  setEditName(user.name);
+                  setEditPhone(user.phone ?? '');
+                  setProfileEditing(true);
+                }}
+              >
+                <Pencil size={16} aria-hidden />
+                {pp.editProfile}
+              </button>
+            ) : null}
           </div>
         </article>
 

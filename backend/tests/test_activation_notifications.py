@@ -19,6 +19,7 @@ How SMS fallback is tested:
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -26,6 +27,7 @@ import pytest
 from tests.conftest import auth_headers
 
 NOTIFICATIONS_ME = "/api/notifications/me"
+CREATE_EVENT = "/api/events"
 
 
 def _activate_url(event_id) -> str:
@@ -39,6 +41,37 @@ def _reminders_url(event_id) -> str:
 def _notifs_by_channel(notifs: list[dict]) -> dict[str, dict]:
     """Index a list of notification dicts by channel name for easy lookup."""
     return {n["channel"]: n for n in notifs}
+
+
+# ---------------------------------------------------------------------------
+# create_event — immediate active + activation dispatch
+# ---------------------------------------------------------------------------
+
+def test_create_event_is_active_and_dispatches_activation(
+    client, make_user, make_department
+):
+    """POST /api/events creates an active event and runs the same activation fan-out as /activate."""
+    admin = make_user(email="admin@test.com", role="admin")
+    target_dept = make_department("Engineering")
+    emp_in = make_user(
+        email="emp_in@test.com", role="employee", department_id=target_dept.department_id
+    )
+
+    body = {
+        "title": "New Live Event",
+        "type": "Earthquake",
+        "description": "integration",
+        "startAt": datetime.now(timezone.utc).isoformat(),
+        "targetDepartmentIds": [str(target_dept.department_id)],
+    }
+    resp = client.post(CREATE_EVENT, json=body, headers=auth_headers(admin))
+    assert resp.status_code == 200
+    assert resp.json()["event"]["status"] == "active"
+
+    notifs = client.get(NOTIFICATIONS_ME, headers=auth_headers(emp_in)).json()["notifications"]
+    assert len(notifs) == 1
+    assert notifs[0]["channel"] == "fcm_activation"
+    assert notifs[0]["status"] == "sent"
 
 
 # ---------------------------------------------------------------------------
