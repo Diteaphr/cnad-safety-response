@@ -27,7 +27,7 @@ from app.repositories.event_type_repository import EventTypeRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DepartmentCreateIn, DepartmentUpdateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
@@ -513,6 +513,54 @@ class PortalService:
         self._users.update_password(db, user_id, new_hash=hash_password(default_password))
         db.commit()
         return {"message": "Password reset.", "temporaryPassword": default_password}
+
+    # ------------------------------------------------------------------
+    # Admin: department management
+    # ------------------------------------------------------------------
+
+    def admin_create_department(
+        self, db: Session, actor_id: uuid.UUID, payload: DepartmentCreateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        parent_id = self._parse_optional_uuid(payload.parentId, field="parentId")
+        if parent_id and self._depts.get_by_id(db, parent_id) is None:
+            raise HTTPException(status_code=400, detail="Parent department not found")
+        dept = self._depts.create(db, name=payload.name.strip(), parent_id=parent_id)
+        db.commit()
+        return self._dept_out(dept)
+
+    def admin_update_department(
+        self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID, payload: DepartmentUpdateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+        parent_id = self._parse_optional_uuid(payload.parentId, field="parentId")
+        if parent_id:
+            if self._depts.get_by_id(db, parent_id) is None:
+                raise HTTPException(status_code=400, detail="Parent department not found")
+            if parent_id == dept_id:
+                raise HTTPException(status_code=400, detail="Department cannot be its own parent")
+        dept = self._depts.update(db, dept_id, name=payload.name.strip(), parent_id=parent_id)
+        db.commit()
+        return self._dept_out(dept)
+
+    def admin_delete_department(
+        self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+        if self._depts.has_members(db, dept_id):
+            raise HTTPException(status_code=409, detail="Department still has members")
+        if self._depts.has_sub_departments(db, dept_id):
+            raise HTTPException(status_code=409, detail="Department still has sub-departments")
+        self._depts.delete(db, dept_id)
+        db.commit()
+        return {"message": "Department deleted."}
 
     def admin_list_users(self, db: Session, actor_id: uuid.UUID) -> list[dict[str, Any]]:
         if not self._users.user_has_role(db, actor_id, "admin"):

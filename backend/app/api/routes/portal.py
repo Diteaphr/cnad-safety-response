@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, EventActionIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, DepartmentCreateIn, DepartmentUpdateIn, EventActionIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.services.portal_service import PortalService
 
 logger = logging.getLogger(__name__)
@@ -188,6 +188,36 @@ def admin_dashboard(
 ):
     eid = _parse_uuid(event_id, name="event_id") if event_id else None
     return _portal.admin_dashboard(db, actor, event_id=eid)
+
+
+@router.post("/admin/departments")
+def admin_create_department(
+    payload: DepartmentCreateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.admin_create_department(db, actor, payload)
+
+
+@router.put("/admin/departments/{dept_id}")
+def admin_update_department(
+    dept_id: str,
+    payload: DepartmentUpdateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    did = _parse_uuid(dept_id, name="dept_id")
+    return _portal.admin_update_department(db, actor, did, payload)
+
+
+@router.delete("/admin/departments/{dept_id}")
+def admin_delete_department(
+    dept_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    did = _parse_uuid(dept_id, name="dept_id")
+    return _portal.admin_delete_department(db, actor, did)
 
 
 @router.get("/admin/users")
