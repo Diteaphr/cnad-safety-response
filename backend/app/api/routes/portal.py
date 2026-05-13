@@ -298,6 +298,26 @@ def admin_reset_password(
     return _portal.admin_reset_password(db, actor, uid)
 
 
+@router.put("/admin/users/{user_id}/deactivate")
+def admin_deactivate_user(
+    user_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    uid = _parse_uuid(user_id, name="user_id")
+    return _portal.admin_deactivate_user(db, actor, uid)
+
+
+@router.put("/admin/users/{user_id}/activate")
+def admin_activate_user(
+    user_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    uid = _parse_uuid(user_id, name="user_id")
+    return _portal.admin_activate_user(db, actor, uid)
+
+
 @router.get("/notifications/me")
 def my_notifications(actor: CurrentUser, db: Session = Depends(get_db)):
     return {"notifications": _portal.notifications_for_user(db, actor)}

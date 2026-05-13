@@ -545,6 +545,36 @@ class PortalService:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid {field}") from e
 
+    def admin_deactivate_user(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if actor_id == user_id:
+            raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.status == "inactive":
+            raise HTTPException(status_code=409, detail="Account is already inactive")
+        self._users.set_status(db, user_id, status="inactive")
+        db.commit()
+        return {"message": "Account deactivated."}
+
+    def admin_activate_user(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.status == "active":
+            raise HTTPException(status_code=409, detail="Account is already active")
+        self._users.set_status(db, user_id, status="active")
+        db.commit()
+        return {"message": "Account activated."}
+
     def admin_reset_password(
         self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
     ) -> dict[str, Any]:

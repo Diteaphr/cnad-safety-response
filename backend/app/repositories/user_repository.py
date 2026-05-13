@@ -56,6 +56,20 @@ class UserRepository:
         stmt = select(User.user_id).where(User.employee_no == employee_no).limit(1)
         return db.execute(stmt).first() is not None
 
+    def set_status(
+        self,
+        db: Session,
+        user_id: uuid.UUID,
+        *,
+        status: str,
+    ) -> None:
+        stmt = select(User).where(User.user_id == user_id)
+        user = db.execute(stmt).scalar_one_or_none()
+        if user is None:
+            raise ValueError(f"User {user_id} not found")
+        user.status = status
+        db.flush()
+
     def update_password(
         self,
         db: Session,
