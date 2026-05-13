@@ -98,6 +98,17 @@ def create_event(
     return _portal.create_event(db, actor_id=actor, payload=payload)
 
 
+@router.put("/events/{event_id}")
+def update_event(
+    event_id: str,
+    payload: CreateEventIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    eid = _parse_uuid(event_id, name="event_id")
+    return _portal.update_event(db, actor_id=actor, event_id=eid, payload=payload)
+
+
 def _dispatch_activation_background(event_id: uuid.UUID) -> None:
     """Run notification fan-out in a background task (dev mode without Pub/Sub)."""
     from app.services.notification_dispatch import dispatch_activation_notifications

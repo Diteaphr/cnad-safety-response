@@ -45,6 +45,36 @@ class EventRepository:
         db.flush()
         return rows
 
+    def update(
+        self,
+        db: Session,
+        event_id: uuid.UUID,
+        *,
+        title: str,
+        event_type_id: uuid.UUID,
+        description: Optional[str],
+        start_time,
+    ) -> None:
+        ev = db.get(Event, event_id)
+        if ev is None:
+            raise ValueError(f"Event {event_id} not found")
+        ev.title = title
+        ev.event_type_id = event_type_id
+        ev.description = description
+        ev.start_time = start_time
+        db.flush()
+
+    def replace_departments(
+        self, db: Session, event_id: uuid.UUID, department_ids: list[uuid.UUID]
+    ) -> None:
+        existing = list(db.scalars(select(EventDepartment).where(EventDepartment.event_id == event_id)))
+        for ed in existing:
+            db.delete(ed)
+        db.flush()
+        for did in department_ids:
+            db.add(EventDepartment(event_id=event_id, department_id=did))
+        db.flush()
+
     def get_by_id(self, db: Session, event_id: uuid.UUID) -> Optional[Event]:
         stmt = (
             select(Event)

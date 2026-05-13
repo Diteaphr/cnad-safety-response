@@ -234,6 +234,49 @@ class PortalService:
         assert full is not None
         return {"message": "Event created", "event": self._event_out(full, nm)}
 
+    def update_event(
+        self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID, payload: CreateEventIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        ev = self._events.get_by_id(db, event_id)
+        if ev is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        if ev.status != "draft":
+            raise HTTPException(status_code=409, detail="Only draft events can be edited")
+        try:
+            st = _parse_iso(payload.startAt)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid startAt") from e
+        dids: list[uuid.UUID] = []
+        for s in payload.targetDepartmentIds:
+            try:
+                dids.append(uuid.UUID(s))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail="Invalid department id") from e
+        custom = (payload.custom_type_name or "").strip()
+        if payload.type.strip().lower() == "other" and custom:
+            et = self._event_types.get_or_create_by_display_name(db, custom)
+        else:
+            et = self._event_types.get_by_label(db, payload.type)
+            if et is None:
+                raise HTTPException(status_code=400, detail="Unknown event type")
+        self._events.update(
+            db,
+            event_id,
+            title=payload.title,
+            event_type_id=et.event_type_id,
+            description=payload.description,
+            start_time=st,
+        )
+        self._events.replace_departments(db, event_id, dids)
+        db.commit()
+        db.expire_all()
+        nm = self._depts.name_map(db)
+        full = self._events.get_by_id(db, event_id)
+        assert full is not None
+        return {"message": "Event updated", "event": self._event_out(full, nm)}
+
     def activate_event(self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID):
         if not self._users.user_has_role(db, actor_id, "admin"):
             raise HTTPException(status_code=403, detail="Admin only")
