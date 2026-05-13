@@ -27,7 +27,7 @@ from app.repositories.event_type_repository import EventTypeRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, CreateEventIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
@@ -478,6 +478,18 @@ class PortalService:
         db.commit()
         return self._profile_out(user)
 
+    def change_password(
+        self, db: Session, user_id: uuid.UUID, payload: ChangePasswordIn
+    ) -> dict[str, Any]:
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if not user.password_hash or not verify_password(payload.currentPassword, user.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        self._users.update_password(db, user_id, new_hash=hash_password(payload.newPassword))
+        db.commit()
+        return {"message": "Password changed successfully."}
+
     # ------------------------------------------------------------------
     # Admin: user management
     # ------------------------------------------------------------------
@@ -489,6 +501,18 @@ class PortalService:
             return uuid.UUID(value.strip())
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid {field}") from e
+
+    def admin_reset_password(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._users.get_by_id(db, user_id) is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        default_password = "Welcome@1234"
+        self._users.update_password(db, user_id, new_hash=hash_password(default_password))
+        db.commit()
+        return {"message": "Password reset.", "temporaryPassword": default_password}
 
     def admin_list_users(self, db: Session, actor_id: uuid.UUID) -> list[dict[str, Any]]:
         if not self._users.user_has_role(db, actor_id, "admin"):

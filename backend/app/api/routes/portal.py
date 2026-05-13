@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, CreateEventIn, DemoLoginIn, EventActionIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, EventActionIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.services.portal_service import PortalService
 
 logger = logging.getLogger(__name__)
@@ -227,6 +227,25 @@ def update_my_profile(
     db: Session = Depends(get_db),
 ):
     return _portal.update_profile(db, actor, payload)
+
+
+@router.put("/users/me/password")
+def change_my_password(
+    payload: ChangePasswordIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.change_password(db, actor, payload)
+
+
+@router.post("/admin/users/{user_id}/reset-password")
+def admin_reset_password(
+    user_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    uid = _parse_uuid(user_id, name="user_id")
+    return _portal.admin_reset_password(db, actor, uid)
 
 
 @router.get("/notifications/me")
