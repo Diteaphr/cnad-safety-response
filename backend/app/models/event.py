@@ -12,7 +12,6 @@ from sqlalchemy.sql import func
 from app.core.base import Base
 
 if TYPE_CHECKING:
-    from app.models.event_department import EventDepartment
     from app.models.event_type import EventType
     from app.models.user import User
 
@@ -48,11 +47,6 @@ class Event(Base):
         back_populates="events",
     )
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
-    event_departments: Mapped[list["EventDepartment"]] = relationship(
-        "EventDepartment",
-        back_populates="event",
-        cascade="all, delete-orphan",
-    )
 
     @property
     def event_type(self) -> str:

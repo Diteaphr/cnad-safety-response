@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
-from app.models.user import User
+from app.models.user_department import UserDepartment
 
 
 class DepartmentRepository:
@@ -22,7 +22,9 @@ class DepartmentRepository:
         return {r.department_id: r.department_name for r in rows}
 
     def has_members(self, db: Session, department_id: uuid.UUID) -> bool:
-        stmt = select(func.count()).select_from(User).where(User.department_id == department_id)
+        stmt = select(func.count()).select_from(UserDepartment).where(
+            UserDepartment.department_id == department_id
+        )
         return db.execute(stmt).scalar_one() > 0
 
     def has_sub_departments(self, db: Session, department_id: uuid.UUID) -> bool:

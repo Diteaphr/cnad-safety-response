@@ -29,9 +29,10 @@ def test_notifications_empty_initially(client, make_user):
     assert resp.json()["notifications"] == []
 
 
-def test_notifications_appear_after_reminder(client, make_user, make_event):
-    sup = make_user(email="sup@test.com", role="supervisor")
-    emp = make_user(email="emp@test.com", role="employee", manager_id=sup.user_id)
+def test_notifications_appear_after_reminder(client, make_user, make_department, make_event):
+    d = make_department("T")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
@@ -47,11 +48,12 @@ def test_notifications_appear_after_reminder(client, make_user, make_event):
     assert n["sentAt"] is not None
 
 
-def test_notifications_only_own(client, make_user, make_event):
+def test_notifications_only_own(client, make_user, make_department, make_event):
     """Each team member sees only their own notification."""
-    sup = make_user(email="sup@test.com", role="supervisor")
-    emp1 = make_user(email="emp1@test.com", role="employee", manager_id=sup.user_id)
-    emp2 = make_user(email="emp2@test.com", role="employee", manager_id=sup.user_id)
+    d = make_department("T")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    emp1 = make_user(email="emp1@test.com", role="employee", department_id=d.department_id)
+    emp2 = make_user(email="emp2@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
@@ -66,10 +68,11 @@ def test_notifications_only_own(client, make_user, make_event):
     assert notifs1[0]["id"] != notifs2[0]["id"]
 
 
-def test_supervisor_has_no_notifications(client, make_user, make_event):
+def test_supervisor_has_no_notifications(client, make_user, make_department, make_event):
     """Supervisor sends reminders but does not receive them themselves."""
-    sup = make_user(email="sup@test.com", role="supervisor")
-    _emp = make_user(email="emp@test.com", role="employee", manager_id=sup.user_id)
+    d = make_department("T")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    _emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
@@ -79,10 +82,11 @@ def test_supervisor_has_no_notifications(client, make_user, make_event):
     assert resp.json()["notifications"] == []
 
 
-def test_notifications_idempotent_second_reminder(client, make_user, make_event):
+def test_notifications_idempotent_second_reminder(client, make_user, make_department, make_event):
     """Sending reminders twice does not duplicate the notification row."""
-    sup = make_user(email="sup@test.com", role="supervisor")
-    emp = make_user(email="emp@test.com", role="employee", manager_id=sup.user_id)
+    d = make_department("T")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     client.post(_reminders_url(event.event_id), headers=auth_headers(sup))

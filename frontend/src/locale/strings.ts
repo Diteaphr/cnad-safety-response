@@ -302,6 +302,9 @@ export type PortalStrings = {
   refreshFailedList: string;
   noFailedDeliveries: string;
   retryDelivery: string;
+  failedReminderRetryOkToast: string;
+  failedReminderRetryErrToast: string;
+  failedReminderLoadErrToast: string;
   adminOnlyManageFailed: string;
   loading: string;
   na: string;
@@ -756,6 +759,9 @@ const portalZh: PortalStrings = {
   refreshFailedList: '重新整理失敗清單',
   noFailedDeliveries: '目前沒有推播失敗紀錄。',
   retryDelivery: '重送',
+  failedReminderRetryOkToast: '已送出重試，狀態稍後會更新。',
+  failedReminderRetryErrToast: '重試失敗，請稍後再試。',
+  failedReminderLoadErrToast: '無法載入推播失敗清單。',
   adminOnlyManageFailed: '僅管理員可處理',
   loading: '載入中…',
   na: '未填',
@@ -836,6 +842,9 @@ const portalEn: PortalStrings = {
   refreshFailedList: 'Refresh failed list',
   noFailedDeliveries: 'No failed deliveries for this event.',
   retryDelivery: 'Retry',
+  failedReminderRetryOkToast: 'Retry queued; status will update shortly.',
+  failedReminderRetryErrToast: 'Retry failed. Please try again.',
+  failedReminderLoadErrToast: 'Could not load failed delivery list.',
   adminOnlyManageFailed: 'Admin only',
   loading: 'Loading…',
   na: 'N/A',

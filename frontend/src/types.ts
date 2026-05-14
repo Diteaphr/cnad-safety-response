@@ -23,6 +23,10 @@ export interface User {
   departmentId: string;
   roles: Role[];
   pushEnabled: boolean;
+  /** 與 GET/PUT /api/users/me 對齊；預設 true */
+  pushEmergencyEnabled?: boolean;
+  pushReminderEnabled?: boolean;
+  pushEscalationEnabled?: boolean;
   managerId?: string | null;
   /** 員工編號（畫面顯示） */
   employeeCode?: string;

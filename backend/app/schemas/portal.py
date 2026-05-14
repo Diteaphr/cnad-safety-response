@@ -21,6 +21,9 @@ class UserOut(BaseModel):
     departmentId: str
     roles: List[Literal["employee", "supervisor", "admin"]]
     pushEnabled: bool = True
+    pushEmergencyEnabled: bool = True
+    pushReminderEnabled: bool = True
+    pushEscalationEnabled: bool = True
     managerId: Optional[str] = None
     needsProfileCompletion: bool = False
 
@@ -30,7 +33,10 @@ class EventItemOut(BaseModel):
     title: str
     type: str
     description: str
-    targetDepartmentIds: List[str]
+    targetDepartmentIds: List[str] = Field(
+        default_factory=list,
+        description="Deprecated: always empty in API responses; events are company-wide.",
+    )
     status: Literal["active", "closed"]
     startAt: str
     cardDepartment: Optional[str] = None
@@ -60,7 +66,10 @@ class CreateEventIn(BaseModel):
     )
     description: Optional[str] = Field(default="", max_length=2000)
     startAt: str
-    targetDepartmentIds: List[str] = Field(min_length=1)
+    targetDepartmentIds: List[str] = Field(
+        default_factory=list,
+        description="Ignored; kept for API compatibility. Events apply to all employees.",
+    )
     custom_type_name: Optional[str] = Field(
         default=None,
         max_length=128,
@@ -113,8 +122,14 @@ class DemoLoginIn(BaseModel):
 class ProfileUpdateIn(BaseModel):
     """Fields an authenticated user may update on their own profile."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str = Field(min_length=1, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=50)
+    push_enabled: Optional[bool] = Field(default=None, alias="pushEnabled")
+    push_emergency_enabled: Optional[bool] = Field(default=None, alias="pushEmergencyEnabled")
+    push_reminder_enabled: Optional[bool] = Field(default=None, alias="pushReminderEnabled")
+    push_escalation_enabled: Optional[bool] = Field(default=None, alias="pushEscalationEnabled")
 
 
 class AdminUserCreateIn(BaseModel):
@@ -126,7 +141,10 @@ class AdminUserCreateIn(BaseModel):
     phone: Optional[str] = Field(default=None, max_length=50)
     employeeNo: Optional[str] = Field(default=None, max_length=50)
     departmentId: Optional[str] = None
-    managerId: Optional[str] = None
+    managerId: Optional[str] = Field(
+        default=None,
+        description="Ignored. Assign department heads via departments API; line manager is derived.",
+    )
     roles: List[Literal["employee", "supervisor", "admin"]] = Field(default=["employee"])
 
 
@@ -136,7 +154,10 @@ class AdminUserUpdateIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=50)
     departmentId: Optional[str] = None
-    managerId: Optional[str] = None
+    managerId: Optional[str] = Field(
+        default=None,
+        description="Ignored. Line manager is derived from department.manager_id chain.",
+    )
     roles: List[Literal["employee", "supervisor", "admin"]] = Field(min_length=1)
 
 

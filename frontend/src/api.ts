@@ -74,27 +74,27 @@ export type DemoAccount = { id: string; label: string; roles: Role[]; userId: st
 export const demoAccountsFallbackSeeded: DemoAccount[] = [
   {
     id: 'employee',
-    label: 'Employee Demo',
+    label: 'Employee — employee_1',
     roles: ['employee'],
-    userId: 'b0000001-0000-4000-8000-000000000001',
+    userId: '02000000-0000-4000-8000-000000000002',
   },
   {
     id: 'supervisor',
-    label: 'Supervisor Demo',
+    label: 'Supervisor — employee_2',
     roles: ['supervisor'],
-    userId: 'b0000001-0000-4000-8000-000000000002',
+    userId: '02000000-0000-4000-8000-000000000003',
   },
   {
     id: 'admin',
-    label: 'Admin Demo',
+    label: 'Admin — admin@test.com',
     roles: ['admin'],
-    userId: 'b0000001-0000-4000-8000-000000000004',
+    userId: '02000000-0000-4000-8000-000000000001',
   },
   {
     id: 'multi',
-    label: 'Multi-role Demo',
+    label: 'Multi-role — employee_3',
     roles: ['employee', 'supervisor', 'admin'],
-    userId: 'b0000001-0000-4000-8000-000000000002',
+    userId: '02000000-0000-4000-8000-000000000004',
   },
 ];
 
@@ -174,8 +174,13 @@ export async function getEventTypesApi(): Promise<EventTypeCatalogItem[]> {
 }
 
 export async function getUsers(): Promise<User[]> {
-  const data = await apiFetch<{ users: User[] }>('/api/users');
-  return data.users;
+  const data = await apiFetch<{ users: Parameters<typeof mapProfileToUser>[0][] }>('/api/users');
+  return data.users.map((u) => mapProfileToUser(u));
+}
+
+export async function getMyProfileApi(): Promise<User> {
+  const data = await apiFetch<Parameters<typeof mapProfileToUser>[0]>('/api/users/me');
+  return mapProfileToUser(data);
 }
 
 export async function getEvents(): Promise<EventItem[]> {
@@ -229,24 +234,41 @@ function mapProfileToUser(data: {
   departmentId?: string | null;
   managerId?: string | null;
   roles: Role[];
-  employeeNo?: string;
+  /** GET/PUT /api/users/me 使用 employeeNo；GET /api/users 使用 employeeCode */
+  employeeNo?: string | null;
+  employeeCode?: string | null;
   needsProfileCompletion?: boolean;
+  pushEnabled?: boolean;
+  pushEmergencyEnabled?: boolean;
+  pushReminderEnabled?: boolean;
+  pushEscalationEnabled?: boolean;
 }): User {
+  const code = data.employeeNo ?? data.employeeCode;
   return {
     id: data.id,
     name: data.name,
     email: data.email,
     departmentId: data.departmentId ?? '',
     roles: data.roles,
-    pushEnabled: true,
+    pushEnabled: data.pushEnabled ?? true,
+    pushEmergencyEnabled: data.pushEmergencyEnabled ?? true,
+    pushReminderEnabled: data.pushReminderEnabled ?? true,
+    pushEscalationEnabled: data.pushEscalationEnabled ?? true,
     managerId: data.managerId,
-    employeeCode: data.employeeNo,
+    employeeCode: code ?? undefined,
     phone: data.phone ?? undefined,
     needsProfileCompletion: data.needsProfileCompletion,
   };
 }
 
-export async function updateMyProfileApi(body: { name: string; phone?: string | null }): Promise<User> {
+export async function updateMyProfileApi(body: {
+  name: string;
+  phone?: string | null;
+  pushEnabled?: boolean;
+  pushEmergencyEnabled?: boolean;
+  pushReminderEnabled?: boolean;
+  pushEscalationEnabled?: boolean;
+}): Promise<User> {
   const data = await apiFetch<{
     id: string;
     name: string;
@@ -257,6 +279,10 @@ export async function updateMyProfileApi(body: { name: string; phone?: string | 
     roles: Role[];
     employeeNo?: string;
     needsProfileCompletion?: boolean;
+    pushEnabled?: boolean;
+    pushEmergencyEnabled?: boolean;
+    pushReminderEnabled?: boolean;
+    pushEscalationEnabled?: boolean;
   }>('/api/users/me', {
     method: 'PUT',
     body: JSON.stringify(body),
@@ -303,23 +329,39 @@ export async function loginWithEmailApi(body: {
   password: string;
 }): Promise<{ user: User; access_token: string; token_type: string }> {
   clearAccessToken();
-  const data = await apiFetch<{ user: User; access_token: string; token_type: string }>('/api/auth/login', {
+  const data = await apiFetch<{
+    user: Parameters<typeof mapProfileToUser>[0];
+    access_token: string;
+    token_type: string;
+  }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(body),
   });
   setAccessToken(data.access_token);
-  return data;
+  return {
+    access_token: data.access_token,
+    token_type: data.token_type,
+    user: mapProfileToUser(data.user),
+  };
 }
 
 /** Demo 下拉登入後取得 JWT，否則受保護的 POST（如 /api/reports）會 401/403 Not authenticated */
 export async function loginDemoUserApi(userId: string): Promise<{ user: User; access_token: string; token_type: string }> {
   clearAccessToken();
-  const data = await apiFetch<{ user: User; access_token: string; token_type: string }>('/api/auth/demo-login', {
+  const data = await apiFetch<{
+    user: Parameters<typeof mapProfileToUser>[0];
+    access_token: string;
+    token_type: string;
+  }>('/api/auth/demo-login', {
     method: 'POST',
     body: JSON.stringify({ userId }),
   });
   setAccessToken(data.access_token);
-  return data;
+  return {
+    access_token: data.access_token,
+    token_type: data.token_type,
+    user: mapProfileToUser(data.user),
+  };
 }
 export async function submitReportApi(payload: {
   eventId: string;

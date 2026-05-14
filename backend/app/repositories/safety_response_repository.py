@@ -105,22 +105,27 @@ class SafetyResponseRepository:
         self, db: Session, *, event_id: uuid.UUID, manager_id: uuid.UUID
     ) -> dict[str, int]:
         """
-        Return KPI counts for all employees recursively under manager_id.
-        Uses a single SQL query (recursive CTE + DISTINCT ON) — no User objects loaded.
+        Return KPI counts for employees under manager_id: primary department in any subtree
+        rooted at a department where departments.manager_id = manager_id (recursive by parent).
         """
         row = db.execute(
             text("""
-                WITH RECURSIVE subordinates(user_id) AS (
-                    SELECT user_id FROM users WHERE manager_id = :manager_id
+                WITH RECURSIVE subdepts(department_id) AS (
+                    SELECT department_id FROM departments WHERE manager_id = :manager_id
                     UNION ALL
-                    SELECT u.user_id FROM users u
-                    JOIN subordinates s ON u.manager_id = s.user_id
+                    SELECT d.department_id FROM departments d
+                    INNER JOIN subdepts s ON d.parent_department_id = s.department_id
                 ),
                 employees AS (
-                    SELECT s.user_id FROM subordinates s
-                    JOIN user_roles ur ON ur.user_id = s.user_id
-                    JOIN roles r ON r.role_id = ur.role_id
-                    WHERE r.role_name = 'employee'
+                    SELECT u.user_id
+                    FROM users u
+                    INNER JOIN user_departments ud
+                        ON ud.user_id = u.user_id AND ud.is_primary = true
+                    INNER JOIN user_roles ur ON ur.user_id = u.user_id
+                    INNER JOIN roles r ON r.role_id = ur.role_id
+                    WHERE ud.department_id IN (SELECT department_id FROM subdepts)
+                      AND r.role_name = 'employee'
+                      AND u.user_id <> :manager_id
                 ),
                 latest AS (
                     SELECT DISTINCT ON (sr.user_id) sr.user_id, sr.status

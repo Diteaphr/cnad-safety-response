@@ -97,7 +97,6 @@ def test_demo_login_success_for_seed_uuid(client, db, roles):
         employee_no="SUP001",
         name="Super Demo",
         email="super_demo@test.local",
-        manager_id=None,
         status="active",
         password_hash=hash_password("unused"),
     )

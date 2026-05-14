@@ -1,35 +1,93 @@
-"""Stable UUIDs for local demo data (aligned with frontend mockData structure)."""
+"""Stable UUIDs for seed data. Numeric suffix 1,2,3… is encoded in the last 12 hex digits."""
+
+from __future__ import annotations
 
 import uuid
 
-# Departments (match logical ids: d-rd, d-hr, ...)
-D_RD = uuid.UUID("a0000001-0000-4000-8000-000000000001")
-D_HR = uuid.UUID("a0000001-0000-4000-8000-000000000002")
-D_OPS = uuid.UUID("a0000001-0000-4000-8000-000000000003")
-D_FAC = uuid.UUID("a0000001-0000-4000-8000-000000000004")
-D_PLANT_A = uuid.UUID("a0000001-0000-4000-8000-000000000005")
-D_LINE1 = uuid.UUID("a0000001-0000-4000-8000-000000000006")
-D_LINE2 = uuid.UUID("a0000001-0000-4000-8000-000000000007")
 
-# Users (u-01 .. u-07, u-04 admin, u-08 test admin)
-U_01 = uuid.UUID("b0000001-0000-4000-8000-000000000001")
-U_02 = uuid.UUID("b0000001-0000-4000-8000-000000000002")
-U_03 = uuid.UUID("b0000001-0000-4000-8000-000000000003")
-U_04 = uuid.UUID("b0000001-0000-4000-8000-000000000004")
-U_05 = uuid.UUID("b0000001-0000-4000-8000-000000000005")
-U_06 = uuid.UUID("b0000001-0000-4000-8000-000000000006")
-U_07 = uuid.UUID("b0000001-0000-4000-8000-000000000007")
-U_08 = uuid.UUID("b0000001-0000-4000-8000-000000000008")
+def dept_key(n: int) -> uuid.UUID:
+    if not 1 <= n <= 0xFFF:
+        raise ValueError(n)
+    return uuid.UUID(f"01000000-0000-4000-8000-{n:012x}")
 
-# Event types (aligned with portal literals / migration seed)
+
+def user_key(n: int) -> uuid.UUID:
+    if not 1 <= n <= 0xFFF:
+        raise ValueError(n)
+    return uuid.UUID(f"02000000-0000-4000-8000-{n:012x}")
+
+
+def event_key(n: int) -> uuid.UUID:
+    if not 1 <= n <= 0xFFF:
+        raise ValueError(n)
+    return uuid.UUID(f"03000000-0000-4000-8000-{n:012x}")
+
+
+def response_key(n: int) -> uuid.UUID:
+    if not 1 <= n <= 0xFFFFF:
+        raise ValueError(n)
+    return uuid.UUID(f"04000000-0000-4000-8000-{n:012x}")
+
+
+def user_department_key(n: int) -> uuid.UUID:
+    if not 1 <= n <= 0xFFF:
+        raise ValueError(n)
+    return uuid.UUID(f"05000000-0000-4000-8000-{n:012x}")
+
+
+# Event types — must match Alembic migration `20260504_0004_event_types_table.py`
 ET_EARTHQUAKE = uuid.UUID("d0000001-0000-4000-8000-000000000001")
 ET_TYPHOON = uuid.UUID("d0000001-0000-4000-8000-000000000002")
 ET_FIRE = uuid.UUID("d0000001-0000-4000-8000-000000000003")
 ET_OTHER = uuid.UUID("d0000001-0000-4000-8000-000000000004")
 
-# Events e-001 ..
-E_001 = uuid.UUID("c0000001-0000-4000-8000-000000000001")
-E_002 = uuid.UUID("c0000001-0000-4000-8000-000000000002")
-E_003 = uuid.UUID("c0000001-0000-4000-8000-000000000003")
-E_004 = uuid.UUID("c0000001-0000-4000-8000-000000000004")
-E_007 = uuid.UUID("c0000001-0000-4000-8000-000000000007")
+# ---------------------------------------------------------------------------
+# Canonical entities (1 = admin, 2–51 = employee_1 … employee_50)
+# ---------------------------------------------------------------------------
+U_ADMIN = user_key(1)
+
+# Departments 1..10（兩條深階層；見 seed_demo 樹狀說明）
+D1 = dept_key(1)
+D2 = dept_key(2)
+D3 = dept_key(3)
+D4 = dept_key(4)
+D5 = dept_key(5)
+D6 = dept_key(6)
+D7 = dept_key(7)
+D8 = dept_key(8)
+D9 = dept_key(9)
+D10 = dept_key(10)
+
+# Events: 1–5 active, 6 completed
+E1 = event_key(1)
+E2 = event_key(2)
+E3 = event_key(3)
+E4 = event_key(4)
+E5 = event_key(5)
+E6 = event_key(6)
+
+# ---------------------------------------------------------------------------
+# Back-compat names (tests / demo / older docs)
+# ---------------------------------------------------------------------------
+U_01 = user_key(2)
+U_02 = user_key(3)
+U_03 = user_key(4)
+U_04 = user_key(1)
+U_05 = user_key(7)
+U_06 = user_key(8)
+U_07 = user_key(9)
+U_08 = user_key(1)
+
+D_OPS = D1
+D_RD = D3
+D_HR = D4
+D_FAC = D5
+D_PLANT_A = D2
+D_LINE1 = D5
+D_LINE2 = D8
+
+E_001 = E1
+E_002 = E2
+E_003 = E6
+E_004 = E4
+E_007 = E6

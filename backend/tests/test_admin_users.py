@@ -6,9 +6,9 @@ Integration tests for admin user management:
 
 Key scenarios:
 - Only admin can access these endpoints (403 for others)
-- Create: sets name, email, phone, department, manager, roles
+- Create: sets name, email, phone, department, roles; managerId in body is ignored (derived from dept)
 - Create: rejects duplicate email / employee number
-- Update: can change department, manager, and roles
+- Update: can change department and roles; managerId ignored
 - Update: 404 for non-existent user
 """
 from __future__ import annotations
@@ -112,10 +112,16 @@ def test_admin_create_user_omitted_password_generates_temp(client, make_user):
     assert login.status_code == 200
 
 
-def test_admin_create_user_with_department_and_manager(client, make_user, make_department):
+def test_admin_create_user_with_department_derives_manager_from_dept(
+    client, make_user, make_department
+):
     admin = make_user(email="admin@test.com", role="admin")
     dept = make_department("Engineering")
-    manager = make_user(email="mgr@test.com", role="supervisor")
+    manager = make_user(
+        email="mgr@test.com",
+        role="supervisor",
+        managed_department_id=dept.department_id,
+    )
 
     resp = client.post(
         ADMIN_USERS,
@@ -124,7 +130,6 @@ def test_admin_create_user_with_department_and_manager(client, make_user, make_d
             "email": "alice@test.com",
             "password": "pass1234",
             "departmentId": str(dept.department_id),
-            "managerId": str(manager.user_id),
             "roles": ["employee"],
         },
         headers=auth_headers(admin),
@@ -275,7 +280,8 @@ def test_admin_update_user_forbidden_for_employee(client, make_user):
     assert resp.status_code == 403
 
 
-def test_admin_update_user_invalid_manager(client, make_user):
+def test_admin_update_user_ignores_stale_manager_id_field(client, make_user):
+    """managerId in PUT body is ignored; API returns manager derived from department."""
     admin = make_user(email="admin@test.com", role="admin")
     emp = make_user(email="emp@test.com", role="employee")
 
@@ -289,4 +295,4 @@ def test_admin_update_user_invalid_manager(client, make_user):
         headers=auth_headers(admin),
     )
 
-    assert resp.status_code == 400
+    assert resp.status_code == 200

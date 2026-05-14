@@ -1,14 +1,13 @@
 """種子假資料。
 
 - ``run_if_empty``：後端 startup 呼叫，若 **尚無使用者** 則灌入一次。
-- ``reset_and_seed_demo``：**不會**被 API / 排程 / startup 自動呼叫，
-  僅供你用 ``scripts/dev_reseed_demo.py`` 在終端機 **手動、一次性**重灌開發資料庫。
+- ``reset_and_seed_demo``：清空業務表（保留 roles）後重灌；請用 ``scripts/dev_reseed_demo.py`` 手動執行。
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -17,11 +16,12 @@ from app.core.base import Base
 from app.core.passwords import hash_password
 from app.models.department import Department
 from app.models.event import Event
-from app.models.event_department import EventDepartment
 from app.models.event_type import EventType
 from app.models.role import Role
 from app.models.safety_response import SafetyResponse
 from app.models.user import User
+from app.models.user_department import UserDepartment
+from app.models.user_notification_preference import UserNotificationPreference
 from app.models.user_role import UserRole
 from app.seeding import ids
 
@@ -35,7 +35,7 @@ def _role_id(db: Session, name: str) -> uuid.UUID:
 
 def clear_demo_tables_keep_roles(db: Session) -> None:
     """清空業務資料，保留 migrations 種入的 roles。"""
-    import app.models as _models  # noqa: F401 — 載入 Notification 等，註冊至 metadata
+    import app.models as _models  # noqa: F401
 
     q = ", ".join(
         f'"{t.name}"' for t in Base.metadata.sorted_tables if t.name not in _SKIP_TRUNCATE_TABLES
@@ -47,83 +47,147 @@ def clear_demo_tables_keep_roles(db: Session) -> None:
 
 
 def insert_demo_entities(db: Session) -> None:
-    """寫入與 ids.py 對齊的假資料（假設 roles 已存在）。"""
+    """1 管理員、50 員工、多層階層部門、5 進行中事件、1 已完成事件，與合理回報資料。
+
+    部門樹（「上級部下級、下級再部下級」）::
+
+        總公司(1)
+        ├── 營運中心(2)
+        │   └── 研發部(3)
+        │       └── 軟體發展組(6)
+        │           └── 後端技術課(7)
+        │               └── 基礎設施小組(8)
+        └── 事業拓展部(4)
+            └── 客戶服務單位(5)
+                └── 前線客服課(9)
+                    └── 夜班應變中心(10)
+    """
     role_employee = _role_id(db, "employee")
     role_supervisor = _role_id(db, "supervisor")
     role_admin = _role_id(db, "admin")
 
-    depts = [
-        Department(department_id=ids.D_RD, department_name="R&D", parent_department_id=None, manager_id=None),
-        Department(department_id=ids.D_HR, department_name="HR", parent_department_id=None, manager_id=None),
-        Department(department_id=ids.D_OPS, department_name="Operations", parent_department_id=None, manager_id=None),
-        Department(department_id=ids.D_FAC, department_name="Facilities", parent_department_id=None, manager_id=None),
-        Department(
-            department_id=ids.D_PLANT_A,
-            department_name="Plant A",
-            parent_department_id=ids.D_OPS,
-            manager_id=None,
-        ),
-        Department(
-            department_id=ids.D_LINE1,
-            department_name="Plant A - Line 1",
-            parent_department_id=ids.D_PLANT_A,
-            manager_id=None,
-        ),
-        Department(
-            department_id=ids.D_LINE2,
-            department_name="Plant A - Line 2",
-            parent_department_id=ids.D_PLANT_A,
-            manager_id=None,
-        ),
-    ]
-    for d in depts:
-        db.merge(d)
+    pw = hash_password("password")
 
-    # Insert order must satisfy fk_users_manager_id (manager row must exist first).
-    users_spec = [
-        (ids.U_08, "ADM002", "Test Admin", "testadmin@company.com", ids.D_OPS, None, None),
-        (ids.U_04, "ADM001", "Admin User", "admin@company.com", ids.D_OPS, None, "+886-2-7000-0001"),
-        (ids.U_02, "EMP002", "Jeffery Liao", "jeffery@company.com", ids.D_RD, ids.U_04, "+886-912-555-202"),
-        (ids.U_03, "EMP003", "Kelly Lin", "kelly@company.com", ids.D_HR, ids.U_04, "+886-912-555-203"),
-        (ids.U_07, "EMP007", "Victor Hsu", "victor@company.com", ids.D_LINE1, ids.U_04, "+886-912-555-207"),
-        (ids.U_01, "EMP001", "Maggie Pan", "maggie.pan@company.com", ids.D_RD, ids.U_02, "+886-912-555-101"),
-        (ids.U_05, "EMP005", "David Wang", "david@company.com", ids.D_RD, ids.U_02, "+886-912-555-102"),
-        (ids.U_06, "EMP006", "Annie Liu", "annie@company.com", ids.D_HR, ids.U_03, "+886-912-555-206"),
-    ]
+    # --- Departments（兩條深鏈；先插入上層再下層，parent 已存在）---
+    for did, name, parent_n in (
+        (1, "總公司", None),
+        (2, "營運中心", 1),
+        (3, "研發部", 2),
+        (4, "事業拓展部", 1),
+        (5, "客戶服務單位", 4),
+        (6, "軟體發展組", 3),
+        (7, "後端技術課", 6),
+        (8, "基礎設施小組", 7),
+        (9, "前線客服課", 5),
+        (10, "夜班應變中心", 9),
+    ):
+        db.merge(
+            Department(
+                department_id=ids.dept_key(did),
+                department_name=name,
+                parent_department_id=ids.dept_key(parent_n) if parent_n else None,
+                manager_id=None,
+            )
+        )
 
-    role_map = {
-        ids.U_01: [role_employee],
-        ids.U_02: [role_employee, role_supervisor, role_admin],
-        ids.U_03: [role_supervisor],
-        ids.U_04: [role_admin],
-        ids.U_05: [role_employee],
-        ids.U_06: [role_employee],
-        ids.U_07: [role_employee],
-        ids.U_08: [role_admin],
-    }
+    # --- Users 1 = admin ; 2–51 = employee_1 … employee_50 ---
+    # 2–6：各部門主管（employee + supervisor）；4 號另具 admin 供 multi demo
+    # 7–51：一般員工
+    def _email(uid: int) -> str:
+        if uid == 1:
+            return "admin@test.com"
+        return f"employee_{uid - 1}@test.com"
 
-    _TEST_ADMIN_PASSWORD = hash_password("admin1234")
+    def _emp_no(uid: int) -> str:
+        if uid == 1:
+            return "ADM001"
+        return f"EMP{uid - 1:03d}"
 
-    for spec in users_spec:
-        uid, emp_no, name, email, dept_id, mgr_id = spec[:6]
-        phone_val = spec[6] if len(spec) > 6 else None
-        pw = _TEST_ADMIN_PASSWORD if uid == ids.U_08 else None
+    def _name(uid: int) -> str:
+        if uid == 1:
+            return "系統管理員"
+        return f"員工 {uid - 1}"
+
+    # primary department：主管對應所屬層級；一般員工輪派至葉部門 5,7,8,9,10
+    def _primary_dept(uid: int) -> int:
+        if uid == 1:
+            return 1
+        if uid == 2:
+            return 1
+        if uid == 3:
+            return 2
+        if uid == 4:
+            return 3
+        if uid == 5:
+            return 4
+        if uid == 6:
+            return 5
+        if uid == 11:
+            return 6
+        if uid == 12:
+            return 7
+        if uid == 13:
+            return 8
+        if uid == 14:
+            return 9
+        if uid == 15:
+            return 10
+        leaf_cycle = (5, 7, 8, 9, 10)
+        return leaf_cycle[(uid - 7) % len(leaf_cycle)]
+
+    for uid in range(1, 52):
         db.merge(
             User(
-                user_id=uid,
-                employee_no=emp_no,
-                name=name,
-                email=email,
-                department_id=dept_id,
-                manager_id=mgr_id,
+                user_id=ids.user_key(uid),
+                employee_no=_emp_no(uid),
+                name=_name(uid),
+                email=_email(uid),
                 status="active",
-                phone=phone_val,
+                phone=f"+886900{uid:06d}" if uid > 1 else None,
                 password_hash=pw,
             )
         )
         db.flush()
-        for rid in role_map[uid]:
-            db.merge(UserRole(user_id=uid, role_id=rid))
+        db.add(
+            UserDepartment(
+                user_department_id=ids.user_department_key(uid),
+                user_id=ids.user_key(uid),
+                department_id=ids.dept_key(_primary_dept(uid)),
+                is_primary=True,
+            )
+        )
+
+        if uid == 1:
+            roles = [role_admin]
+        elif uid == 4:
+            roles = [role_employee, role_supervisor, role_admin]
+        elif uid in (2, 3, 5, 6, 11, 12, 13, 14, 15):
+            roles = [role_employee, role_supervisor]
+        else:
+            roles = [role_employee]
+        for rid in roles:
+            db.merge(UserRole(user_id=ids.user_key(uid), role_id=rid))
+
+    # 各部門主管（users 2–6 管 1–5 層；11–15 管深層下屬部門 6–10）
+    for did, head_uid in (
+        (1, 2),
+        (2, 3),
+        (3, 4),
+        (4, 5),
+        (5, 6),
+        (6, 11),
+        (7, 12),
+        (8, 13),
+        (9, 14),
+        (10, 15),
+    ):
+        row = db.get(Department, ids.dept_key(did))
+        if row is not None:
+            row.manager_id = ids.user_key(head_uid)
+    db.flush()
+
+    for uid in range(1, 52):
+        db.merge(UserNotificationPreference(user_id=ids.user_key(uid)))
 
     for tid, code, name in (
         (ids.ET_EARTHQUAKE, "earthquake", "Earthquake"),
@@ -134,91 +198,88 @@ def insert_demo_entities(db: Session) -> None:
         db.merge(EventType(event_type_id=tid, code=code, name=name))
     db.flush()
 
-    ev_specs = [
-        (
-            ids.E_001,
-            "Earthquake Safety Check",
-            ids.ET_EARTHQUAKE,
-            "M5+ earthquake detected in northern region. Report your status now.",
-            "active",
-            datetime(2026, 5, 1, 15, 0, tzinfo=timezone.utc),
-            [ids.D_RD, ids.D_HR, ids.D_OPS, ids.D_FAC],
-        ),
-        (
-            ids.E_004,
-            "Fire Drill Check",
-            ids.ET_FIRE,
-            "Scheduled fire evacuation drill.",
-            "active",
-            datetime(2026, 5, 3, 4, 30, tzinfo=timezone.utc),
-            [ids.D_RD, ids.D_OPS],
-        ),
-        (
-            ids.E_002,
-            "Typhoon Safety Check",
-            ids.ET_TYPHOON,
-            "Typhoon warning raised. Confirm current working location and safety.",
-            "active",
-            datetime(2026, 5, 3, 8, 0, tzinfo=timezone.utc),
-            [ids.D_RD, ids.D_FAC],
-        ),
-        (
-            ids.E_003,
-            "Annual Evacuation Drill",
-            ids.ET_OTHER,
-            "Company-wide evacuation drill concluded.",
-            "closed",
-            datetime(2026, 3, 15, 6, 30, tzinfo=timezone.utc),
-            [ids.D_RD, ids.D_HR, ids.D_OPS],
-        ),
-        (
-            ids.E_007,
-            "Flood Response Check",
-            ids.ET_OTHER,
-            "Heavy rainfall event — response window closed.",
-            "closed",
-            datetime(2026, 4, 20, 7, 45, tzinfo=timezone.utc),
-            [ids.D_RD, ids.D_OPS, ids.D_FAC],
-        ),
-    ]
-    for eid, title, etype_id, desc, estatus, start_t, dept_ids in ev_specs:
+    et_cycle = (
+        ids.ET_EARTHQUAKE,
+        ids.ET_TYPHOON,
+        ids.ET_FIRE,
+        ids.ET_OTHER,
+        ids.ET_EARTHQUAKE,
+    )
+    titles = (
+        "地震應變通報（進行中）",
+        "颱風假勤與安全確認（進行中）",
+        "廠區火警演練回報（進行中）",
+        "豪雨應變視窗（進行中）",
+        "大規模停電應變（進行中）",
+    )
+    base_start = datetime(2026, 5, 12, 2, 0, tzinfo=timezone.utc)
+    for i in range(5):
         db.merge(
             Event(
-                event_id=eid,
-                title=title,
-                event_type_id=etype_id,
-                description=desc,
-                status=estatus,
-                created_by=ids.U_04,
-                start_time=start_t,
+                event_id=ids.event_key(i + 1),
+                title=titles[i],
+                event_type_id=et_cycle[i],
+                description=f"事件 {i + 1}：請全體同仁依部門演練計畫完成安全回報。",
+                status="active",
+                created_by=ids.user_key(1),
+                start_time=base_start + timedelta(hours=i * 3),
             )
         )
-        db.flush()
-        for did in dept_ids:
-            db.add(EventDepartment(event_id=eid, department_id=did))
+    db.merge(
+        Event(
+            event_id=ids.event_key(6),
+            title="年度消防演練（已結案）",
+            event_type_id=ids.ET_FIRE,
+            description="演練結案歸檔；以下為全員回報紀錄。",
+            status="closed",
+            created_by=ids.user_key(1),
+            start_time=datetime(2026, 3, 1, 6, 0, tzinfo=timezone.utc),
+        )
+    )
+    db.flush()
 
-    rsp_data = [
-        (ids.U_01, ids.E_001, "safe", "I'm safe. Minor shaking, everything is normal now.", "Building A, 3rd Floor, Lab 2"),
-        (ids.U_01, ids.E_004, "need_help", "Need guidance at assembly point.", None),
-        (ids.U_05, ids.E_001, "need_help", "Minor injury near stairs", None),
-        (ids.U_07, ids.E_001, "safe", "Plant A assembly point", None),
-        (ids.U_01, ids.E_003, "safe", "Evacuated with team.", None),
-        (ids.U_05, ids.E_003, "safe", "No issue", None),
-        (ids.U_01, ids.E_007, "safe", "Area cleared.", None),
-        (ids.U_05, ids.E_004, "safe", "Production floor evacuated", None),
-        (ids.U_05, ids.E_002, "safe", "WFH safe", None),
-    ]
-    for uid, eid, st, comment, loc in rsp_data:
+    # --- Safety responses ---
+    rseq = 1
+    t0 = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+
+    def _add(ev: int, uid: int, status: str, comment: str | None, loc: str | None, hours: int) -> None:
+        nonlocal rseq
         db.add(
             SafetyResponse(
-                response_id=uuid.uuid4(),
-                event_id=eid,
-                user_id=uid,
-                status=st,
+                response_id=ids.response_key(rseq),
+                event_id=ids.event_key(ev),
+                user_id=ids.user_key(uid),
+                status=status,
                 comment=comment,
                 location=loc,
-                responded_at=datetime.now(timezone.utc),
+                responded_at=t0 + timedelta(hours=hours, minutes=(uid + ev) % 60),
             )
+        )
+        rseq += 1
+
+    # Active events 1–5: 約 3/4 員工有回報，混合 safe / need_help
+    for ev in range(1, 6):
+        for uid in range(2, 52):
+            if (uid + ev * 5) % 5 == 0:
+                continue
+            st = "safe" if (uid + ev) % 4 != 0 else "need_help"
+            cmt = (
+                "已確認位置與同仁安全。"
+                if st == "safe"
+                else "需要現場支援或物資，已聯繫窗口。"
+            )
+            loc = f"站點 {(uid + ev) % 9 + 1}" if st == "safe" else None
+            _add(ev, uid, st, cmt, loc, hours=ev * 2 + (uid % 5))
+
+    # Completed event 6: 全員 safe
+    for uid in range(2, 52):
+        _add(
+            6,
+            uid,
+            "safe",
+            "演練結束，已撤離至集合點完成點名。",
+            "南棟集合點",
+            hours=200 + uid,
         )
 
     db.commit()

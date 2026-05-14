@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.department import Department
 from app.models.role import Role
 from app.models.user import User
+from app.models.user_department import UserDepartment
 from app.models.user_role import UserRole
 
 
@@ -14,7 +16,11 @@ class UserRepository:
     def list_all(self, db: Session) -> list[User]:
         stmt = (
             select(User)
-            .options(selectinload(User.user_roles).selectinload(UserRole.role))
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.notification_preference),
+                selectinload(User.department_memberships),
+            )
             .order_by(User.name)
         )
         return list(db.scalars(stmt).unique().all())
@@ -22,7 +28,11 @@ class UserRepository:
     def get_by_id(self, db: Session, user_id: uuid.UUID) -> User | None:
         stmt = (
             select(User)
-            .options(selectinload(User.user_roles).selectinload(UserRole.role))
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.notification_preference),
+                selectinload(User.department_memberships),
+            )
             .where(User.user_id == user_id)
         )
         return db.execute(stmt).unique().scalar_one_or_none()
@@ -31,30 +41,107 @@ class UserRepository:
         em = email.strip().lower()
         stmt = (
             select(User)
-            .options(selectinload(User.user_roles).selectinload(UserRole.role))
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.notification_preference),
+                selectinload(User.department_memberships),
+            )
             .where(func.lower(User.email) == em)
         )
         return db.execute(stmt).unique().scalar_one_or_none()
 
+    def get_primary_department_id(self, db: Session, user_id: uuid.UUID) -> uuid.UUID | None:
+        stmt = (
+            select(UserDepartment.department_id)
+            .where(UserDepartment.user_id == user_id, UserDepartment.is_primary.is_(True))
+            .limit(1)
+        )
+        return db.execute(stmt).scalar_one_or_none()
+
+    def primary_department_map(
+        self, db: Session, user_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, uuid.UUID | None]:
+        if not user_ids:
+            return {}
+        stmt = select(UserDepartment.user_id, UserDepartment.department_id).where(
+            UserDepartment.user_id.in_(user_ids),
+            UserDepartment.is_primary.is_(True),
+        )
+        rows = db.execute(stmt).all()
+        m = {uid: None for uid in user_ids}
+        for uid, did in rows:
+            m[uid] = did
+        return m
+
+    def derived_manager_id(self, db: Session, user_id: uuid.UUID) -> uuid.UUID | None:
+        """Line manager: nearest department on primary-dept chain whose manager is set and not self."""
+        dcur = self.get_primary_department_id(db, user_id)
+        while dcur is not None:
+            dept = db.get(Department, dcur)
+            if dept is None:
+                break
+            mid = dept.manager_id
+            if mid is not None and mid != user_id:
+                return mid
+            dcur = dept.parent_department_id
+        return None
+
+    def set_primary_department(
+        self, db: Session, user_id: uuid.UUID, department_id: uuid.UUID | None
+    ) -> None:
+        db.execute(delete(UserDepartment).where(UserDepartment.user_id == user_id))
+        db.flush()
+        if department_id is not None:
+            db.add(
+                UserDepartment(
+                    user_id=user_id,
+                    department_id=department_id,
+                    is_primary=True,
+                )
+            )
+        db.flush()
+
     def list_subordinates(self, db: Session, manager_id: uuid.UUID) -> list[User]:
+        """Primary-department members of any department where manager_id = this user (excludes self)."""
         stmt = (
             select(User)
             .options(selectinload(User.user_roles).selectinload(UserRole.role))
-            .where(User.manager_id == manager_id)
+            .join(
+                UserDepartment,
+                (UserDepartment.user_id == User.user_id) & (UserDepartment.is_primary.is_(True)),
+            )
+            .join(Department, Department.department_id == UserDepartment.department_id)
+            .where(Department.manager_id == manager_id, User.user_id != manager_id)
             .order_by(User.name)
         )
         return list(db.scalars(stmt).unique().all())
 
     def list_all_subordinates(self, db: Session, manager_id: uuid.UUID) -> list[User]:
-        """Return all subordinates transitively via recursive CTE on manager_id."""
-        base = select(User.user_id).where(User.manager_id == manager_id)
-        cte = base.cte(name="subordinates", recursive=True)
-        recursive_part = select(User.user_id).join(cte, User.manager_id == cte.c.user_id)
-        cte = cte.union_all(recursive_part)
+        """Users whose primary department lies in a subtree rooted at a department managed by manager_id."""
+        rows = db.execute(
+            text("""
+                WITH RECURSIVE subdepts(department_id) AS (
+                    SELECT department_id FROM departments WHERE manager_id = :mid
+                    UNION ALL
+                    SELECT d.department_id FROM departments d
+                    INNER JOIN subdepts s ON d.parent_department_id = s.department_id
+                )
+                SELECT DISTINCT u.user_id
+                FROM users u
+                INNER JOIN user_departments ud
+                    ON ud.user_id = u.user_id AND ud.is_primary = true
+                WHERE ud.department_id IN (SELECT department_id FROM subdepts)
+                  AND u.user_id <> :mid
+            """),
+            {"mid": manager_id},
+        ).all()
+        ids = [r[0] for r in rows]
+        if not ids:
+            return []
         stmt = (
             select(User)
             .options(selectinload(User.user_roles).selectinload(UserRole.role))
-            .where(User.user_id.in_(select(cte.c.user_id)))
+            .where(User.user_id.in_(ids))
             .order_by(User.name)
         )
         return list(db.scalars(stmt).unique().all())
@@ -62,20 +149,18 @@ class UserRepository:
     def is_subordinate_of(
         self, db: Session, *, actor_id: uuid.UUID, target_id: uuid.UUID
     ) -> bool:
-        """Return True if target_id is reachable from actor_id via manager_id (traverse upward from target)."""
-        base = (
-            select(User.manager_id.label("ancestor_id"))
-            .where(User.user_id == target_id, User.manager_id.isnot(None))
-        )
-        cte = base.cte(name="ancestors", recursive=True)
-        recursive_part = (
-            select(User.manager_id.label("ancestor_id"))
-            .join(cte, User.user_id == cte.c.ancestor_id)
-            .where(User.manager_id.isnot(None))
-        )
-        cte = cte.union_all(recursive_part)
-        stmt = select(func.count()).select_from(cte).where(cte.c.ancestor_id == actor_id)
-        return db.execute(stmt).scalar_one() > 0
+        """True if actor is the manager of target's primary dept or an ancestor dept (view_as chain)."""
+        if actor_id == target_id:
+            return False
+        dcur = self.get_primary_department_id(db, target_id)
+        while dcur is not None:
+            dept = db.get(Department, dcur)
+            if dept is None:
+                break
+            if dept.manager_id == actor_id:
+                return True
+            dcur = dept.parent_department_id
+        return False
 
     def user_has_role(self, db: Session, user_id: uuid.UUID, role_name: str) -> bool:
         stmt = (
@@ -143,7 +228,6 @@ class UserRepository:
         name: str,
         phone: str | None,
         department_id: uuid.UUID | None,
-        manager_id: uuid.UUID | None,
     ) -> User:
         stmt = select(User).where(User.user_id == user_id)
         user = db.execute(stmt).scalar_one_or_none()
@@ -151,8 +235,7 @@ class UserRepository:
             raise ValueError(f"User {user_id} not found")
         user.name = name
         user.phone = phone
-        user.department_id = department_id
-        user.manager_id = manager_id
+        self.set_primary_department(db, user_id, department_id)
         db.flush()
         return self.get_by_id(db, user_id)  # type: ignore[return-value]
 

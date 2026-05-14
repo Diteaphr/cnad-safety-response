@@ -23,9 +23,7 @@ import {
   clearAccessToken,
   closeEventApi,
   createEventApi,
-  demoAccountsFallbackSeeded,
   getAdminDashboardApi,
-  getDemoAccounts,
   getDepartments,
   getEventTypesApi,
   getEvents,
@@ -33,15 +31,14 @@ import {
   getReports,
   getSupervisorDashboardApi,
   getUsers,
-  loginDemoUserApi,
   loginWithEmailApi,
   submitReportApi,
   sendEventRemindersApi,
   type AdminDashboardApi,
-  type DemoAccount,
   type PortalNotificationRow,
   type SupervisorDashboardApi,
 } from './api';
+import { cloneMockCatalog, demoRoleAccounts } from './mockData';
 import { appendReminderAudit, loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
 import { useLocale } from './locale/LocaleContext';
@@ -79,7 +76,8 @@ function App() {
   );
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([]);
+  /** Demo 登入：畫面資料來自 `mockData.ts`，不呼叫後端（方便前端離線預覽）。 */
+  const [useMockOfflineCatalog, setUseMockOfflineCatalog] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -109,44 +107,40 @@ function App() {
   const supervisorDashEventIdRef = useRef('');
   const adminDashEventIdRef = useRef('');
   const [adminDepartmentFilter, setAdminDepartmentFilter] = useState<string | null>(null);
+  const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
 
-  const demoAccountsForLogin = useMemo(
-    () => (demoAccounts.length > 0 ? demoAccounts : demoAccountsFallbackSeeded),
-    [demoAccounts],
-  );
+  const loadCatalogFromApi = useCallback(async () => {
+    setCatalogError(null);
+    try {
+      const [deptRows, userRows, evRows, respRows, typeRows] = await Promise.all([
+        getDepartments(),
+        getUsers(),
+        getEvents(),
+        getReports(),
+        getEventTypesApi().catch(() => []),
+      ]);
+      setDepartments(deptRows);
+      setUsers(userRows);
+      setEvents(evRows);
+      setResponses(respRows);
+      setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
+    } catch (e) {
+      setCatalogError(e instanceof Error ? e.message : '無法載入資料');
+    } finally {
+      setCatalogLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        setCatalogError(null);
-        const [accounts, deptRows, userRows, evRows, respRows, typeRows] = await Promise.all([
-          getDemoAccounts(),
-          getDepartments(),
-          getUsers(),
-          getEvents(),
-          getReports(),
-          getEventTypesApi().catch(() => []),
-        ]);
-        if (cancelled) return;
-        setDemoAccounts(accounts);
-        setDepartments(deptRows);
-        setUsers(userRows);
-        setEvents(evRows);
-        setResponses(respRows);
-        setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
-        setCatalogLoaded(true);
-      } catch (e) {
-        if (!cancelled) {
-          setCatalogError(e instanceof Error ? e.message : '無法載入資料');
-          setCatalogLoaded(true);
-        }
-      }
+    void (async () => {
+      await loadCatalogFromApi();
+      if (cancelled) return;
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadCatalogFromApi]);
 
   useEffect(() => {
     if (events.length === 0) return;
@@ -167,7 +161,6 @@ function App() {
 
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
-  const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
   const [eventForm, setEventForm] = useState({
     title: '',
     type: 'Earthquake',
@@ -582,6 +575,10 @@ function App() {
 
   const refreshOperationalData = useCallback(async () => {
     if (!session.isLoggedIn) return;
+    if (useMockOfflineCatalog) {
+      setDashboardUpdatedAt(Date.now());
+      return;
+    }
     try {
       const [repFresh, evtFresh] = await Promise.all([getReports(), getEvents()]);
       setResponses(repFresh);
@@ -610,7 +607,7 @@ function App() {
       /* optional */
     }
     setDashboardUpdatedAt(Date.now());
-  }, [session.isLoggedIn, session.currentRole]);
+  }, [session.isLoggedIn, session.currentRole, useMockOfflineCatalog]);
 
   useEffect(() => {
     if (!session.isLoggedIn || session.currentRole === null) return;
@@ -679,6 +676,10 @@ function App() {
 
   const dispatchRemindersForEvent = useCallback(
     async (eventId: string) => {
+      if (useMockOfflineCatalog) {
+        showToast({ tone: 'info', message: 'Demo 模式：未呼叫後端發送提醒。' });
+        return;
+      }
       try {
         const out = await sendEventRemindersApi(eventId);
         const rid =
@@ -702,41 +703,38 @@ function App() {
         showToast({ tone: 'danger', message: e instanceof Error ? e.message : '無法發送提醒' });
       }
     },
-    [refreshOperationalData, showToast],
+    [refreshOperationalData, showToast, useMockOfflineCatalog],
   );
 
   const handleLogin = async (demoId: string) => {
     clearAccessToken();
-    const account = demoAccountsForLogin.find((item) => item.id === demoId);
+    setUseMockOfflineCatalog(true);
+    const account = demoRoleAccounts.find((item) => item.id === demoId);
     if (!account) return;
-    const cachedUser = users.find((u) => u.id === account.userId);
-    if (!cachedUser) {
-      showToast({
-        tone: 'danger',
-        message: '載入使用者清單後才能 Demo 登入。請確認 /api/users 可走通並重新整理頁面。',
-      });
+    const snapshot = cloneMockCatalog();
+    const mockUser = snapshot.users.find((u) => u.id === account.userId);
+    if (!mockUser) {
+      showToast({ tone: 'danger', message: 'Demo 帳號設定錯誤：找不到對應使用者。' });
       return;
     }
-    try {
-      const { user: tokenUser } = await loginDemoUserApi(cachedUser.id);
-      mergeUserIntoList(tokenUser);
-      const initialRole = account.roles[0];
-      setSession({
-        isLoggedIn: true,
-        user: tokenUser,
-        availableRoles: account.roles,
-        currentRole: account.roles.length === 1 ? initialRole : null,
-      });
-      setNavKey(roleDefaultNav[initialRole]);
-    } catch (e) {
-      showToast({
-        tone: 'danger',
-        message:
-          e instanceof Error
-            ? e.message
-            : 'Demo 登入未取得 JWT（後端請升級並啟動 /api/auth/demo-login）；暫請改用 Email 登入。',
-      });
-    }
+    eventsSelectionInitialized.current = false;
+    setDepartments(snapshot.departments);
+    setUsers(snapshot.users);
+    setEvents(snapshot.events);
+    setResponses(snapshot.responses);
+    setCatalogError(null);
+    setMyNotifications([]);
+    setSupervisorDashboard(null);
+    setAdminDashboard(null);
+    const initialRole = account.roles[0];
+    setSession({
+      isLoggedIn: true,
+      user: { ...mockUser },
+      availableRoles: account.roles,
+      currentRole: account.roles.length === 1 ? initialRole : null,
+    });
+    setNavKey(roleDefaultNav[initialRole]);
+    showToast({ tone: 'info', message: 'Demo 模式：資料來自 mockData（未連資料庫）。' });
   };
 
   const mergeUserIntoList = (user: User) => {
@@ -752,7 +750,9 @@ function App() {
   };
 
   const handleEmailLogin = async (email: string, password: string) => {
+    setUseMockOfflineCatalog(false);
     const { user } = await loginWithEmailApi({ email, password });
+    await loadCatalogFromApi();
     mergeUserIntoList(user);
     const roles = user.roles;
     const initialRole = roles[0];
@@ -774,7 +774,9 @@ function App() {
 
   const logout = () => {
     clearAccessToken();
+    setUseMockOfflineCatalog(false);
     setSession({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
+    void loadCatalogFromApi();
     showToast({ tone: 'info', message: 'Logged out.' });
   };
 
@@ -796,6 +798,61 @@ function App() {
       .filter((r) => r.eventId === eventId && r.userId === uid)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
     const keepPriorAttach = !(meta?.omitStoredAttachment ?? false);
+    if (useMockOfflineCatalog) {
+      try {
+        const rid =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `local-${Date.now()}`;
+        const nextResponse: SafetyResponse = {
+          id: rid,
+          eventId,
+          userId: uid,
+          status,
+          comment: fields.comment.trim() || undefined,
+          location: fields.location.trim() || undefined,
+          attachmentName:
+            fields.attachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined) ?? undefined,
+          attachmentSizeBytes:
+            fields.attachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined) ?? undefined,
+          updatedAt: new Date().toISOString(),
+        };
+        const mergedResponses: SafetyResponse[] = [
+          ...responses.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
+          nextResponse,
+        ];
+        if (session.currentRole === 'supervisor' && subordinateUserIds.length > 0) {
+          let pend = 0;
+          for (const sid of subordinateUserIds) {
+            const lr = mergedResponses
+              .filter((r) => r.eventId === eventId && r.userId === sid)
+              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+            if (!lr) pend += 1;
+          }
+          const teamTotal = subordinateUserIds.length;
+          if (pend > 0 && teamTotal > 0) {
+            setSupervisorTeamNudge({
+              pendingPct: Math.round((pend / teamTotal) * 100),
+              eventTitle: eventRow.title,
+            });
+          } else {
+            setSupervisorTeamNudge(null);
+          }
+        } else {
+          setSupervisorTeamNudge(null);
+        }
+        clearEmployeeReportDraft(uid, eventId);
+        setResponses(mergedResponses);
+        lastSubmitMetaRef.current = null;
+        showToast({
+          tone: 'success',
+          message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}（Demo 本地）`,
+        });
+      } finally {
+        setSubmittingReportEventId(null);
+      }
+      return;
+    }
     try {
       const out = await submitReportApi({
         eventId,
@@ -857,19 +914,39 @@ function App() {
   const createEvent = async (): Promise<boolean> => {
     if (!session.user) return false;
     const custom = eventForm.type.trim().toLowerCase() === 'other' ? eventForm.customType.trim() : '';
+    if (useMockOfflineCatalog) {
+      const eid =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `e-local-${Date.now()}`;
+      const newEvent: EventItem = {
+        id: eid,
+        title: eventForm.title || 'Untitled Event',
+        type: eventForm.type,
+        description: eventForm.description,
+        targetDepartmentIds: [],
+        status: 'active',
+        startAt: new Date(eventForm.startAt).toISOString(),
+        cardDepartment: undefined,
+        venue: undefined,
+      };
+      setEvents((prev) => [newEvent, ...prev]);
+      showToast({ tone: 'success', message: 'Demo：事件已加入本機清單（未寫入後端）。' });
+      return true;
+    }
     try {
       const out = await createEventApi(session.user.id, {
         title: eventForm.title || 'Untitled Event',
         type: eventForm.type,
         description: eventForm.description,
         startAt: new Date(eventForm.startAt).toISOString(),
-        targetDepartmentIds: departments.map((d) => d.id),
+        targetDepartmentIds: [],
         ...(custom ? { customTypeName: custom } : {}),
       });
       setEvents((prev) => [out.event, ...prev]);
       showToast({
         tone: 'success',
-        message: 'Event is live. Activation notifications were sent to targeted employees.',
+        message: 'Event is live. Activation notifications were sent to all employees.',
       });
       try {
         const typeRows = await getEventTypesApi();
@@ -887,6 +964,11 @@ function App() {
 
   const closeEvent = async (eventId: string) => {
     if (!session.user) return;
+    if (useMockOfflineCatalog) {
+      setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, status: 'closed' as const } : e)));
+      showToast({ tone: 'info', message: 'Demo：事件已標記為已結束（本機）。' });
+      return;
+    }
     try {
       await closeEventApi(session.user.id, eventId);
       await refreshOperationalData();
@@ -903,7 +985,7 @@ function App() {
   if (!session.isLoggedIn) {
     return (
       <LoginPage
-        accounts={demoAccountsForLogin}
+        accounts={demoRoleAccounts}
         loading={!catalogLoaded}
         error={catalogError}
         onLogin={handleLogin}
@@ -1088,6 +1170,7 @@ function App() {
             users={users}
             departments={departments}
             showToast={showToast}
+            offlineMockMode={useMockOfflineCatalog}
             onUserCreated={(u) => mergeUserIntoList(u)}
           />
         )}
@@ -1109,6 +1192,7 @@ function App() {
               setProfileSubordinateUserId(userId);
               setNavKey('profile-direct-report-history');
             }}
+            offlineMockSession={useMockOfflineCatalog}
           />
         )}
         {navKey === 'profile-direct-reports-list' && (

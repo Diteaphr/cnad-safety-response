@@ -27,6 +27,9 @@ from app.repositories.event_repository import EventRepository
 from app.repositories.event_type_repository import EventTypeRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
+from app.repositories.user_notification_preference_repository import (
+    UserNotificationPreferenceRepository,
+)
 from app.repositories.user_repository import UserRepository
 from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DepartmentCreateIn, DepartmentUpdateIn, EventTypeCreateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
@@ -51,6 +54,7 @@ def _role_names(user: User) -> List[str]:
 class PortalService:
     def __init__(self) -> None:
         self._users = UserRepository()
+        self._notif_prefs = UserNotificationPreferenceRepository()
         self._depts = DepartmentRepository()
         self._events = EventRepository()
         self._event_types = EventTypeRepository()
@@ -59,23 +63,32 @@ class PortalService:
         self._response_svc = SafetyResponseService()
         self._notif_svc = NotificationService()
 
-    def _user_out(self, user: User) -> dict[str, Any]:
+    def _attach_push_prefs(self, db: Session, user: User, out: dict[str, Any]) -> dict[str, Any]:
+        pref = user.notification_preference
+        if pref is None:
+            pref = self._notif_prefs.ensure_for_user(db, user.user_id)
+        out.update(self._notif_prefs.row_to_api_dict(pref))
+        return out
+
+    def _user_out(self, db: Session, user: User) -> dict[str, Any]:
         roles = _role_names(user)
         rcast: list[Any] = [
             x for x in roles if x in ("employee", "supervisor", "admin")
         ]
-        return {
+        pd = self._users.get_primary_department_id(db, user.user_id)
+        dm = self._users.derived_manager_id(db, user.user_id)
+        out = {
             "id": str(user.user_id),
             "name": user.name,
             "email": user.email,
-            "departmentId": str(user.department_id) if user.department_id else "",
+            "departmentId": str(pd) if pd else "",
             "roles": rcast,
-            "pushEnabled": True,
-            "managerId": str(user.manager_id) if user.manager_id else None,
+            "managerId": str(dm) if dm else None,
             "employeeCode": user.employee_no,
             "phone": user.phone or None,
             "needsProfileCompletion": _needs_profile_completion(user),
         }
+        return self._attach_push_prefs(db, user, out)
 
     def _dept_out(self, d) -> dict[str, Any]:
         return {
@@ -85,10 +98,6 @@ class PortalService:
         }
 
     def _event_out(self, event: Event, name_map: dict[uuid.UUID, str]) -> dict[str, Any]:
-        tids = [str(ed.department_id) for ed in event.event_departments]
-        first = None
-        if event.event_departments:
-            first = name_map.get(event.event_departments[0].department_id)
         st = event.start_time or event.created_at
         et = event.event_type
         return {
@@ -96,10 +105,10 @@ class PortalService:
             "title": event.title,
             "type": et,
             "description": event.description or "",
-            "targetDepartmentIds": tids,
+            "targetDepartmentIds": [],
             "status": event.status,
             "startAt": st.replace(tzinfo=timezone.utc).isoformat() if st.tzinfo is None else st.isoformat(),
-            "cardDepartment": first,
+            "cardDepartment": None,
             "venue": None,
         }
 
@@ -136,7 +145,7 @@ class PortalService:
         return [self._dept_out(d) for d in self._depts.list_all(db)]
 
     def list_users(self, db: Session) -> list[dict[str, Any]]:
-        return [self._user_out(u) for u in self._users.list_all(db)]
+        return [self._user_out(db, u) for u in self._users.list_all(db)]
 
     def list_events(self, db: Session) -> list[dict[str, Any]]:
         nm = self._depts.name_map(db)
@@ -151,27 +160,27 @@ class PortalService:
         return [
             {
                 "id": "employee",
-                "label": "Employee Demo",
+                "label": "Employee — employee_1",
                 "roles": ["employee"],
-                "userId": str(ids.U_01),
+                "userId": str(ids.user_key(2)),
             },
             {
                 "id": "supervisor",
-                "label": "Supervisor Demo",
+                "label": "Supervisor — employee_2",
                 "roles": ["supervisor"],
-                "userId": str(ids.U_02),
+                "userId": str(ids.user_key(3)),
             },
             {
                 "id": "admin",
-                "label": "Admin Demo",
+                "label": "Admin — admin@test.com",
                 "roles": ["admin"],
-                "userId": str(ids.U_04),
+                "userId": str(ids.user_key(1)),
             },
             {
                 "id": "multi",
-                "label": "Multi-role Demo",
+                "label": "Multi-role — employee_3",
                 "roles": ["employee", "supervisor", "admin"],
-                "userId": str(ids.U_02),
+                "userId": str(ids.user_key(4)),
             },
         ]
 
@@ -190,7 +199,7 @@ class PortalService:
                 my_report = self._response_out(r)
         roles = _role_names(user)
         return {
-            "current_user": self._user_out(user),
+            "current_user": self._user_out(db, user),
             "active_event": self._event_out(active, nm) if active else None,
             "my_active_report": my_report,
             "capabilities": {
@@ -209,14 +218,6 @@ class PortalService:
             st = _parse_iso(payload.startAt)
         except ValueError as e:
             raise HTTPException(status_code=400, detail="Invalid startAt") from e
-        dids: list[uuid.UUID] = []
-        for s in payload.targetDepartmentIds:
-            try:
-                dids.append(uuid.UUID(s))
-            except ValueError as e:
-                raise HTTPException(
-                    status_code=400, detail="Invalid department id"
-                ) from e
         custom = (payload.custom_type_name or "").strip()
         if payload.type.strip().lower() == "other" and custom:
             et = self._event_types.get_or_create_by_display_name(db, custom)
@@ -233,7 +234,6 @@ class PortalService:
             created_by=actor_id,
             start_time=st,
         )
-        self._events.add_departments(db, ev.event_id, dids)
         db.commit()
         nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, ev.event_id)
@@ -248,18 +248,14 @@ class PortalService:
         ev = self._events.get_by_id(db, event_id)
         if ev is None:
             raise HTTPException(status_code=404, detail="Event not found")
-        if ev.status != "draft":
-            raise HTTPException(status_code=409, detail="Only draft events can be edited")
+        if ev.status != "active":
+            raise HTTPException(
+                status_code=409, detail="Only active events can be edited"
+            )
         try:
             st = _parse_iso(payload.startAt)
         except ValueError as e:
             raise HTTPException(status_code=400, detail="Invalid startAt") from e
-        dids: list[uuid.UUID] = []
-        for s in payload.targetDepartmentIds:
-            try:
-                dids.append(uuid.UUID(s))
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail="Invalid department id") from e
         custom = (payload.custom_type_name or "").strip()
         if payload.type.strip().lower() == "other" and custom:
             et = self._event_types.get_or_create_by_display_name(db, custom)
@@ -275,7 +271,6 @@ class PortalService:
             description=payload.description,
             start_time=st,
         )
-        self._events.replace_departments(db, event_id, dids)
         db.commit()
         db.expire_all()
         nm = self._depts.name_map(db)
@@ -399,17 +394,19 @@ class PortalService:
             db, event_id=active_event.event_id, manager_id=target_manager_id
         )
 
-        # Team: direct reports only
+        # Team: direct reports only (primary dept's department.manager_id == target manager)
         direct_reports = self._users.list_subordinates(db, target_manager_id)
         employee_ids = [u.user_id for u in direct_reports if "employee" in _role_names(u)]
         latest_responses = self._responses.latest_for_users(
             db, active_event.event_id, employee_ids
         )
 
+        prim = self._users.primary_department_map(db, [u.user_id for u in direct_reports])
         team = []
         for u in direct_reports:
             u_roles = _role_names(u)
-            dname = nm.get(u.department_id, "-") if u.department_id else "-"
+            did = prim.get(u.user_id)
+            dname = nm.get(did, "-") if did else "-"
             if "supervisor" in u_roles:
                 sub_kpis = self._responses.kpi_for_manager_subordinates(
                     db, event_id=active_event.event_id, manager_id=u.user_id
@@ -488,10 +485,12 @@ class PortalService:
         need_c = sum(1 for r in latest_by_user.values() if r.status == "need_help")
         pending = max(0, targeted_count - responded)
         dept_stats: dict[str, dict[str, Any]] = {}
+        prim = self._users.primary_department_map(db, [u.user_id for u in targeted])
         for u in targeted:
-            if not u.department_id:
+            did = prim.get(u.user_id)
+            if not did:
                 continue
-            dname = nm.get(u.department_id, "Unknown")
+            dname = nm.get(did, "Unknown")
             bucket = dept_stats.setdefault(
                 dname,
                 {"department": dname, "safe": 0, "need_help": 0, "pending": 0},
@@ -519,27 +518,30 @@ class PortalService:
     # Profile (self-service)
     # ------------------------------------------------------------------
 
-    def _profile_out(self, user: User) -> dict[str, Any]:
+    def _profile_out(self, db: Session, user: User) -> dict[str, Any]:
         """Extended user dict that includes phone and employeeNo — for /users/me."""
         roles = _role_names(user)
         rcast: list[Any] = [x for x in roles if x in ("employee", "supervisor", "admin")]
-        return {
+        pd = self._users.get_primary_department_id(db, user.user_id)
+        dm = self._users.derived_manager_id(db, user.user_id)
+        out = {
             "id": str(user.user_id),
             "employeeNo": user.employee_no,
             "name": user.name,
             "email": user.email,
             "phone": user.phone,
-            "departmentId": str(user.department_id) if user.department_id else None,
-            "managerId": str(user.manager_id) if user.manager_id else None,
+            "departmentId": str(pd) if pd else None,
+            "managerId": str(dm) if dm else None,
             "roles": rcast,
             "needsProfileCompletion": _needs_profile_completion(user),
         }
+        return self._attach_push_prefs(db, user, out)
 
     def get_profile(self, db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         user = self._users.get_by_id(db, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
-        return self._profile_out(user)
+        return self._profile_out(db, user)
 
     def update_profile(
         self, db: Session, user_id: uuid.UUID, payload: ProfileUpdateIn
@@ -552,8 +554,25 @@ class PortalService:
             name=payload.name.strip(),
             phone=payload.phone.strip() if payload.phone else None,
         )
+        if (
+            payload.push_enabled is not None
+            or payload.push_emergency_enabled is not None
+            or payload.push_reminder_enabled is not None
+            or payload.push_escalation_enabled is not None
+        ):
+            self._notif_prefs.apply_partial(
+                db,
+                user_id,
+                push_master_enabled=payload.push_enabled,
+                push_emergency_enabled=payload.push_emergency_enabled,
+                push_reminder_enabled=payload.push_reminder_enabled,
+                push_escalation_enabled=payload.push_escalation_enabled,
+            )
         db.commit()
-        return self._profile_out(user)
+        db.expire_all()
+        refreshed = self._users.get_by_id(db, user_id)
+        assert refreshed is not None
+        return self._profile_out(db, refreshed)
 
     def change_password(
         self, db: Session, user_id: uuid.UUID, payload: ChangePasswordIn
@@ -688,7 +707,7 @@ class PortalService:
     def admin_list_users(self, db: Session, actor_id: uuid.UUID) -> list[dict[str, Any]]:
         if not self._users.user_has_role(db, actor_id, "admin"):
             raise HTTPException(status_code=403, detail="Admin only")
-        return [self._profile_out(u) for u in self._users.list_all(db)]
+        return [self._profile_out(db, u) for u in self._users.list_all(db)]
 
     def admin_create_user(
         self, db: Session, actor_id: uuid.UUID, payload: AdminUserCreateIn
@@ -703,10 +722,6 @@ class PortalService:
         dept_id = self._parse_optional_uuid(payload.departmentId, field="departmentId")
         if dept_id and self._depts.get_by_id(db, dept_id) is None:
             raise HTTPException(status_code=400, detail="Department not found")
-
-        manager_id = self._parse_optional_uuid(payload.managerId, field="managerId")
-        if manager_id and self._users.get_by_id(db, manager_id) is None:
-            raise HTTPException(status_code=400, detail="Manager not found")
 
         if payload.employeeNo and payload.employeeNo.strip():
             emp_no = payload.employeeNo.strip()
@@ -730,19 +745,19 @@ class PortalService:
             name=payload.name.strip(),
             email=email,
             phone=payload.phone.strip() if payload.phone else None,
-            department_id=dept_id,
-            manager_id=manager_id,
             status="active",
             password_hash=hash_password(pw_plain),
         )
         db.add(user)
         db.flush()
+        self._notif_prefs.ensure_for_user(db, user.user_id)
+        self._users.set_primary_department(db, user.user_id, dept_id)
         self._users.set_roles(db, user.user_id, payload.roles)
         db.commit()
 
         full = self._users.get_by_id(db, user.user_id)
         assert full is not None
-        out: dict[str, Any] = {"message": "User created.", "user": self._profile_out(full)}
+        out: dict[str, Any] = {"message": "User created.", "user": self._profile_out(db, full)}
         if temporary_password is not None:
             out["temporaryPassword"] = temporary_password
         return out
@@ -760,17 +775,12 @@ class PortalService:
         if dept_id and self._depts.get_by_id(db, dept_id) is None:
             raise HTTPException(status_code=400, detail="Department not found")
 
-        manager_id = self._parse_optional_uuid(payload.managerId, field="managerId")
-        if manager_id and self._users.get_by_id(db, manager_id) is None:
-            raise HTTPException(status_code=400, detail="Manager not found")
-
         self._users.update_user_admin(
             db,
             user_id,
             name=payload.name.strip(),
             phone=payload.phone.strip() if payload.phone else None,
             department_id=dept_id,
-            manager_id=manager_id,
         )
         self._users.set_roles(db, user_id, payload.roles)
         db.commit()
@@ -780,7 +790,7 @@ class PortalService:
 
         full = self._users.get_by_id(db, user_id)
         assert full is not None
-        return self._profile_out(full)
+        return self._profile_out(db, full)
 
     def register(self, db: Session, payload: RegisterIn) -> dict[str, Any]:
         email = payload.email.strip().lower()
@@ -825,18 +835,18 @@ class PortalService:
             name=payload.name.strip(),
             email=email,
             phone=payload.phone.strip() if payload.phone else None,
-            department_id=dept_uuid,
-            manager_id=None,
             status="active",
             password_hash=hash_password(payload.password),
         )
         db.add(user)
         db.flush()
+        self._users.set_primary_department(db, user.user_id, dept_uuid)
         db.add(UserRole(user_id=user.user_id, role_id=rid))
+        self._notif_prefs.ensure_for_user(db, user.user_id)
         db.commit()
         full = self._users.get_by_id(db, user.user_id)
         assert full is not None
-        return {"message": "Registration successful.", "user": self._user_out(full)}
+        return {"message": "Registration successful.", "user": self._user_out(db, full)}
 
     def login(self, db: Session, payload: LoginIn) -> dict[str, Any]:
         user = self._users.get_by_email(db, payload.email.strip().lower())
@@ -853,7 +863,7 @@ class PortalService:
         roles = _role_names(user)
         token = create_access_token(user.user_id, roles)
         return {
-            "user": self._user_out(user),
+            "user": self._user_out(db, user),
             "access_token": token,
             "token_type": "bearer",
         }
@@ -881,7 +891,7 @@ class PortalService:
         roles = _role_names(user)
         token = create_access_token(user.user_id, roles)
         return {
-            "user": self._user_out(user),
+            "user": self._user_out(db, user),
             "access_token": token,
             "token_type": "bearer",
         }

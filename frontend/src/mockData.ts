@@ -1,4 +1,20 @@
-import type { Department, EventItem, Role, SafetyResponse, User } from './types';
+import type { DemoAccount } from './api';
+import type { Department, EventItem, SafetyResponse, User } from './types';
+
+/** 供 Demo 登入還原靜態資料（避免改到模組匯出的常數參照）。 */
+export function cloneMockCatalog(): {
+  departments: Department[];
+  users: User[];
+  events: EventItem[];
+  responses: SafetyResponse[];
+} {
+  return {
+    departments: structuredClone(departments),
+    users: structuredClone(users),
+    events: structuredClone(events),
+    responses: structuredClone(responses),
+  };
+}
 
 export const departments: Department[] = [
   { id: 'd-rd', name: 'R&D', parentId: null },
@@ -156,6 +172,21 @@ export const users: User[] = [
     jobTitle: '產線組長',
     phone: '+886-3-5550-0888',
   },
+  {
+    id: 'u-multi',
+    name: 'Pat Chen',
+    email: 'pat.multi@company.com',
+    departmentId: 'd-rd',
+    roles: ['employee', 'supervisor', 'admin'],
+    pushEnabled: true,
+    pushEmergencyEnabled: true,
+    pushReminderEnabled: true,
+    pushEscalationEnabled: true,
+    managerId: null,
+    employeeCode: 'EMP-100900',
+    jobTitle: '多角色示範帳號',
+    phone: '+886-2-5550-0900',
+  },
 ];
 
 /** 進行中 3：地震（Maggie 已報平安）、颱風（Maggie 未回報）、消防演練（Maggie I need help） */
@@ -248,9 +279,10 @@ export const responses: SafetyResponse[] = [
   { id: 'r-009', eventId: 'e-002', userId: 'u-05', status: 'safe', comment: 'WFH safe', updatedAt: '2026-05-03T08:15:00.000Z' },
 ];
 
-export const demoRoleAccounts: Array<{ id: string; label: string; roles: Role[]; userId: string }> = [
-  { id: 'employee', label: 'Employee Demo', roles: ['employee'], userId: 'u-01' },
-  { id: 'supervisor', label: 'Supervisor Demo', roles: ['supervisor'], userId: 'u-02' },
-  { id: 'admin', label: 'Admin Demo', roles: ['admin'], userId: 'u-04' },
-  { id: 'multi', label: 'Multi-role Demo', roles: ['employee', 'supervisor', 'admin'], userId: 'u-02' },
+/** Demo 下拉選項；`userId` 對應本檔 `users` 的 `id`（不依賴後端／資料庫）。 */
+export const demoRoleAccounts: DemoAccount[] = [
+  { id: 'employee', label: 'Employee — Maggie (R&D)', roles: ['employee'], userId: 'u-01' },
+  { id: 'supervisor', label: 'Supervisor — Jeffery (R&D)', roles: ['supervisor'], userId: 'u-02' },
+  { id: 'admin', label: 'Admin — Admin User (Ops)', roles: ['admin'], userId: 'u-04' },
+  { id: 'multi', label: 'Multi-role — Pat Chen', roles: ['employee', 'supervisor', 'admin'], userId: 'u-multi' },
 ];

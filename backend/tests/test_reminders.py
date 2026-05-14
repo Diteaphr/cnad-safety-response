@@ -25,9 +25,10 @@ def _reminders_url(event_id) -> str:
 # Happy paths
 # ---------------------------------------------------------------------------
 
-def test_reminders_sends_to_pending_team(client, make_user, make_event):
-    sup = make_user(email="sup@test.com", role="supervisor")
-    emp = make_user(email="emp@test.com", role="employee", manager_id=sup.user_id)
+def test_reminders_sends_to_pending_team(client, make_user, make_department, make_event):
+    d = make_department("TeamDept")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     resp = client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
@@ -39,9 +40,10 @@ def test_reminders_sends_to_pending_team(client, make_user, make_event):
     assert body["total_team"] == 1
 
 
-def test_reminders_skips_safe_respondents(client, make_user, make_event):
-    sup = make_user(email="sup@test.com", role="supervisor")
-    emp = make_user(email="emp@test.com", role="employee", manager_id=sup.user_id)
+def test_reminders_skips_safe_respondents(client, make_user, make_department, make_event):
+    d = make_department("TeamDept")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     # emp reports safe first
@@ -59,9 +61,10 @@ def test_reminders_skips_safe_respondents(client, make_user, make_event):
     assert body["total_team"] == 1
 
 
-def test_reminders_sends_to_need_help_respondents(client, make_user, make_event):
-    sup = make_user(email="sup@test.com", role="supervisor")
-    emp = make_user(email="emp@test.com", role="employee", manager_id=sup.user_id)
+def test_reminders_sends_to_need_help_respondents(client, make_user, make_department, make_event):
+    d = make_department("TeamDept")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     # emp reported "need_help" — should still receive reminder
@@ -88,11 +91,12 @@ def test_reminders_no_subordinates(client, make_user, make_event):
     assert body["total_team"] == 0
 
 
-def test_reminders_multiple_team_members(client, make_user, make_event):
-    sup = make_user(email="sup@test.com", role="supervisor")
-    emp1 = make_user(email="emp1@test.com", role="employee", manager_id=sup.user_id)
-    emp2 = make_user(email="emp2@test.com", role="employee", manager_id=sup.user_id)
-    emp3 = make_user(email="emp3@test.com", role="employee", manager_id=sup.user_id)
+def test_reminders_multiple_team_members(client, make_user, make_department, make_event):
+    d = make_department("TeamDept")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    emp1 = make_user(email="emp1@test.com", role="employee", department_id=d.department_id)
+    emp2 = make_user(email="emp2@test.com", role="employee", department_id=d.department_id)
+    emp3 = make_user(email="emp3@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     # emp1 reports safe, emp2 reports need_help, emp3 is pending
@@ -115,10 +119,11 @@ def test_reminders_multiple_team_members(client, make_user, make_event):
     assert body["sent"] == 2  # emp2 (need_help) + emp3 (pending)
 
 
-def test_reminders_idempotent(client, make_user, make_event):
+def test_reminders_idempotent(client, make_user, make_department, make_event):
     """Second call re-uses the existing notification row without crashing."""
-    sup = make_user(email="sup@test.com", role="supervisor")
-    _emp = make_user(email="emp@test.com", role="employee", manager_id=sup.user_id)
+    d = make_department("TeamDept")
+    sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
+    _emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
     r1 = client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
@@ -141,14 +146,6 @@ def test_reminders_employee_role_403(client, make_user, make_event):
 
     resp = client.post(_reminders_url(event.event_id), headers=auth_headers(emp))
     assert resp.status_code == 403
-
-
-def test_reminders_draft_event_400(client, make_user, make_event):
-    sup = make_user(email="sup@test.com", role="supervisor")
-    event = make_event(status="draft")
-
-    resp = client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
-    assert resp.status_code == 400
 
 
 def test_reminders_closed_event_400(client, make_user, make_event):

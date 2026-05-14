@@ -42,6 +42,10 @@ def test_get_profile_returns_own_data(client, make_user, make_department):
     assert body["departmentId"] == str(dept.department_id)
     assert "employee" in body["roles"]
     assert "employeeNo" in body
+    assert body.get("pushEnabled") is True
+    assert body.get("pushEmergencyEnabled") is True
+    assert body.get("pushReminderEnabled") is True
+    assert body.get("pushEscalationEnabled") is True
     assert "password" not in body
     assert "password_hash" not in body
 
@@ -150,3 +154,59 @@ def test_get_profile_reflects_update(client, make_user):
     resp = client.get(PROFILE, headers=auth_headers(user))
     assert resp.json()["name"] == "After"
     assert resp.json()["phone"] == "+886911111111"
+
+
+def test_update_profile_push_toggles(client, make_user):
+    user = make_user(name="Pat", email="pat@test.com", role="employee", phone="+886900000001")
+
+    r1 = client.put(
+        PROFILE,
+        json={
+            "name": "Pat",
+            "phone": "+886900000001",
+            "pushEnabled": False,
+            "pushEmergencyEnabled": False,
+            "pushReminderEnabled": True,
+            "pushEscalationEnabled": False,
+        },
+        headers=auth_headers(user),
+    )
+    assert r1.status_code == 200
+    b1 = r1.json()
+    assert b1["pushEnabled"] is False
+    assert b1["pushEmergencyEnabled"] is False
+    assert b1["pushReminderEnabled"] is True
+    assert b1["pushEscalationEnabled"] is False
+
+    r2 = client.get(PROFILE, headers=auth_headers(user))
+    assert r2.status_code == 200
+    b2 = r2.json()
+    assert b2["pushEnabled"] is False
+    assert b2["pushEmergencyEnabled"] is False
+
+
+def test_update_profile_push_partial_does_not_reset_others(client, make_user):
+    user = make_user(name="Sam", email="sam@test.com", role="employee", phone=None)
+
+    client.put(
+        PROFILE,
+        json={
+            "name": "Sam",
+            "phone": None,
+            "pushEnabled": False,
+            "pushEmergencyEnabled": False,
+            "pushReminderEnabled": False,
+            "pushEscalationEnabled": False,
+        },
+        headers=auth_headers(user),
+    )
+    client.put(
+        PROFILE,
+        json={"name": "Sam", "phone": None, "pushReminderEnabled": True},
+        headers=auth_headers(user),
+    )
+    body = client.get(PROFILE, headers=auth_headers(user)).json()
+    assert body["pushEnabled"] is False
+    assert body["pushEmergencyEnabled"] is False
+    assert body["pushReminderEnabled"] is True
+    assert body["pushEscalationEnabled"] is False

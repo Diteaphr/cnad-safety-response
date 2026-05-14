@@ -41,20 +41,15 @@ def _is_employee(user: User) -> bool:
 
 def _employees_targeted_by_event(db: Session, event_id: uuid.UUID) -> list[User]:
     """
-    Return employees targeted by the event.
-    If the event has target departments, only include employees in those departments.
-    If no target departments are set, include all employees (company-wide event).
+    Return employees who participate in safety events.
+
+    Events are company-wide: all users with the employee role are in scope.
+    (The event_id argument is kept for call-site compatibility.)
     """
     event = _event_repo.get_by_id(db, event_id)
     if event is None:
         return []
-    target_dept_ids = {ed.department_id for ed in event.event_departments}
     all_users = _user_repo.list_all(db)
-    if target_dept_ids:
-        return [
-            u for u in all_users
-            if _is_employee(u) and u.department_id in target_dept_ids
-        ]
     return [u for u in all_users if _is_employee(u)]
 
 

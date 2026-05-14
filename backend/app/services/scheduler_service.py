@@ -99,19 +99,12 @@ def _scan_all_active_events(db) -> None:
         return
 
     for event in active_events:
-        target_dept_ids = {ed.department_id for ed in event.event_departments}
         all_users = user_repo.list_all(db)
 
         def _is_employee(u) -> bool:
             return any(ur.role.role_name == "employee" for ur in u.user_roles)
 
-        if target_dept_ids:
-            employees = [
-                u for u in all_users
-                if _is_employee(u) and u.department_id in target_dept_ids
-            ]
-        else:
-            employees = [u for u in all_users if _is_employee(u)]
+        employees = [u for u in all_users if _is_employee(u)]
 
         stats = dispatch_reminders(db, event.event_id, employees)
         logger.info(

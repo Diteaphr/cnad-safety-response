@@ -37,10 +37,10 @@ from app.main import app
 from app.models.department import Department
 from app.models.event import Event
 from app.models.event_type import EventType
-from app.models.event_department import EventDepartment
-from app.models.notification import Notification
 from app.models.role import Role
 from app.models.user import User
+from app.models.user_department import UserDepartment  # noqa: F401 — metadata
+from app.models.user_notification_preference import UserNotificationPreference
 from app.models.user_role import UserRole
 
 # ---------------------------------------------------------------------------
@@ -154,58 +154,71 @@ def roles(db) -> dict[str, Role]:
 
 @pytest.fixture
 def make_department(db):
-    """Factory fixture: create a Department row in the test DB."""
-    def _factory(name: str = "Test Dept") -> Department:
+    """Factory: create a Department."""
+
+    def _factory(name: str = "Test Dept", parent_id: uuid.UUID | None = None) -> Department:
         dept = Department(
             department_id=uuid.uuid4(),
             department_name=name,
+            parent_department_id=parent_id,
         )
         db.add(dept)
         db.commit()
         db.refresh(dept)
         return dept
+
     return _factory
 
 
 @pytest.fixture
 def make_user(db, roles):
     """
-    Factory fixture: call make_user(email=..., role=...) to get a User.
+    Factory: create User + optional primary department (user_departments).
 
-    Each created user gets a unique employee_no and optionally a manager_id
-    for supervisor-subordinate tests.
+    For supervisor/team tests, set ``managed_department_id`` to a department UUID
+    to set ``departments.manager_id`` to this user after creation (department head).
     """
+
     def _factory(
         name: str = "Test User",
         email: str = "user@test.com",
         password: str = "password123",
         role: str = "employee",
-        manager_id: uuid.UUID | None = None,
         phone: str | None = None,
         department_id: uuid.UUID | None = None,
+        managed_department_id: uuid.UUID | None = None,
     ) -> User:
         user = User(
             employee_no=f"T{uuid.uuid4().hex[:8].upper()}",
             name=name,
             email=email,
             phone=phone,
-            department_id=department_id,
-            manager_id=manager_id,
             status="active",
             password_hash=hash_password(password),
         )
         db.add(user)
         db.flush()
+        if department_id is not None:
+            db.add(
+                UserDepartment(
+                    user_id=user.user_id,
+                    department_id=department_id,
+                    is_primary=True,
+                )
+            )
         db.add(UserRole(user_id=user.user_id, role_id=roles[role].role_id))
+        db.merge(UserNotificationPreference(user_id=user.user_id))
+        db.flush()
+        if managed_department_id is not None:
+            dep = db.get(Department, managed_department_id)
+            if dep is not None:
+                dep.manager_id = user.user_id
         db.commit()
-        db.refresh(user)
-        # Eager-load user_roles → role so auth_headers can read role names
         from sqlalchemy.orm import selectinload
-        from sqlalchemy import select
-        from app.models.user_role import UserRole as UR
+
         stmt = (
             select(User)
-            .options(selectinload(User.user_roles).selectinload(UR.role))
+            .options(selectinload(User.user_roles).selectinload(UserRole.role))
             .where(User.user_id == user.user_id)
         )
         return db.execute(stmt).unique().scalar_one()
@@ -216,48 +229,35 @@ def make_user(db, roles):
 @pytest.fixture
 def make_event(db):
     """Factory fixture: create an Event row directly in the test DB."""
+    from app.seeding import ids as seed_ids
+
+    _TYPE_BY_NAME = {
+        "Earthquake": seed_ids.ET_EARTHQUAKE,
+        "Typhoon": seed_ids.ET_TYPHOON,
+        "Fire": seed_ids.ET_FIRE,
+        "Other": seed_ids.ET_OTHER,
+    }
+
     def _factory(
         title: str = "Test Event",
-        event_type: str = "Earthquake",
         status: str = "active",
         created_by: uuid.UUID | None = None,
-        department_ids: list[uuid.UUID] | None = None,
+        event_type: str | None = None,
     ) -> Event:
-        # events.created_by has a FK to users.user_id — create a real user if none given
-        if created_by is None:
-            from app.core.passwords import hash_password
-            placeholder = User(
-                employee_no=f"SYS{uuid.uuid4().hex[:8].upper()}",
-                name="System",
-                email=f"system-{uuid.uuid4().hex[:8]}@internal.test",
-                status="active",
-                password_hash=hash_password("unused"),
-            )
-            db.add(placeholder)
-            db.flush()
-            created_by = placeholder.user_id
-
-        stmt = select(EventType).where(func.lower(EventType.name) == event_type.lower())
-        et = db.execute(stmt).scalar_one_or_none()
-        if et is None:
-            et = db.execute(
-                select(EventType).where(EventType.code == "other")
-            ).scalar_one()
-        event = Event(
+        creator = created_by or uuid.uuid4()
+        etid = _TYPE_BY_NAME.get(event_type or "Earthquake", seed_ids.ET_EARTHQUAKE)
+        ev = Event(
             event_id=uuid.uuid4(),
             title=title,
-            event_type_id=et.event_type_id,
-            description="Test event description",
+            event_type_id=etid,
+            description="test",
             status=status,
-            created_by=created_by,
+            created_by=creator,
             start_time=datetime.now(timezone.utc),
         )
-        db.add(event)
-        db.flush()
-        for dept_id in (department_ids or []):
-            db.add(EventDepartment(event_id=event.event_id, department_id=dept_id))
+        db.add(ev)
         db.commit()
-        db.refresh(event)
-        return event
+        db.refresh(ev)
+        return ev
 
     return _factory

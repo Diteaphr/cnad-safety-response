@@ -10,6 +10,7 @@ import type { DashboardStrings } from '../../locale/strings';
 import { getStrings } from '../../locale/strings';
 import { useLocale } from '../../locale/LocaleContext';
 import type { Department, EventItem } from '../../types';
+import type { FailedNotificationRow } from '../../api';
 
 function formatSynced(strings: DashboardStrings, ts: number | null, locale: string): string | null {
   if (ts === null) return null;
@@ -339,6 +340,10 @@ export function AdminDashboardPage({
   selectedDepartment,
   onSelectDepartment,
   deptRankingSourceRows,
+  failedReminderRows,
+  failedReminderLoading,
+  onRefreshFailedReminders,
+  onRetryFailedReminder,
 }: {
   event: EventItem | null;
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
@@ -353,9 +358,14 @@ export function AdminDashboardPage({
   onSelectDepartment: (departmentName: string | null) => void;
   /** Full event roster for department ranking fallback (when API breakdown is empty). Keeps % correct while `rows` is filtered. */
   deptRankingSourceRows?: Array<{ id: string; name: string; department: string; status: 'safe' | 'need_help' | 'pending'; note?: string; phone?: string }>;
+  /** Reminder-channel notifications with `failed` status for this event (`GET .../notifications/failed`). Omit to hide the panel. */
+  failedReminderRows?: FailedNotificationRow[];
+  failedReminderLoading?: boolean;
+  onRefreshFailedReminders?: () => void;
+  onRetryFailedReminder?: (notificationId: string) => void;
 }) {
   const { locale } = useLocale();
-  const { dash } = getStrings(locale);
+  const { dash, portal: portalStrings } = getStrings(locale);
 
   const rankingRows = deptRankingSourceRows ?? rows;
   const critical = rows.filter((row) => row.status === 'need_help');
@@ -539,6 +549,44 @@ export function AdminDashboardPage({
         </section>
         <section className="map-placeholder dash-map-placeholder">{dash.mapPlaceholder}</section>
       </div>
+      {failedReminderRows !== undefined && onRefreshFailedReminders ? (
+        <section className="dash-panel-elevated" style={{ marginTop: 16 }}>
+          <h3 className="dash-subsection-title">{portalStrings.failedDeliveries}</h3>
+          <p className="muted-text small">{portalStrings.failedDeliveriesHint}</p>
+          <div className="row-actions">
+            <button type="button" className="btn ghost btn-sm" onClick={onRefreshFailedReminders}>
+              {portalStrings.refreshFailedList}
+            </button>
+          </div>
+          <div className="list">
+            {failedReminderLoading ? (
+              <p className="muted-text">{portalStrings.loading}</p>
+            ) : failedReminderRows.length === 0 ? (
+              <p className="empty">{portalStrings.noFailedDeliveries}</p>
+            ) : (
+              failedReminderRows.map((row) => {
+                const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
+                return (
+                  <article className="list-item" key={row.id}>
+                    <div>
+                      <strong>{row.userName}</strong>
+                      <p>
+                        {(row.department ?? portalStrings.na)} · {row.channel}
+                      </p>
+                      <p>{row.sentAt ? new Date(row.sentAt).toLocaleString(localeTag) : portalStrings.notSentYet}</p>
+                    </div>
+                    {onRetryFailedReminder ? (
+                      <button type="button" className="btn warning btn-sm" onClick={() => onRetryFailedReminder(row.id)}>
+                        {portalStrings.retryDelivery}
+                      </button>
+                    ) : null}
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }

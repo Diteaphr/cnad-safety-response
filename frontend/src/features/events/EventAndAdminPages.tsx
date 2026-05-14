@@ -24,7 +24,7 @@ function typeLabel(ev: string, p: ReturnType<typeof getStrings>['portal']) {
   }
 }
 
-function statusChip(status: EventItem['status'] | 'draft', p: ReturnType<typeof getStrings>['portal']) {
+function statusChip(status: EventItem['status'], p: ReturnType<typeof getStrings>['portal']) {
   if (status === 'active') return p.eventChipActive;
   return p.eventChipClosed;
 }
@@ -300,11 +300,14 @@ export function UserManagementPage({
   departments: deptList,
   showToast,
   onUserCreated,
+  offlineMockMode = false,
 }: {
   users: User[];
   departments: Department[];
   showToast: (t: { tone: 'success' | 'warning' | 'danger' | 'info'; message: string }) => void;
   onUserCreated: (user: User) => void;
+  /** Demo 靜態模式：建立使用者僅寫入前端 state。 */
+  offlineMockMode?: boolean;
 }) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
@@ -345,6 +348,25 @@ export function UserManagementPage({
     }
     setCreating(true);
     try {
+      if (offlineMockMode) {
+        const uid =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `u-mock-${Date.now()}`;
+        const newUser: User = {
+          id: uid,
+          name,
+          email,
+          departmentId: newDeptId,
+          roles: ['employee'],
+          pushEnabled: true,
+        };
+        onUserCreated(newUser);
+        setNewName('');
+        setNewEmail('');
+        showToast({ tone: 'success', message: 'Demo：已加入本機使用者清單。' });
+        return;
+      }
       const out = await adminCreateUserApi({ name, email, departmentId: newDeptId });
       onUserCreated(out.user);
       setNewName('');

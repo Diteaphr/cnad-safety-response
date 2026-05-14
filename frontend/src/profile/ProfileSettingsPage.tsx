@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   Building2,
@@ -19,7 +19,7 @@ import { useLocale } from '../locale/LocaleContext';
 import type { AppLocale } from '../locale/LocaleContext';
 import { getStrings, type ProfilePageStrings } from '../locale/strings';
 import type { Department, Role, ToastState, User } from '../types';
-import { updateMyProfileApi } from '../api';
+import { getMyProfileApi, updateMyProfileApi } from '../api';
 import { ManagerContactDialog } from './ManagerContactDialog';
 import { initialsFromName } from './utils';
 
@@ -82,6 +82,7 @@ export function ProfileSettingsPage({
   onProfileUpdated,
   onNavigateToDirectReportsList,
   onNavigateToSubordinateHistory,
+  offlineMockSession = false,
 }: {
   user: User;
   departmentName: string;
@@ -92,6 +93,8 @@ export function ProfileSettingsPage({
   onProfileUpdated: (next: User) => void;
   onNavigateToDirectReportsList: () => void;
   onNavigateToSubordinateHistory: (userId: string) => void;
+  /** 為 true 時不呼叫 GET/PUT /api/users/me（Demo 靜態資料模式）。 */
+  offlineMockSession?: boolean;
 }) {
   const { locale, setLocale } = useLocale();
   const profileCopy = getStrings(locale).profile;
@@ -104,12 +107,41 @@ export function ProfileSettingsPage({
   const [editPhone, setEditPhone] = useState(user.phone ?? '');
   const [profileSaving, setProfileSaving] = useState(false);
   const [pushMaster, setPushMaster] = useState(user.pushEnabled);
-  const [pushEmergency, setPushEmergency] = useState(true);
-  const [pushStatusReminder, setPushStatusReminder] = useState(true);
-  const [pushEscalation, setPushEscalation] = useState(user.pushEnabled);
+  const [pushEmergency, setPushEmergency] = useState(user.pushEmergencyEnabled ?? true);
+  const [pushStatusReminder, setPushStatusReminder] = useState(user.pushReminderEnabled ?? true);
+  const [pushEscalation, setPushEscalation] = useState(user.pushEscalationEnabled ?? user.pushEnabled);
   const [timeZone, setTimeZone] = useState('Asia/Taipei');
+  const [pushSaving, setPushSaving] = useState(false);
+
+  const onProfileUpdatedRef = useRef(onProfileUpdated);
+  onProfileUpdatedRef.current = onProfileUpdated;
 
   const deptLabel = (id: string) => departments.find((d) => d.id === id)?.name ?? '';
+
+  useEffect(() => {
+    if (offlineMockSession) return;
+    let cancelled = false;
+    void getMyProfileApi()
+      .then((next) => {
+        if (!cancelled) onProfileUpdatedRef.current(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user.id, offlineMockSession]);
+
+  useEffect(() => {
+    setPushMaster(user.pushEnabled);
+    setPushEmergency(user.pushEmergencyEnabled ?? true);
+    setPushStatusReminder(user.pushReminderEnabled ?? true);
+    setPushEscalation(user.pushEscalationEnabled ?? user.pushEnabled);
+  }, [
+    user.pushEnabled,
+    user.pushEmergencyEnabled,
+    user.pushReminderEnabled,
+    user.pushEscalationEnabled,
+  ]);
 
   useEffect(() => {
     if (!profileEditing) {
@@ -117,6 +149,53 @@ export function ProfileSettingsPage({
       setEditPhone(user.phone ?? '');
     }
   }, [user.name, user.phone, profileEditing]);
+
+  const persistNotificationPrefs = async (patch: {
+    pushEnabled?: boolean;
+    pushEmergencyEnabled?: boolean;
+    pushReminderEnabled?: boolean;
+    pushEscalationEnabled?: boolean;
+  }) => {
+    if (pushSaving) return;
+    setPushSaving(true);
+    try {
+      if (offlineMockSession) {
+        const updated: User = {
+          ...user,
+          pushEnabled: patch.pushEnabled ?? pushMaster,
+          pushEmergencyEnabled: patch.pushEmergencyEnabled ?? pushEmergency,
+          pushReminderEnabled: patch.pushReminderEnabled ?? pushStatusReminder,
+          pushEscalationEnabled: patch.pushEscalationEnabled ?? pushEscalation,
+        };
+        onProfileUpdated(updated);
+        setPushMaster(updated.pushEnabled);
+        setPushEmergency(updated.pushEmergencyEnabled ?? true);
+        setPushStatusReminder(updated.pushReminderEnabled ?? true);
+        setPushEscalation(updated.pushEscalationEnabled ?? true);
+        return;
+      }
+      const updated = await updateMyProfileApi({
+        name: user.name,
+        phone: user.phone?.trim() ? user.phone.trim() : null,
+        pushEnabled: patch.pushEnabled ?? pushMaster,
+        pushEmergencyEnabled: patch.pushEmergencyEnabled ?? pushEmergency,
+        pushReminderEnabled: patch.pushReminderEnabled ?? pushStatusReminder,
+        pushEscalationEnabled: patch.pushEscalationEnabled ?? pushEscalation,
+      });
+      onProfileUpdated(updated);
+      setPushMaster(updated.pushEnabled);
+      setPushEmergency(updated.pushEmergencyEnabled ?? true);
+      setPushStatusReminder(updated.pushReminderEnabled ?? true);
+      setPushEscalation(updated.pushEscalationEnabled ?? true);
+    } catch (e) {
+      showToast({
+        tone: 'danger',
+        message: e instanceof Error ? e.message : pp.profileSaveError,
+      });
+    } finally {
+      setPushSaving(false);
+    }
+  };
 
   const manager = useMemo(() => {
     if (!user.managerId) return null;
@@ -128,13 +207,17 @@ export function ProfileSettingsPage({
   const previewReports = directReports.slice(0, DIRECT_PREVIEW);
   const hasMoreReports = directReports.length > DIRECT_PREVIEW;
 
-  const toggleRow = (checked: boolean, set: (v: boolean) => void) => (
+  const toggleRow = (checked: boolean, onToggle: (next: boolean) => void) => (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={pushSaving}
       className={`profile-settings-switch${checked ? ' is-on' : ''}`}
-      onClick={() => set(!checked)}
+      onClick={() => {
+        if (pushSaving) return;
+        onToggle(!checked);
+      }}
     />
   );
 
@@ -194,9 +277,28 @@ export function ProfileSettingsPage({
                         if (!name) return;
                         setProfileSaving(true);
                         try {
+                          if (offlineMockSession) {
+                            const next: User = {
+                              ...user,
+                              name,
+                              phone: editPhone.trim() ? editPhone.trim() : undefined,
+                              pushEnabled: pushMaster,
+                              pushEmergencyEnabled: pushEmergency,
+                              pushReminderEnabled: pushStatusReminder,
+                              pushEscalationEnabled: pushEscalation,
+                            };
+                            onProfileUpdated(next);
+                            setProfileEditing(false);
+                            showToast({ tone: 'success', message: pp.profileUpdatedToast });
+                            return;
+                          }
                           const next = await updateMyProfileApi({
                             name,
                             phone: editPhone.trim() ? editPhone.trim() : null,
+                            pushEnabled: pushMaster,
+                            pushEmergencyEnabled: pushEmergency,
+                            pushReminderEnabled: pushStatusReminder,
+                            pushEscalationEnabled: pushEscalation,
                           });
                           onProfileUpdated(next);
                           setProfileEditing(false);
@@ -339,9 +441,8 @@ export function ProfileSettingsPage({
                 <p className="profile-settings-notify-title">{pp.pushMaster}</p>
                 <p className="profile-settings-notify-desc">{pp.pushMasterDesc}</p>
               </div>
-              {toggleRow(pushMaster, (v) => {
-                setPushMaster(v);
-                showToast({ tone: 'info', message: v ? pp.toastPushOn : pp.toastPushOff });
+              {toggleRow(pushMaster, (next) => {
+                void persistNotificationPrefs({ pushEnabled: next });
               })}
             </li>
             <li>
@@ -349,21 +450,27 @@ export function ProfileSettingsPage({
                 <p className="profile-settings-notify-title">{pp.pushEmergency}</p>
                 <p className="profile-settings-notify-desc">{pp.pushEmergencyDesc}</p>
               </div>
-              {toggleRow(pushEmergency, setPushEmergency)}
+              {toggleRow(pushEmergency, (next) => {
+                void persistNotificationPrefs({ pushEmergencyEnabled: next });
+              })}
             </li>
             <li>
               <div>
                 <p className="profile-settings-notify-title">{pp.pushReminder}</p>
                 <p className="profile-settings-notify-desc">{pp.pushReminderDesc}</p>
               </div>
-              {toggleRow(pushStatusReminder, setPushStatusReminder)}
+              {toggleRow(pushStatusReminder, (next) => {
+                void persistNotificationPrefs({ pushReminderEnabled: next });
+              })}
             </li>
             <li>
               <div>
                 <p className="profile-settings-notify-title">{pp.pushEscalation}</p>
                 <p className="profile-settings-notify-desc">{pp.pushEscalationDesc}</p>
               </div>
-              {toggleRow(pushEscalation, setPushEscalation)}
+              {toggleRow(pushEscalation, (next) => {
+                void persistNotificationPrefs({ pushEscalationEnabled: next });
+              })}
             </li>
           </ul>
         </article>

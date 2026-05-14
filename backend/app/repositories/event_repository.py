@@ -7,7 +7,6 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.event import Event
-from app.models.event_department import EventDepartment
 
 
 class EventRepository:
@@ -34,17 +33,6 @@ class EventRepository:
         db.flush()
         return event
 
-    def add_departments(
-        self, db: Session, event_id: uuid.UUID, department_ids: list[uuid.UUID]
-    ) -> list[EventDepartment]:
-        rows: list[EventDepartment] = []
-        for did in department_ids:
-            row = EventDepartment(event_id=event_id, department_id=did)
-            db.add(row)
-            rows.append(row)
-        db.flush()
-        return rows
-
     def update(
         self,
         db: Session,
@@ -64,24 +52,10 @@ class EventRepository:
         ev.start_time = start_time
         db.flush()
 
-    def replace_departments(
-        self, db: Session, event_id: uuid.UUID, department_ids: list[uuid.UUID]
-    ) -> None:
-        existing = list(db.scalars(select(EventDepartment).where(EventDepartment.event_id == event_id)))
-        for ed in existing:
-            db.delete(ed)
-        db.flush()
-        for did in department_ids:
-            db.add(EventDepartment(event_id=event_id, department_id=did))
-        db.flush()
-
     def get_by_id(self, db: Session, event_id: uuid.UUID) -> Optional[Event]:
         stmt = (
             select(Event)
-            .options(
-                selectinload(Event.event_departments),
-                selectinload(Event.event_type_row),
-            )
+            .options(selectinload(Event.event_type_row))
             .where(Event.event_id == event_id)
         )
         return db.execute(stmt).scalar_one_or_none()
@@ -89,10 +63,7 @@ class EventRepository:
     def list_all(self, db: Session) -> list[Event]:
         stmt = (
             select(Event)
-            .options(
-                selectinload(Event.event_departments),
-                selectinload(Event.event_type_row),
-            )
+            .options(selectinload(Event.event_type_row))
             .order_by(Event.created_at.desc())
         )
         return list(db.scalars(stmt).all())
