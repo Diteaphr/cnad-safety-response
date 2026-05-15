@@ -167,6 +167,8 @@ function App() {
     customType: '',
     description: '',
     startAt: new Date().toISOString().slice(0, 16),
+    location: '',
+    targetDepartmentIds: [] as string[],
   });
 
   const employeeDeptId = session.user?.departmentId;
@@ -940,7 +942,8 @@ function App() {
         type: eventForm.type,
         description: eventForm.description,
         startAt: new Date(eventForm.startAt).toISOString(),
-        targetDepartmentIds: [],
+        targetDepartmentIds: eventForm.targetDepartmentIds,
+        ...(eventForm.location.trim() ? { location: eventForm.location.trim() } : {}),
         ...(custom ? { customTypeName: custom } : {}),
       });
       setEvents((prev) => [out.event, ...prev]);
@@ -1141,6 +1144,7 @@ function App() {
               eventForm,
               setEventForm,
               eventTypeCatalog,
+              departments,
               onSubmitCreate: async () => {
                 const ok = await createEvent();
                 if (ok) setNavKey('event-management');

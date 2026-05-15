@@ -201,6 +201,7 @@ export async function createEventApi(
     description: string;
     startAt: string;
     targetDepartmentIds: string[];
+    location?: string;
     /** 與 type=Other 併用：後端會先寫入 event_types 再建立事件 */
     customTypeName?: string;
   },
@@ -213,6 +214,7 @@ export async function createEventApi(
       description: body.description,
       startAt: body.startAt,
       targetDepartmentIds: body.targetDepartmentIds,
+      ...(body.location ? { location: body.location } : {}),
       ...(body.customTypeName != null && body.customTypeName !== ''
         ? { customTypeName: body.customTypeName }
         : {}),
