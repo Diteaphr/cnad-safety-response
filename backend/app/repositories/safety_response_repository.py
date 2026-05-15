@@ -102,7 +102,7 @@ class SafetyResponseRepository:
         return {r.user_id: r for r in db.scalars(stmt).all()}
 
     def admin_kpi(self, db: Session, *, event_id: uuid.UUID) -> dict[str, int]:
-        """Global KPI for all employees company-wide for the given event."""
+        """KPI for the event's targeted employees (all employees when no target departments)."""
         row = db.execute(
             text("""
                 WITH employees AS (
@@ -111,6 +111,19 @@ class SafetyResponseRepository:
                     INNER JOIN user_roles ur ON ur.user_id = u.user_id
                     INNER JOIN roles r ON r.role_id = ur.role_id
                     WHERE r.role_name = 'employee'
+                      AND (
+                          NOT EXISTS (
+                              SELECT 1 FROM event_target_departments etd
+                              WHERE etd.event_id = :event_id
+                          )
+                          OR u.user_id IN (
+                              SELECT ud.user_id FROM user_departments ud
+                              INNER JOIN event_target_departments etd
+                                  ON etd.department_id = ud.department_id
+                              WHERE etd.event_id = :event_id
+                                AND ud.is_primary = true
+                          )
+                      )
                 ),
                 latest AS (
                     SELECT DISTINCT ON (sr.user_id) sr.user_id, sr.status
@@ -139,7 +152,7 @@ class SafetyResponseRepository:
         }
 
     def admin_dept_stats(self, db: Session, *, event_id: uuid.UUID) -> list[dict]:
-        """Per-department response breakdown for all employees company-wide."""
+        """Per-department response breakdown scoped to the event's targeted employees."""
         rows = db.execute(
             text("""
                 WITH employees AS (
@@ -150,6 +163,16 @@ class SafetyResponseRepository:
                     INNER JOIN user_departments ud
                         ON ud.user_id = u.user_id AND ud.is_primary = true
                     WHERE r.role_name = 'employee'
+                      AND (
+                          NOT EXISTS (
+                              SELECT 1 FROM event_target_departments etd
+                              WHERE etd.event_id = :event_id
+                          )
+                          OR ud.department_id IN (
+                              SELECT etd.department_id FROM event_target_departments etd
+                              WHERE etd.event_id = :event_id
+                          )
+                      )
                 ),
                 latest AS (
                     SELECT DISTINCT ON (sr.user_id) sr.user_id, sr.status

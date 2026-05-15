@@ -40,17 +40,19 @@ def _is_employee(user: User) -> bool:
 
 
 def _employees_targeted_by_event(db: Session, event_id: uuid.UUID) -> list[User]:
-    """
-    Return employees who participate in safety events.
+    """Return employees in scope for this event.
 
-    Events are company-wide: all users with the employee role are in scope.
-    (The event_id argument is kept for call-site compatibility.)
+    Company-wide (no target_departments): all employees.
+    Targeted (target_departments set): only employees whose primary
+    department is in the expanded target set stored at event creation.
     """
     event = _event_repo.get_by_id(db, event_id)
     if event is None:
         return []
-    all_users = _user_repo.list_all(db)
-    return [u for u in all_users if _is_employee(u)]
+    if not event.target_departments:
+        return [u for u in _user_repo.list_all(db) if _is_employee(u)]
+    target_dept_ids = [d.department_id for d in event.target_departments]
+    return [u for u in _user_repo.list_by_department_ids(db, target_dept_ids) if _is_employee(u)]
 
 
 def dispatch_activation_notifications(db: Session, event_id: uuid.UUID) -> int:

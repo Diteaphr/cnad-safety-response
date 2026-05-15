@@ -398,3 +398,69 @@ def test_admin_dashboard_employee_role_403(client, make_user, make_event):
 def test_admin_dashboard_unauthenticated(client):
     resp = client.get(ADM_DASH)
     assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# Admin KPI — event department targeting scope
+# ---------------------------------------------------------------------------
+
+def test_admin_kpi_company_wide_counts_all_employees(client, make_user, make_department, make_event):
+    """Event with no target departments counts every employee."""
+    admin = make_user(email="admin@test.com", role="admin")
+    dept_a = make_department("A")
+    dept_b = make_department("B")
+    make_user(email="e1@test.com", role="employee", department_id=dept_a.department_id)
+    make_user(email="e2@test.com", role="employee", department_id=dept_b.department_id)
+    event = make_event(status="active")  # no target depts → company-wide
+
+    resp = client.get(
+        ADM_DASH,
+        params={"event_id": str(event.event_id)},
+        headers=auth_headers(admin),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["kpis"]["targeted"] == 2
+
+
+def test_admin_kpi_scoped_to_targeted_department(client, make_user, make_department, make_event):
+    """Event targeting dept A should only count employees in dept A."""
+    admin = make_user(email="admin@test.com", role="admin")
+    dept_a = make_department("A")
+    dept_b = make_department("B")
+    make_user(email="ea@test.com", role="employee", department_id=dept_a.department_id)
+    make_user(email="eb@test.com", role="employee", department_id=dept_b.department_id)
+    event = make_event(
+        status="active",
+        target_department_ids=[dept_a.department_id],
+    )
+
+    resp = client.get(
+        ADM_DASH,
+        params={"event_id": str(event.event_id)},
+        headers=auth_headers(admin),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["kpis"]["targeted"] == 1
+
+
+def test_admin_kpi_targeted_dept_includes_children(client, make_user, make_department, make_event):
+    """Targeting a parent department counts employees in child departments too."""
+    admin = make_user(email="admin@test.com", role="admin")
+    parent = make_department("Parent")
+    child = make_department("Child", parent_id=parent.department_id)
+    make_user(email="ep@test.com", role="employee", department_id=parent.department_id)
+    make_user(email="ec@test.com", role="employee", department_id=child.department_id)
+    make_user(email="eo@test.com", role="employee")  # no dept — not in scope
+    # Expand subtree when creating the event so child is in event_target_departments
+    event = make_event(
+        status="active",
+        target_department_ids=[parent.department_id, child.department_id],
+    )
+
+    resp = client.get(
+        ADM_DASH,
+        params={"event_id": str(event.event_id)},
+        headers=auth_headers(admin),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["kpis"]["targeted"] == 2

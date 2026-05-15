@@ -7,6 +7,16 @@ import type { ReactElement } from 'react';
 import type { FailedNotificationRow } from '../../api';
 import { adminCreateUserApi, type PortalNotificationRow } from '../../api';
 import type { Department, EventItem, NotificationSummary, User } from '../../types';
+
+type EventFormState = {
+  title: string;
+  type: string;
+  customType: string;
+  description: string;
+  startAt: string;
+  location: string;
+  targetDepartmentIds: string[];
+};
 import { Plus } from 'lucide-react';
 
 function typeLabel(ev: string, p: ReturnType<typeof getStrings>['portal']) {
@@ -31,23 +41,38 @@ function statusChip(status: EventItem['status'], p: ReturnType<typeof getStrings
 
 const BUILTIN_TYPE_ORDER = ['Earthquake', 'Typhoon', 'Fire', 'Other'] as const;
 
+function flattenDepts(depts: Department[]): { dept: Department; depth: number }[] {
+  const childMap: Record<string, Department[]> = {};
+  for (const d of depts) {
+    const parent = d.parentId ?? '__root__';
+    (childMap[parent] ??= []).push(d);
+  }
+  const result: { dept: Department; depth: number }[] = [];
+  function walk(parentId: string, depth: number) {
+    for (const d of childMap[parentId] ?? []) {
+      result.push({ dept: d, depth });
+      walk(d.id, depth + 1);
+    }
+  }
+  walk('__root__', 0);
+  return result;
+}
+
 function AdminQuickCreateFormFields({
   p,
   eventForm,
   setEventForm,
   eventTypeCatalog,
+  departments,
 }: {
   p: ReturnType<typeof getStrings>['portal'];
-  eventForm: { title: string; type: string; customType: string; description: string; startAt: string };
-  setEventForm: (value: {
-    title: string;
-    type: string;
-    customType: string;
-    description: string;
-    startAt: string;
-  }) => void;
+  eventForm: EventFormState;
+  setEventForm: (value: EventFormState) => void;
   eventTypeCatalog: { name: string }[] | null;
+  departments: Department[];
 }) {
+  const flatDepts = useMemo(() => flattenDepts(departments), [departments]);
+  const limitToDept = eventForm.targetDepartmentIds.length > 0;
   const typeSelectRows = useMemo(() => {
     if (!eventTypeCatalog?.length) {
       return BUILTIN_TYPE_ORDER.map((name) => ({ name }));
@@ -108,6 +133,77 @@ function AdminQuickCreateFormFields({
           onChange={(e) => setEventForm({ ...eventForm, startAt: e.target.value })}
         />
       </label>
+      <label className="event-form-field">
+        <span className="event-form-field-label">地點（選填）</span>
+        <input
+          value={eventForm.location}
+          onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })}
+          placeholder="例：台北總部 3F 會議室"
+        />
+      </label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span className="event-form-field-label">通知對象</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setEventForm({ ...eventForm, targetDepartmentIds: [] })}
+            style={{
+              flex: 1,
+              padding: '8px 0',
+              borderRadius: 8,
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer',
+              background: !limitToDept ? '#1a6fc4' : '#eef3fa',
+              color: !limitToDept ? '#fff' : '#17385b',
+              transition: 'background 0.15s',
+            }}
+          >
+            全體員工
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!limitToDept) {
+                setEventForm({ ...eventForm, targetDepartmentIds: flatDepts.length > 0 ? [flatDepts[0].dept.id] : [] });
+              }
+            }}
+            style={{
+              flex: 1,
+              padding: '8px 0',
+              borderRadius: 8,
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer',
+              background: limitToDept ? '#1a6fc4' : '#eef3fa',
+              color: limitToDept ? '#fff' : '#17385b',
+              transition: 'background 0.15s',
+            }}
+          >
+            限定部門
+          </button>
+        </div>
+        {limitToDept && flatDepts.length > 0 && (
+          <div style={{ border: '1px solid #d4e0ef', borderRadius: 8, padding: '8px 12px', maxHeight: 220, overflowY: 'auto' }}>
+            {flatDepts.map(({ dept, depth }) => (
+              <label key={dept.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', paddingLeft: depth * 16, cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={eventForm.targetDepartmentIds.includes(dept.id)}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...eventForm.targetDepartmentIds, dept.id]
+                      : eventForm.targetDepartmentIds.filter((id) => id !== dept.id);
+                    setEventForm({ ...eventForm, targetDepartmentIds: next.length > 0 ? next : [dept.id] });
+                  }}
+                />
+                {dept.name}
+              </label>
+            ))}
+            <p className="muted-text small" style={{ marginTop: 6, marginBottom: 0 }}>子部門會自動包含</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -125,15 +221,10 @@ export function EventSelectionPage({
   onSelectEvent: (eventId: string) => void;
   /** Admin FAB: full create form in modal; on success navigates to event list (no form on that page). */
   adminQuickCreate?: {
-    eventForm: { title: string; type: string; customType: string; description: string; startAt: string };
-    setEventForm: (value: {
-      title: string;
-      type: string;
-      customType: string;
-      description: string;
-      startAt: string;
-    }) => void;
+    eventForm: EventFormState;
+    setEventForm: (value: EventFormState) => void;
     eventTypeCatalog: { name: string }[] | null;
+    departments: Department[];
     onSubmitCreate: () => Promise<boolean>;
   };
 }) {
@@ -195,6 +286,7 @@ export function EventSelectionPage({
               eventForm={adminQuickCreate.eventForm}
               setEventForm={adminQuickCreate.setEventForm}
               eventTypeCatalog={adminQuickCreate.eventTypeCatalog}
+              departments={adminQuickCreate.departments}
             />
             <div className="modal-actions">
               <button

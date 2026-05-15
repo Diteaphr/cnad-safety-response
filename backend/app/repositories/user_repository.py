@@ -55,6 +55,28 @@ class UserRepository:
             stmt = stmt.limit(limit)
         return list(db.scalars(stmt).unique().all())
 
+    def list_by_department_ids(
+        self, db: Session, department_ids: list[uuid.UUID]
+    ) -> list[User]:
+        """Users whose primary department is any of the given IDs."""
+        if not department_ids:
+            return []
+        stmt = (
+            select(User)
+            .join(
+                UserDepartment,
+                (UserDepartment.user_id == User.user_id) & UserDepartment.is_primary.is_(True),
+            )
+            .where(UserDepartment.department_id.in_(department_ids))
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.notification_preference),
+                selectinload(User.department_memberships),
+            )
+            .order_by(User.name)
+        )
+        return list(db.scalars(stmt).unique().all())
+
     def count_by_department(self, db: Session, department_id: uuid.UUID) -> int:
         return db.execute(
             select(func.count())
