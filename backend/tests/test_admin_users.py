@@ -153,7 +153,7 @@ def test_admin_create_user_omitted_password_generates_temp(client, make_user):
 
     resp = client.post(
         ADMIN_USERS,
-        json={"name": "Gen", "email": "genuser@test.com", "phone": "+886922222222", "employeeNo": "EMP002"},
+        json={"name": "Gen", "email": "genuser@test.com", "phone": "+886922222222", "employeeNo": "EMP2024001"},
         headers=auth_headers(admin),
     )
 
@@ -161,7 +161,8 @@ def test_admin_create_user_omitted_password_generates_temp(client, make_user):
     body = resp.json()
     assert "temporaryPassword" in body
     tp = body["temporaryPassword"]
-    assert isinstance(tp, str) and len(tp) >= 8
+    assert isinstance(tp, str) and len(tp) > 0
+    assert tp == "EMP2024001"
 
     login = client.post("/api/auth/login", json={"email": "genuser@test.com", "password": tp})
     assert login.status_code == 200

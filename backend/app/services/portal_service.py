@@ -4,7 +4,6 @@ Portal API — business logic for frontend SPA (three-layer: called only from AP
 
 from __future__ import annotations
 
-import secrets
 import uuid
 from datetime import datetime, timezone
 from typing import Any, List, Optional
@@ -712,7 +711,7 @@ class PortalService:
         if raw_pw:
             pw_plain = raw_pw
         else:
-            temporary_password = secrets.token_urlsafe(16)
+            temporary_password = emp_no
             pw_plain = temporary_password
 
         user = User(
