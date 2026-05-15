@@ -166,6 +166,12 @@ postgresql+psycopg://user:password@127.0.0.1:15432/employee_safety
 postgresql+psycopg://user:password@postgres:5432/employee_safety
 ```
 
+**Cloud Run → Cloud SQL**:
+
+Phase 1 deployment notes are documented in
+[`docs/cloud-run-cloud-sql-phase1.md`](docs/cloud-run-cloud-sql-phase1.md).
+Production secrets are stored in Secret Manager, not in repository files.
+
 ---
 
 ## Authentication (quick reference)
