@@ -238,13 +238,30 @@ def make_event(db):
         "Other": seed_ids.ET_OTHER,
     }
 
+    _placeholder_user_id: uuid.UUID | None = None
+
+    def _get_placeholder_user() -> uuid.UUID:
+        nonlocal _placeholder_user_id
+        if _placeholder_user_id is None:
+            u = User(
+                employee_no=f"SYS{uuid.uuid4().hex[:6].upper()}",
+                name="System",
+                email=f"system_{uuid.uuid4().hex[:8]}@test.internal",
+                status="active",
+                password_hash="unused",
+            )
+            db.add(u)
+            db.flush()
+            _placeholder_user_id = u.user_id
+        return _placeholder_user_id
+
     def _factory(
         title: str = "Test Event",
         status: str = "active",
         created_by: uuid.UUID | None = None,
         event_type: str | None = None,
     ) -> Event:
-        creator = created_by or uuid.uuid4()
+        creator = created_by if created_by is not None else _get_placeholder_user()
         etid = _TYPE_BY_NAME.get(event_type or "Earthquake", seed_ids.ET_EARTHQUAKE)
         ev = Event(
             event_id=uuid.uuid4(),
