@@ -109,7 +109,7 @@ class PortalService:
             "status": event.status,
             "startAt": st.replace(tzinfo=timezone.utc).isoformat() if st.tzinfo is None else st.isoformat(),
             "cardDepartment": None,
-            "venue": None,
+            "venue": event.location or None,
         }
 
     def _response_out(self, r: SafetyResponse) -> dict[str, Any]:
@@ -230,6 +230,7 @@ class PortalService:
             title=payload.title,
             event_type_id=et.event_type_id,
             description=payload.description,
+            location=payload.location,
             status="active",
             created_by=actor_id,
             start_time=st,
@@ -269,6 +270,7 @@ class PortalService:
             title=payload.title,
             event_type_id=et.event_type_id,
             description=payload.description,
+            location=payload.location,
             start_time=st,
         )
         db.commit()

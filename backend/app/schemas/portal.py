@@ -65,6 +65,7 @@ class CreateEventIn(BaseModel):
         description="event_types.name 或 code（與 GET /api/event-types 目錄一致）；選「其他」並填自訂名時請傳 Other。",
     )
     description: Optional[str] = Field(default="", max_length=2000)
+    location: Optional[str] = Field(default=None, max_length=200)
     startAt: str
     targetDepartmentIds: List[str] = Field(
         default_factory=list,

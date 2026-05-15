@@ -17,6 +17,7 @@ class EventRepository:
         title: str,
         event_type_id: uuid.UUID,
         description: Optional[str],
+        location: Optional[str],
         status: str,
         created_by: uuid.UUID,
         start_time,
@@ -25,6 +26,7 @@ class EventRepository:
             title=title,
             event_type_id=event_type_id,
             description=description,
+            location=location,
             status=status,
             created_by=created_by,
             start_time=start_time,
@@ -41,6 +43,7 @@ class EventRepository:
         title: str,
         event_type_id: uuid.UUID,
         description: Optional[str],
+        location: Optional[str],
         start_time,
     ) -> None:
         ev = db.get(Event, event_id)
@@ -49,6 +52,7 @@ class EventRepository:
         ev.title = title
         ev.event_type_id = event_type_id
         ev.description = description
+        ev.location = location
         ev.start_time = start_time
         db.flush()
 

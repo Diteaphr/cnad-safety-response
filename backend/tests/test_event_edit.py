@@ -168,3 +168,47 @@ def test_update_event_forbidden_for_supervisor(client, make_user, make_departmen
     )
 
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# location / venue field
+# ---------------------------------------------------------------------------
+
+def test_create_event_with_location(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+
+    resp = client.post(
+        "/api/events",
+        json={**_base_payload(), "location": "台北總部 3F"},
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["event"]["venue"] == "台北總部 3F"
+
+
+def test_create_event_without_location_returns_null(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+
+    resp = client.post(
+        "/api/events",
+        json=_base_payload(),
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["event"]["venue"] is None
+
+
+def test_update_event_location(client, make_user, make_event):
+    admin = make_user(email="admin@test.com", role="admin")
+    event = make_event(status="active", created_by=admin.user_id)
+
+    resp = client.put(
+        _update_url(event.event_id),
+        json={**_base_payload(), "location": "高雄分部 B1"},
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["event"]["venue"] == "高雄分部 B1"
