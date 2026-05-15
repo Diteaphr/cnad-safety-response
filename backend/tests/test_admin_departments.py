@@ -251,3 +251,41 @@ def test_admin_delete_department_forbidden_for_employee(client, make_user, make_
     resp = client.delete(_delete_url(dept.department_id), headers=auth_headers(emp))
 
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# GET /api/departments — managerId in response
+# ---------------------------------------------------------------------------
+
+def test_list_departments_includes_manager_id(client, make_user, make_department):
+    emp = make_user(email="emp@test.com", role="employee")
+    sup = make_user(email="sup@test.com", role="supervisor")
+    dept = make_department("Engineering")
+    dept.manager_id = sup.user_id
+    from sqlalchemy.orm import Session
+    # update via fixture db is not accessible here; use API instead
+    admin = make_user(email="admin@test.com", role="admin")
+    client.put(
+        f"/api/admin/departments/{dept.department_id}",
+        json={"name": "Engineering", "managerId": str(sup.user_id)},
+        headers=auth_headers(admin),
+    )
+
+    resp = client.get("/api/departments", headers=auth_headers(emp))
+
+    assert resp.status_code == 200
+    depts = resp.json()["departments"]
+    target = next(d for d in depts if d["id"] == str(dept.department_id))
+    assert target["managerId"] == str(sup.user_id)
+
+
+def test_list_departments_manager_id_null_when_unset(client, make_user, make_department):
+    emp = make_user(email="emp@test.com", role="employee")
+    make_department("No Manager Dept")
+
+    resp = client.get("/api/departments", headers=auth_headers(emp))
+
+    assert resp.status_code == 200
+    depts = resp.json()["departments"]
+    target = next(d for d in depts if d["name"] == "No Manager Dept")
+    assert target["managerId"] is None

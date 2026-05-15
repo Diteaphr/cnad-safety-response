@@ -95,6 +95,7 @@ class PortalService:
             "id": str(d.department_id),
             "name": d.department_name,
             "parentId": str(d.parent_department_id) if d.parent_department_id else None,
+            "managerId": str(d.manager_id) if d.manager_id else None,
         }
 
     def _event_out(self, event: Event, name_map: dict[uuid.UUID, str]) -> dict[str, Any]:
