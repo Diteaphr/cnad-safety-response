@@ -222,7 +222,8 @@ class PortalService:
         for uid in uids:
             if self._depts.get_by_id(db, uid) is None:
                 raise HTTPException(status_code=400, detail=f"Department {uid} not found")
-        return self._depts.expand_subtree(db, uids)
+        expanded = self._depts.expand_subtree(db, uids)
+        return list(dict.fromkeys(expanded))
 
     def create_event(
         self, db: Session, *, actor_id: uuid.UUID, payload: CreateEventIn
