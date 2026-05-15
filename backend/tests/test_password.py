@@ -158,3 +158,58 @@ def test_admin_reset_password_forbidden_for_employee(client, make_user):
 
     resp = client.post(_reset_url(other.user_id), headers=auth_headers(emp))
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# mustChangePassword flag
+# ---------------------------------------------------------------------------
+
+def test_must_change_password_set_when_no_password_given(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+    resp = client.post(
+        "/api/admin/users",
+        json={"name": "New", "email": "new@test.com", "phone": "+886911111111", "employeeNo": "EMP2024099"},
+        headers=auth_headers(admin),
+    )
+    assert resp.status_code == 200
+
+    new_user_id = resp.json()["user"]["id"]
+    token = resp.json().get("temporaryPassword")
+    login = client.post("/api/auth/login", json={"email": "new@test.com", "password": token})
+    profile = client.get("/api/users/me", headers={"Authorization": f"Bearer {login.json()['access_token']}"})
+    assert profile.json()["mustChangePassword"] is True
+
+
+def test_must_change_password_cleared_after_change(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+    client.post(
+        "/api/admin/users",
+        json={"name": "New", "email": "new@test.com", "phone": "+886911111111", "employeeNo": "EMP2024099"},
+        headers=auth_headers(admin),
+    )
+    temp_pw = "EMP2024099"
+    login = client.post("/api/auth/login", json={"email": "new@test.com", "password": temp_pw})
+    token = login.json()["access_token"]
+
+    client.put(
+        ME_PASSWORD,
+        json={"currentPassword": temp_pw, "newPassword": "mynewpass99"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    profile = client.get("/api/users/me", headers={"Authorization": f"Bearer {token}"})
+    assert profile.json()["mustChangePassword"] is False
+
+
+def test_must_change_password_not_set_when_password_given(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+    resp = client.post(
+        "/api/admin/users",
+        json={"name": "New", "email": "new@test.com", "phone": "+886911111111", "employeeNo": "EMP2024099", "password": "given1234"},
+        headers=auth_headers(admin),
+    )
+    assert resp.status_code == 200
+
+    login = client.post("/api/auth/login", json={"email": "new@test.com", "password": "given1234"})
+    profile = client.get("/api/users/me", headers={"Authorization": f"Bearer {login.json()['access_token']}"})
+    assert profile.json()["mustChangePassword"] is False

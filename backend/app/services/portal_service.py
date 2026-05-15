@@ -492,6 +492,7 @@ class PortalService:
             "managerId": str(dm) if dm else None,
             "roles": rcast,
             "needsProfileCompletion": _needs_profile_completion(user),
+            "mustChangePassword": user.must_change_password,
         }
         return self._attach_push_prefs(db, user, out)
 
@@ -721,6 +722,7 @@ class PortalService:
             phone=payload.phone.strip(),
             status="active",
             password_hash=hash_password(pw_plain),
+            must_change_password=temporary_password is not None,
         )
         db.add(user)
         db.flush()

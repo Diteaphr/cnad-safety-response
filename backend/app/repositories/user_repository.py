@@ -241,6 +241,7 @@ class UserRepository:
         if user is None:
             raise ValueError(f"User {user_id} not found")
         user.password_hash = new_hash
+        user.must_change_password = False
         db.flush()
 
     def update_profile(
