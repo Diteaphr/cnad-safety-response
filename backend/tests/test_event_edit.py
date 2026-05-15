@@ -64,8 +64,8 @@ def test_update_active_event_description(client, make_user, make_department, mak
     assert resp.json()["event"]["description"] == "New desc"
 
 
-def test_update_active_event_target_department_ids_ignored(client, make_user, make_department, make_event):
-    """Payload may send department IDs; response is always company-wide (empty list)."""
+def test_update_event_stores_target_department_ids(client, make_user, make_department, make_event):
+    """targetDepartmentIds in the PUT body is stored and returned in the response."""
     admin = make_user(email="admin@test.com", role="admin")
     dept_a = make_department("Dept A")
     dept_b = make_department("Dept B")
@@ -81,7 +81,9 @@ def test_update_active_event_target_department_ids_ignored(client, make_user, ma
     )
 
     assert resp.status_code == 200
-    assert resp.json()["event"]["targetDepartmentIds"] == []
+    returned_ids = set(resp.json()["event"]["targetDepartmentIds"])
+    assert str(dept_a.department_id) in returned_ids
+    assert str(dept_b.department_id) in returned_ids
 
 
 def test_update_active_event_type(client, make_user, make_department, make_event):
@@ -212,3 +214,85 @@ def test_update_event_location(client, make_user, make_event):
 
     assert resp.status_code == 200
     assert resp.json()["event"]["venue"] == "高雄分部 B1"
+
+
+# ---------------------------------------------------------------------------
+# targetDepartmentIds — create / update / subtree expansion
+# ---------------------------------------------------------------------------
+
+def test_create_event_with_no_target_depts_is_company_wide(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+
+    resp = client.post(
+        "/api/events",
+        json=_base_payload(),
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["event"]["targetDepartmentIds"] == []
+
+
+def test_create_event_stores_target_department_ids(client, make_user, make_department):
+    admin = make_user(email="admin@test.com", role="admin")
+    dept = make_department("Engineering")
+
+    resp = client.post(
+        "/api/events",
+        json={**_base_payload(), "targetDepartmentIds": [str(dept.department_id)]},
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 200
+    assert str(dept.department_id) in resp.json()["event"]["targetDepartmentIds"]
+
+
+def test_create_event_target_dept_auto_expands_children(client, make_user, make_department):
+    """Selecting a parent department automatically includes its child in the response."""
+    admin = make_user(email="admin@test.com", role="admin")
+    parent = make_department("R&D")
+    child = make_department("Frontend", parent_id=parent.department_id)
+
+    resp = client.post(
+        "/api/events",
+        json={**_base_payload(), "targetDepartmentIds": [str(parent.department_id)]},
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 200
+    returned_ids = set(resp.json()["event"]["targetDepartmentIds"])
+    assert str(parent.department_id) in returned_ids
+    assert str(child.department_id) in returned_ids
+
+
+def test_create_event_nonexistent_dept_returns_400(client, make_user):
+    import uuid as _uuid
+    admin = make_user(email="admin@test.com", role="admin")
+
+    resp = client.post(
+        "/api/events",
+        json={**_base_payload(), "targetDepartmentIds": [str(_uuid.uuid4())]},
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 400
+
+
+def test_update_event_to_company_wide_clears_target_depts(client, make_user, make_department, make_event):
+    """PUT with empty targetDepartmentIds clears existing targeting."""
+    admin = make_user(email="admin@test.com", role="admin")
+    dept = make_department("Ops")
+    event = make_event(
+        status="active",
+        created_by=admin.user_id,
+        target_department_ids=[dept.department_id],
+    )
+
+    resp = client.put(
+        _update_url(event.event_id),
+        json={**_base_payload(), "targetDepartmentIds": []},
+        headers=auth_headers(admin),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["event"]["targetDepartmentIds"] == []

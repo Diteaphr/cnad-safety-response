@@ -105,7 +105,7 @@ class PortalService:
             "title": event.title,
             "type": et,
             "description": event.description or "",
-            "targetDepartmentIds": [],
+            "targetDepartmentIds": [str(d.department_id) for d in event.target_departments],
             "status": event.status,
             "startAt": st.replace(tzinfo=timezone.utc).isoformat() if st.tzinfo is None else st.isoformat(),
             "cardDepartment": None,
@@ -209,6 +209,21 @@ class PortalService:
             },
         }
 
+    def _resolve_target_dept_ids(
+        self, db: Session, raw_ids: list[str]
+    ) -> list[uuid.UUID]:
+        """Parse UUIDs, validate existence, then expand to include all sub-departments."""
+        if not raw_ids:
+            return []
+        try:
+            uids = [uuid.UUID(did) for did in raw_ids]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid department ID format")
+        for uid in uids:
+            if self._depts.get_by_id(db, uid) is None:
+                raise HTTPException(status_code=400, detail=f"Department {uid} not found")
+        return self._depts.expand_subtree(db, uids)
+
     def create_event(
         self, db: Session, *, actor_id: uuid.UUID, payload: CreateEventIn
     ) -> dict[str, Any]:
@@ -225,6 +240,7 @@ class PortalService:
             et = self._event_types.get_by_label(db, payload.type)
             if et is None:
                 raise HTTPException(status_code=400, detail="Unknown event type")
+        target_dept_ids = self._resolve_target_dept_ids(db, payload.targetDepartmentIds)
         ev = self._events.create(
             db,
             title=payload.title,
@@ -234,6 +250,7 @@ class PortalService:
             status="active",
             created_by=actor_id,
             start_time=st,
+            target_department_ids=target_dept_ids,
         )
         db.commit()
         nm = self._depts.name_map(db)
@@ -264,6 +281,7 @@ class PortalService:
             et = self._event_types.get_by_label(db, payload.type)
             if et is None:
                 raise HTTPException(status_code=400, detail="Unknown event type")
+        target_dept_ids = self._resolve_target_dept_ids(db, payload.targetDepartmentIds)
         self._events.update(
             db,
             event_id,
@@ -272,6 +290,7 @@ class PortalService:
             description=payload.description,
             location=payload.location,
             start_time=st,
+            target_department_ids=target_dept_ids,
         )
         db.commit()
         db.expire_all()

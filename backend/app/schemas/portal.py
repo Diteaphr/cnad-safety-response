@@ -69,7 +69,7 @@ class CreateEventIn(BaseModel):
     startAt: str
     targetDepartmentIds: List[str] = Field(
         default_factory=list,
-        description="Ignored; kept for API compatibility. Events apply to all employees.",
+        description="Department UUIDs to target; backend expands to include all sub-departments. Empty = company-wide.",
     )
     custom_type_name: Optional[str] = Field(
         default=None,
