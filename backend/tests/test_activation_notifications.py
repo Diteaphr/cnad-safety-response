@@ -169,6 +169,55 @@ def test_activate_no_sms_fallback_when_user_has_no_phone(
 
 
 # ---------------------------------------------------------------------------
+# dispatch_activation_notifications — department-targeted events
+# ---------------------------------------------------------------------------
+
+def test_activation_notifies_only_employees_in_targeted_department(
+    client, db, make_user, make_event, make_department
+):
+    """Targeted event: only employees in the target department receive notification."""
+    dept_a = make_department("Engineering")
+    dept_b = make_department("Marketing")
+    emp_a = make_user(email="emp_a@test.com", role="employee", department_id=dept_a.department_id)
+    emp_b = make_user(email="emp_b@test.com", role="employee", department_id=dept_b.department_id)
+
+    event = make_event(status="active", target_department_ids=[dept_a.department_id])
+    dispatch_activation_notifications(db, event.event_id)
+
+    notifs_a = client.get(NOTIFICATIONS_ME, headers=auth_headers(emp_a)).json()["notifications"]
+    notifs_b = client.get(NOTIFICATIONS_ME, headers=auth_headers(emp_b)).json()["notifications"]
+
+    assert len(notifs_a) == 1
+    assert notifs_a[0]["channel"] == "fcm_activation"
+    assert notifs_b == [], "Employee outside targeted dept must not be notified"
+
+
+def test_activation_targeted_dept_includes_child_dept_employees(
+    client, db, make_user, make_event, make_department
+):
+    """When event stores parent+child depts, employee in child dept is also notified."""
+    parent = make_department("R&D")
+    child = make_department("Frontend", parent_id=parent.department_id)
+    emp_parent = make_user(email="ep@test.com", role="employee", department_id=parent.department_id)
+    emp_child = make_user(email="ec@test.com", role="employee", department_id=child.department_id)
+    emp_other = make_user(email="eo@test.com", role="employee")  # no dept
+
+    # Simulate what the API does: expand_subtree stores both parent and child
+    event = make_event(
+        status="active",
+        target_department_ids=[parent.department_id, child.department_id],
+    )
+    dispatch_activation_notifications(db, event.event_id)
+
+    for emp in (emp_parent, emp_child):
+        notifs = client.get(NOTIFICATIONS_ME, headers=auth_headers(emp)).json()["notifications"]
+        assert len(notifs) == 1, f"{emp.email} should receive notification"
+
+    other_notifs = client.get(NOTIFICATIONS_ME, headers=auth_headers(emp_other)).json()["notifications"]
+    assert other_notifs == []
+
+
+# ---------------------------------------------------------------------------
 # send_reminders — SMS fallback
 # ---------------------------------------------------------------------------
 
