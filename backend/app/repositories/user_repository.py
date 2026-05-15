@@ -13,7 +13,9 @@ from app.models.user_role import UserRole
 
 
 class UserRepository:
-    def list_all(self, db: Session) -> list[User]:
+    def list_all(
+        self, db: Session, limit: int | None = None, offset: int = 0
+    ) -> list[User]:
         stmt = (
             select(User)
             .options(
@@ -22,10 +24,18 @@ class UserRepository:
                 selectinload(User.department_memberships),
             )
             .order_by(User.name)
+            .offset(offset)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return list(db.scalars(stmt).unique().all())
 
-    def list_by_department(self, db: Session, department_id: uuid.UUID) -> list[User]:
+    def count_all(self, db: Session) -> int:
+        return db.execute(select(func.count()).select_from(User)).scalar_one()
+
+    def list_by_department(
+        self, db: Session, department_id: uuid.UUID, limit: int | None = None, offset: int = 0
+    ) -> list[User]:
         stmt = (
             select(User)
             .join(
@@ -39,8 +49,21 @@ class UserRepository:
                 selectinload(User.department_memberships),
             )
             .order_by(User.name)
+            .offset(offset)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return list(db.scalars(stmt).unique().all())
+
+    def count_by_department(self, db: Session, department_id: uuid.UUID) -> int:
+        return db.execute(
+            select(func.count())
+            .select_from(UserDepartment)
+            .where(
+                UserDepartment.department_id == department_id,
+                UserDepartment.is_primary.is_(True),
+            )
+        ).scalar_one()
 
     def get_by_id(self, db: Session, user_id: uuid.UUID) -> User | None:
         stmt = (

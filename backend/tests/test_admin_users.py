@@ -38,9 +38,41 @@ def test_admin_list_users_returns_all(client, make_user):
     resp = client.get(ADMIN_USERS, headers=auth_headers(admin))
 
     assert resp.status_code == 200
-    emails = {u["email"] for u in resp.json()["users"]}
+    body = resp.json()
+    emails = {u["email"] for u in body["users"]}
     assert "emp1@test.com" in emails
     assert "emp2@test.com" in emails
+    assert "total" in body
+    assert "page" in body
+    assert "page_size" in body
+
+
+def test_admin_list_users_pagination(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+    for i in range(5):
+        make_user(email=f"emp{i}@test.com", role="employee")
+
+    resp_p1 = client.get(ADMIN_USERS, params={"page": 1, "page_size": 3}, headers=auth_headers(admin))
+    resp_p2 = client.get(ADMIN_USERS, params={"page": 2, "page_size": 3}, headers=auth_headers(admin))
+
+    assert resp_p1.status_code == 200
+    assert resp_p2.status_code == 200
+    body1 = resp_p1.json()
+    body2 = resp_p2.json()
+    assert body1["total"] == body2["total"]
+    assert len(body1["users"]) == 3
+    assert len(body2["users"]) >= 1
+    ids1 = {u["id"] for u in body1["users"]}
+    ids2 = {u["id"] for u in body2["users"]}
+    assert ids1.isdisjoint(ids2)
+
+
+def test_admin_list_users_page_size_limit(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+
+    resp = client.get(ADMIN_USERS, params={"page_size": 999}, headers=auth_headers(admin))
+
+    assert resp.status_code == 422
 
 
 def test_admin_list_users_includes_phone(client, make_user):
