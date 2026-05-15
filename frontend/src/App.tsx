@@ -174,11 +174,11 @@ function App() {
   const employeeDeptId = session.user?.departmentId;
 
   const employeeAccessibleEvents = useMemo(() => {
-    if (!employeeDeptId) return [];
     return events.filter((event) => {
       if (event.status !== 'active' && event.status !== 'closed') return false;
       const tids = event.targetDepartmentIds;
-      return tids.length === 0 || tids.includes(employeeDeptId);
+      if (tids.length === 0) return true; // company-wide: visible to everyone
+      return !!employeeDeptId && tids.includes(employeeDeptId);
     });
   }, [events, employeeDeptId]);
 
