@@ -457,61 +457,19 @@ class PortalService:
             if active_event is None:
                 raise HTTPException(status_code=404, detail="Event not found")
         else:
-            events = [e for e in self._events.list_all(db) if e.status == "active"]
-            events.sort(key=lambda e: e.created_at, reverse=True)
-            active_event = events[0] if events else None
+            active_event = self._events.latest_active(db)
         if active_event is None:
             return {
                 "event": None,
-                "kpis": {
-                    "safe": 0,
-                    "need_help": 0,
-                    "responded": 0,
-                    "pending": 0,
-                    "targeted": 0,
-                },
+                "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0, "targeted": 0},
                 "departments": [],
             }
-        targeted = [u for u in self._users.list_all(db) if "employee" in _role_names(u)]
-        targeted_count = len(targeted)
-        reports = self._responses.list_for_event(db, active_event.event_id)
-        latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
-        for r in reports:
-            prev = latest_by_user.get(r.user_id)
-            if prev is None or r.responded_at > prev.responded_at:
-                latest_by_user[r.user_id] = r
-        responded = len(latest_by_user)
-        safe_c = sum(1 for r in latest_by_user.values() if r.status == "safe")
-        need_c = sum(1 for r in latest_by_user.values() if r.status == "need_help")
-        pending = max(0, targeted_count - responded)
-        dept_stats: dict[str, dict[str, Any]] = {}
-        prim = self._users.primary_department_map(db, [u.user_id for u in targeted])
-        for u in targeted:
-            did = prim.get(u.user_id)
-            if not did:
-                continue
-            dname = nm.get(did, "Unknown")
-            bucket = dept_stats.setdefault(
-                dname,
-                {"department": dname, "safe": 0, "need_help": 0, "pending": 0},
-            )
-            lr = latest_by_user.get(u.user_id)
-            if lr is None:
-                bucket["pending"] += 1
-            elif lr.status == "safe":
-                bucket["safe"] += 1
-            else:
-                bucket["need_help"] += 1
+        kpis = self._responses.admin_kpi(db, event_id=active_event.event_id)
+        departments = self._responses.admin_dept_stats(db, event_id=active_event.event_id)
         return {
             "event": self._event_out(active_event, nm),
-            "kpis": {
-                "safe": safe_c,
-                "need_help": need_c,
-                "responded": responded,
-                "pending": pending,
-                "targeted": targeted_count,
-            },
-            "departments": sorted(dept_stats.values(), key=lambda x: x["department"]),
+            "kpis": kpis,
+            "departments": departments,
         }
 
     # ------------------------------------------------------------------
@@ -704,10 +662,18 @@ class PortalService:
         db.commit()
         return {"message": "Department deleted."}
 
-    def admin_list_users(self, db: Session, actor_id: uuid.UUID) -> list[dict[str, Any]]:
+    def admin_list_users(
+        self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID | None = None
+    ) -> list[dict[str, Any]]:
         if not self._users.user_has_role(db, actor_id, "admin"):
             raise HTTPException(status_code=403, detail="Admin only")
-        return [self._profile_out(db, u) for u in self._users.list_all(db)]
+        if dept_id is not None:
+            if self._depts.get_by_id(db, dept_id) is None:
+                raise HTTPException(status_code=404, detail="Department not found")
+            users = self._users.list_by_department(db, dept_id)
+        else:
+            users = self._users.list_all(db)
+        return [self._profile_out(db, u) for u in users]
 
     def admin_create_user(
         self, db: Session, actor_id: uuid.UUID, payload: AdminUserCreateIn

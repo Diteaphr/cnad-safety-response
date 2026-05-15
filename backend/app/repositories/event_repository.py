@@ -68,6 +68,16 @@ class EventRepository:
         )
         return list(db.scalars(stmt).all())
 
+    def latest_active(self, db: Session) -> Optional[Event]:
+        stmt = (
+            select(Event)
+            .options(selectinload(Event.event_type_row))
+            .where(Event.status == "active")
+            .order_by(Event.created_at.desc())
+            .limit(1)
+        )
+        return db.execute(stmt).scalar_one_or_none()
+
     def list_active_ids(self, db: Session) -> list[uuid.UUID]:
         stmt = select(Event.event_id).where(Event.status == "active")
         return list(db.scalars(stmt).all())

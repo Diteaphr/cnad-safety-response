@@ -25,6 +25,23 @@ class UserRepository:
         )
         return list(db.scalars(stmt).unique().all())
 
+    def list_by_department(self, db: Session, department_id: uuid.UUID) -> list[User]:
+        stmt = (
+            select(User)
+            .join(
+                UserDepartment,
+                (UserDepartment.user_id == User.user_id) & UserDepartment.is_primary.is_(True),
+            )
+            .where(UserDepartment.department_id == department_id)
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.notification_preference),
+                selectinload(User.department_memberships),
+            )
+            .order_by(User.name)
+        )
+        return list(db.scalars(stmt).unique().all())
+
     def get_by_id(self, db: Session, user_id: uuid.UUID) -> User | None:
         stmt = (
             select(User)

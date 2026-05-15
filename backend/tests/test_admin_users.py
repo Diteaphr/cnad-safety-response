@@ -59,6 +59,29 @@ def test_admin_list_users_forbidden_for_employee(client, make_user):
     assert resp.status_code == 403
 
 
+def test_admin_list_users_filter_by_dept(client, make_user, make_department):
+    admin = make_user(email="admin@test.com", role="admin")
+    dept_a = make_department("Dept A")
+    dept_b = make_department("Dept B")
+    emp_a = make_user(email="emp_a@test.com", role="employee", department_id=dept_a.department_id)
+    make_user(email="emp_b@test.com", role="employee", department_id=dept_b.department_id)
+
+    resp = client.get(ADMIN_USERS, params={"dept_id": str(dept_a.department_id)}, headers=auth_headers(admin))
+
+    assert resp.status_code == 200
+    emails = {u["email"] for u in resp.json()["users"]}
+    assert str(emp_a.email) in emails
+    assert "emp_b@test.com" not in emails
+
+
+def test_admin_list_users_filter_dept_not_found_404(client, make_user):
+    admin = make_user(email="admin@test.com", role="admin")
+
+    resp = client.get(ADMIN_USERS, params={"dept_id": str(uuid.uuid4())}, headers=auth_headers(admin))
+
+    assert resp.status_code == 404
+
+
 def test_admin_list_users_forbidden_for_supervisor(client, make_user):
     sup = make_user(email="sup@test.com", role="supervisor")
     resp = client.get(ADMIN_USERS, headers=auth_headers(sup))
