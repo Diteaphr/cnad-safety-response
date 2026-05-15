@@ -102,7 +102,7 @@ def test_admin_create_user_basic(client, make_user):
 
     resp = client.post(
         ADMIN_USERS,
-        json={"name": "New Emp", "email": "newemp@test.com", "password": "pass1234"},
+        json={"name": "New Emp", "email": "newemp@test.com", "password": "pass1234", "phone": "+886911111111", "employeeNo": "EMP001"},
         headers=auth_headers(admin),
     )
 
@@ -121,7 +121,7 @@ def test_admin_create_user_omitted_password_generates_temp(client, make_user):
 
     resp = client.post(
         ADMIN_USERS,
-        json={"name": "Gen", "email": "genuser@test.com"},
+        json={"name": "Gen", "email": "genuser@test.com", "phone": "+886922222222", "employeeNo": "EMP002"},
         headers=auth_headers(admin),
     )
 
@@ -152,6 +152,8 @@ def test_admin_create_user_with_department_derives_manager_from_dept(
             "name": "Alice",
             "email": "alice@test.com",
             "password": "pass1234",
+            "phone": "+886933333333",
+            "employeeNo": "EMP003",
             "departmentId": str(dept.department_id),
             "roles": ["employee"],
         },
@@ -173,6 +175,8 @@ def test_admin_create_user_with_admin_role(client, make_user):
             "name": "New Admin",
             "email": "newadmin@test.com",
             "password": "pass1234",
+            "phone": "+886944444444",
+            "employeeNo": "EMP004",
             "roles": ["admin"],
         },
         headers=auth_headers(admin),
@@ -188,7 +192,7 @@ def test_admin_create_user_duplicate_email(client, make_user):
 
     resp = client.post(
         ADMIN_USERS,
-        json={"name": "Dup", "email": "taken@test.com", "password": "pass1234"},
+        json={"name": "Dup", "email": "taken@test.com", "password": "pass1234", "phone": "+886955555555", "employeeNo": "EMP005"},
         headers=auth_headers(admin),
     )
 
@@ -204,6 +208,8 @@ def test_admin_create_user_invalid_department(client, make_user):
             "name": "X",
             "email": "x@test.com",
             "password": "pass1234",
+            "phone": "+886966666666",
+            "employeeNo": "EMP006",
             "departmentId": str(uuid.uuid4()),
         },
         headers=auth_headers(admin),
@@ -217,7 +223,7 @@ def test_admin_create_user_forbidden_for_employee(client, make_user):
 
     resp = client.post(
         ADMIN_USERS,
-        json={"name": "X", "email": "x@test.com", "password": "pass1234"},
+        json={"name": "X", "email": "x@test.com", "password": "pass1234", "phone": "+886977777777", "employeeNo": "EMP007"},
         headers=auth_headers(emp),
     )
 

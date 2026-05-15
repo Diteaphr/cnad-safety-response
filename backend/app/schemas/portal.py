@@ -138,8 +138,8 @@ class AdminUserCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     email: EmailStr
     password: Optional[str] = Field(default=None, min_length=8, max_length=128)
-    phone: Optional[str] = Field(default=None, max_length=50)
-    employeeNo: Optional[str] = Field(default=None, max_length=50)
+    phone: str = Field(max_length=50)
+    employeeNo: str = Field(max_length=50)
     departmentId: Optional[str] = None
     managerId: Optional[str] = Field(
         default=None,

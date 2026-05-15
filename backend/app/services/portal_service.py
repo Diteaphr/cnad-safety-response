@@ -689,14 +689,9 @@ class PortalService:
         if dept_id and self._depts.get_by_id(db, dept_id) is None:
             raise HTTPException(status_code=400, detail="Department not found")
 
-        if payload.employeeNo and payload.employeeNo.strip():
-            emp_no = payload.employeeNo.strip()
-            if self._users.employee_no_exists(db, emp_no):
-                raise HTTPException(status_code=409, detail="Employee number already in use.")
-        else:
-            emp_no = f"EMP-{uuid.uuid4().hex[:12].upper()}"
-            while self._users.employee_no_exists(db, emp_no):
-                emp_no = f"EMP-{uuid.uuid4().hex[:12].upper()}"
+        emp_no = payload.employeeNo.strip()
+        if self._users.employee_no_exists(db, emp_no):
+            raise HTTPException(status_code=409, detail="Employee number already in use.")
 
         raw_pw = (payload.password or "").strip()
         temporary_password: str | None = None
@@ -710,7 +705,7 @@ class PortalService:
             employee_no=emp_no,
             name=payload.name.strip(),
             email=email,
-            phone=payload.phone.strip() if payload.phone else None,
+            phone=payload.phone.strip(),
             status="active",
             password_hash=hash_password(pw_plain),
         )
