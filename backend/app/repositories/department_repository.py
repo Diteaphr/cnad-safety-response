@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
@@ -64,6 +64,28 @@ class DepartmentRepository:
         dept.parent_department_id = parent_id
         db.flush()
         return dept
+
+    def expand_subtree(
+        self, db: Session, dept_ids: list[uuid.UUID]
+    ) -> list[uuid.UUID]:
+        """Return dept_ids plus all transitive child department IDs (recursive CTE)."""
+        if not dept_ids:
+            return []
+        roots_literal = "{" + ",".join(str(d) for d in dept_ids) + "}"
+        rows = db.execute(
+            text("""
+                WITH RECURSIVE subtree AS (
+                    SELECT department_id FROM departments
+                    WHERE department_id = ANY(CAST(:roots AS uuid[]))
+                    UNION ALL
+                    SELECT d.department_id FROM departments d
+                    JOIN subtree s ON d.parent_department_id = s.department_id
+                )
+                SELECT department_id FROM subtree
+            """),
+            {"roots": roots_literal},
+        ).all()
+        return [row[0] for row in rows]
 
     def delete(self, db: Session, department_id: uuid.UUID) -> None:
         dept = db.get(Department, department_id)
