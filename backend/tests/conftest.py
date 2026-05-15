@@ -260,6 +260,7 @@ def make_event(db):
         status: str = "active",
         created_by: uuid.UUID | None = None,
         event_type: str | None = None,
+        target_department_ids: list[uuid.UUID] | None = None,
     ) -> Event:
         creator = created_by if created_by is not None else _get_placeholder_user()
         etid = _TYPE_BY_NAME.get(event_type or "Earthquake", seed_ids.ET_EARTHQUAKE)
@@ -273,6 +274,13 @@ def make_event(db):
             start_time=datetime.now(timezone.utc),
         )
         db.add(ev)
+        db.flush()
+        if target_department_ids:
+            from app.models.department import Department as Dept
+            for did in target_department_ids:
+                dept = db.get(Dept, did)
+                if dept is not None:
+                    ev.target_departments.append(dept)
         db.commit()
         db.refresh(ev)
         return ev

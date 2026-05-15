@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, String, Table, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -12,8 +12,27 @@ from sqlalchemy.sql import func
 from app.core.base import Base
 
 if TYPE_CHECKING:
+    from app.models.department import Department
     from app.models.event_type import EventType
     from app.models.user import User
+
+# Association table — no ORM class needed (no extra columns).
+event_target_departments_table = Table(
+    "event_target_departments",
+    Base.metadata,
+    Column(
+        "event_id",
+        UUID(as_uuid=True),
+        ForeignKey("events.event_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "department_id",
+        UUID(as_uuid=True),
+        ForeignKey("departments.department_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 class Event(Base):
@@ -48,6 +67,11 @@ class Event(Base):
         back_populates="events",
     )
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
+    target_departments: Mapped[list["Department"]] = relationship(
+        "Department",
+        secondary=event_target_departments_table,
+        lazy="select",
+    )
 
     @property
     def event_type(self) -> str:
