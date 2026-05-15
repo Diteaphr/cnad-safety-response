@@ -245,8 +245,13 @@ def admin_delete_department(
 
 
 @router.get("/admin/users")
-def admin_list_users(actor: CurrentUser, db: Session = Depends(get_db)):
-    return {"users": _portal.admin_list_users(db, actor)}
+def admin_list_users(
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+    dept_id: Optional[str] = Query(default=None),
+):
+    did = _parse_uuid(dept_id, name="dept_id") if dept_id else None
+    return {"users": _portal.admin_list_users(db, actor, dept_id=did)}
 
 
 @router.post("/admin/users")
