@@ -249,9 +249,11 @@ def admin_list_users(
     actor: CurrentUser,
     db: Session = Depends(get_db),
     dept_id: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
 ):
     did = _parse_uuid(dept_id, name="dept_id") if dept_id else None
-    return {"users": _portal.admin_list_users(db, actor, dept_id=did)}
+    return _portal.admin_list_users(db, actor, dept_id=did, page=page, page_size=page_size)
 
 
 @router.post("/admin/users")

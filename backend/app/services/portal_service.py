@@ -664,17 +664,30 @@ class PortalService:
         return {"message": "Department deleted."}
 
     def admin_list_users(
-        self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID | None = None
-    ) -> list[dict[str, Any]]:
+        self,
+        db: Session,
+        actor_id: uuid.UUID,
+        dept_id: uuid.UUID | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
             raise HTTPException(status_code=403, detail="Admin only")
+        offset = (page - 1) * page_size
         if dept_id is not None:
             if self._depts.get_by_id(db, dept_id) is None:
                 raise HTTPException(status_code=404, detail="Department not found")
-            users = self._users.list_by_department(db, dept_id)
+            total = self._users.count_by_department(db, dept_id)
+            users = self._users.list_by_department(db, dept_id, limit=page_size, offset=offset)
         else:
-            users = self._users.list_all(db)
-        return [self._profile_out(db, u) for u in users]
+            total = self._users.count_all(db)
+            users = self._users.list_all(db, limit=page_size, offset=offset)
+        return {
+            "users": [self._profile_out(db, u) for u in users],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
 
     def admin_create_user(
         self, db: Session, actor_id: uuid.UUID, payload: AdminUserCreateIn
