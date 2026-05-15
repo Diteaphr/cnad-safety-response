@@ -72,6 +72,7 @@ function AdminQuickCreateFormFields({
   departments: Department[];
 }) {
   const flatDepts = useMemo(() => flattenDepts(departments), [departments]);
+  const limitToDept = eventForm.targetDepartmentIds.length > 0;
   const typeSelectRows = useMemo(() => {
     if (!eventTypeCatalog?.length) {
       return BUILTIN_TYPE_ORDER.map((name) => ({ name }));
@@ -140,40 +141,69 @@ function AdminQuickCreateFormFields({
           placeholder="例：台北總部 3F 會議室"
         />
       </label>
-      {flatDepts.length > 0 && (
-        <div className="event-form-field">
-          <span className="event-form-field-label">目標部門（未選 = 全員通知）</span>
-          <select
-            multiple
-            size={Math.min(flatDepts.length, 6)}
-            value={eventForm.targetDepartmentIds}
-            onChange={(e) => {
-              const selected = Array.from(e.target.selectedOptions, (o) => o.value);
-              setEventForm({ ...eventForm, targetDepartmentIds: selected });
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span className="event-form-field-label">通知對象</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setEventForm({ ...eventForm, targetDepartmentIds: [] })}
+            style={{
+              flex: 1,
+              padding: '8px 0',
+              borderRadius: 8,
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer',
+              background: !limitToDept ? '#1a6fc4' : '#eef3fa',
+              color: !limitToDept ? '#fff' : '#17385b',
+              transition: 'background 0.15s',
             }}
-            style={{ width: '100%', minHeight: 96 }}
           >
-            {flatDepts.map(({ dept, depth }) => (
-              <option key={dept.id} value={dept.id}>
-                {'　'.repeat(depth)}{dept.name}
-              </option>
-            ))}
-          </select>
-          {eventForm.targetDepartmentIds.length > 0 && (
-            <button
-              type="button"
-              className="btn ghost btn-sm"
-              style={{ marginTop: 4 }}
-              onClick={() => setEventForm({ ...eventForm, targetDepartmentIds: [] })}
-            >
-              清除選取（改為全員）
-            </button>
-          )}
-          <p className="muted-text small" style={{ marginTop: 4 }}>
-            子部門會自動包含。按住 Ctrl / Cmd 可複選。
-          </p>
+            全體員工
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!limitToDept) {
+                setEventForm({ ...eventForm, targetDepartmentIds: flatDepts.length > 0 ? [flatDepts[0].dept.id] : [] });
+              }
+            }}
+            style={{
+              flex: 1,
+              padding: '8px 0',
+              borderRadius: 8,
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer',
+              background: limitToDept ? '#1a6fc4' : '#eef3fa',
+              color: limitToDept ? '#fff' : '#17385b',
+              transition: 'background 0.15s',
+            }}
+          >
+            限定部門
+          </button>
         </div>
-      )}
+        {limitToDept && flatDepts.length > 0 && (
+          <div style={{ border: '1px solid #d4e0ef', borderRadius: 8, padding: '8px 12px', maxHeight: 220, overflowY: 'auto' }}>
+            {flatDepts.map(({ dept, depth }) => (
+              <label key={dept.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', paddingLeft: depth * 16, cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={eventForm.targetDepartmentIds.includes(dept.id)}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...eventForm.targetDepartmentIds, dept.id]
+                      : eventForm.targetDepartmentIds.filter((id) => id !== dept.id);
+                    setEventForm({ ...eventForm, targetDepartmentIds: next.length > 0 ? next : [dept.id] });
+                  }}
+                />
+                {dept.name}
+              </label>
+            ))}
+            <p className="muted-text small" style={{ marginTop: 6, marginBottom: 0 }}>子部門會自動包含</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

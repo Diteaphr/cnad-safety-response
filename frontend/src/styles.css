@@ -3903,8 +3903,8 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 }
 
 .admin-create-event-modal {
-  width: min(520px, 100%);
-  max-height: min(88vh, 720px);
+  width: min(620px, 100%);
+  max-height: min(88vh, 800px);
   overflow-y: auto;
 }
 .admin-create-event-modal h3 {
