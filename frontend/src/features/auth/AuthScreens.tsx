@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { DemoAccount } from '../../api';
-import type { Role } from '../../types';
 
 export function LoginPage({
   accounts,
@@ -96,26 +95,3 @@ export function LoginPage({
   );
 }
 
-export function RoleSelectionPage({ roles, onPickRole }: { roles: Role[]; onPickRole: (role: Role) => void }) {
-  return (
-    <div className="auth-shell">
-      <div className="auth-card role-pick prettier-role-select">
-        <h2>Choose Your Role</h2>
-        <div className="role-cards">
-          {roles.map((role) => (
-            <button key={role} className="role-card" onClick={() => onPickRole(role)} type="button">
-              <strong>{role}</strong>
-              <p>
-                {role === 'employee'
-                  ? 'Quickly report your own status.'
-                  : role === 'supervisor'
-                    ? 'Monitor your team responses.'
-                    : 'Manage events and global response.'}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}

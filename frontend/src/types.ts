@@ -1,5 +1,15 @@
 export type Role = 'employee' | 'supervisor' | 'admin';
 
+/** UI 殼：主系統 vs 管理中心 */
+export type AppSurface = 'member' | 'adminCenter';
+
+export interface UserCapabilities {
+  canManage: boolean;
+  canViewTeam: boolean;
+  /** 具員工或主管身分，可由管理中心返回主系統 */
+  hasStaffPortal: boolean;
+}
+
 export type SafetyStatus = 'safe' | 'need_help' | 'pending';
 
 export type NavKey =

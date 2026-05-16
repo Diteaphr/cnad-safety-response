@@ -223,27 +223,33 @@ export type StatusBadgeStrings = {
 };
 
 export type LayoutNavStrings = {
-  empHome: string;
-  supervisorHome: string;
-  teamDash: string;
-  reminders: string;
-  profile: string;
+  memberHome: string;
+  teamReports: string;
+  notifications: string;
+  accountSettings: string;
   adminOverview: string;
   adminEvents: string;
   adminUsers: string;
   adminNotifications: string;
+  adminSystemSettings: string;
 };
 
 export type LayoutChromeStrings = {
   offlineBanner: string;
-  sidebarHeadline: string;
-  sidebarSub: string;
+  memberSidebarTitle: string;
+  memberSidebarSub: string;
+  adminSidebarTitle: string;
+  adminSidebarSub: string;
+  enterAdminCenter: string;
+  backToStaffMode: string;
   logout: string;
-  switchRole: string;
-  roleEmployee: string;
-  roleSupervisor: string;
-  roleAdmin: string;
   mobileAppTitle: string;
+  /** 窄屏右上角：進入管理中心（可見標籤） */
+  mobileEnterAdminCenter: string;
+  /** 窄屏右上角：返回主系統（可見標籤） */
+  mobileExitAdminCenter: string;
+  ariaMobileEnterAdmin: string;
+  ariaMobileExitAdmin: string;
 };
 
 /** Admin / supervisor portal pages (event pickers, management, notifications). */
@@ -656,51 +662,59 @@ const profilePageEn: ProfilePageStrings = {
 };
 
 const layoutNavZh: LayoutNavStrings = {
-  empHome: '首頁',
-  supervisorHome: '我的狀態',
-  teamDash: '團隊報表',
-  reminders: '通知',
-  profile: '帳號與設定',
+  memberHome: '我的狀態',
+  teamReports: '團隊回報',
+  notifications: '通知',
+  accountSettings: '帳號與設定',
   adminOverview: '總覽',
-  adminEvents: '事件',
+  adminEvents: '事件管理',
   adminUsers: '使用者',
   adminNotifications: '通知',
+  adminSystemSettings: '系統設定',
 };
 
 const layoutNavEn: LayoutNavStrings = {
-  empHome: 'Home',
-  supervisorHome: 'My status',
-  teamDash: 'Team dashboards',
-  reminders: 'Inbox',
-  profile: 'Profile',
+  memberHome: 'My status',
+  teamReports: 'Team reports',
+  notifications: 'Notifications',
+  accountSettings: 'Account & settings',
   adminOverview: 'Overview',
   adminEvents: 'Events',
   adminUsers: 'Users',
   adminNotifications: 'Notifications',
+  adminSystemSettings: 'System settings',
 };
 
 const layoutChromeZh: LayoutChromeStrings = {
   offlineBanner: '目前離線：已快取的資料仍可操作；請恢復連線後再試送出。',
-  sidebarHeadline: '員工安全與回報',
-  sidebarSub: '緊急應變管理中心',
+  memberSidebarTitle: 'Safety Connect',
+  memberSidebarSub: '緊急應變與個人回報',
+  adminSidebarTitle: '管理中心',
+  adminSidebarSub: '事件、派送與權限',
+  enterAdminCenter: '管理中心',
+  backToStaffMode: '返回主系統',
   logout: '登出',
-  switchRole: '切換身分',
-  roleEmployee: '員工',
-  roleSupervisor: '主管',
-  roleAdmin: '管理員',
   mobileAppTitle: 'Safety Connect',
+  mobileEnterAdminCenter: '切換至管理中心',
+  mobileExitAdminCenter: '返回主系統',
+  ariaMobileEnterAdmin: '切換至管理中心視圖',
+  ariaMobileExitAdmin: '離開管理中心，返回主系統／員工介面',
 };
 
 const layoutChromeEn: LayoutChromeStrings = {
   offlineBanner: "You're offline. Cached views still work — reconnect before submitting.",
-  sidebarHeadline: 'Employee Safety & Response',
-  sidebarSub: 'Emergency response operations center',
+  memberSidebarTitle: 'Safety Connect',
+  memberSidebarSub: 'Emergency response',
+  adminSidebarTitle: 'Admin Console',
+  adminSidebarSub: 'Events, broadcasts & directory',
+  enterAdminCenter: 'Admin Console',
+  backToStaffMode: 'Back to main app',
   logout: 'Logout',
-  switchRole: 'Switch role',
-  roleEmployee: 'Employee',
-  roleSupervisor: 'Supervisor',
-  roleAdmin: 'Admin',
   mobileAppTitle: 'Safety Connect',
+  mobileEnterAdminCenter: 'Admin center',
+  mobileExitAdminCenter: 'Main app',
+  ariaMobileEnterAdmin: 'Switch to admin console workspace',
+  ariaMobileExitAdmin: 'Leave admin console and return to staff app',
 };
 
 const portalZh: PortalStrings = {

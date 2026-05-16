@@ -1833,7 +1833,7 @@ export function MemberPriorityHomePage({
             </div>
             <div className="supervisor-team-nudge-actions">
               <button type="button" className="btn primary" onClick={onGoTeamDashboardFromNudge}>
-                {layoutNav.teamDash}
+                {layoutNav.teamReports}
               </button>
               <button type="button" className="btn ghost" onClick={onDismissSupervisorNudge}>
                 {ec.close}
