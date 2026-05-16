@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Toast } from './components/Toast';
 import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
 import { DirectReportsListPage } from './profile/DirectReportsListPage';
 import { ProfileOnboardingPage } from './profile/ProfileOnboardingPage';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
-import { LoginPage, RoleSelectionPage } from './features/auth/AuthScreens';
+import { LoginPage } from './features/auth/AuthScreens';
 import { SupervisorDashboardPage, AdminDashboardPage, TeamDashboardHomePage } from './features/dashboard/DashboardPages';
 import {
-  EventManagementPage,
-  EventSelectionPage,
   GlobalNotificationInboxPage,
   UserManagementPage,
 } from './features/events/EventAndAdminPages';
+import { AdminEventCenterPage } from './features/events/AdminEventCenterPage';
 import {
   EmployeeHomePage,
   MemberPriorityHomePage,
@@ -28,47 +27,70 @@ import {
   getEventTypesApi,
   getEvents,
   getMyNotificationsApi,
+  getMyProfileApi,
   getReports,
   getSupervisorDashboardApi,
   getUsers,
   loginWithEmailApi,
+  PORTAL_ACCESS_TOKEN_STORAGE_KEY,
+  PORTAL_SURFACE_STORAGE_KEY,
   submitReportApi,
   sendEventRemindersApi,
   type AdminDashboardApi,
   type PortalNotificationRow,
   type SupervisorDashboardApi,
 } from './api';
+import { deriveUserCapabilities, initialSurfaceFromRoles } from './lib/portalSessionRoles';
 import { cloneMockCatalog, demoRoleAccounts } from './mockData';
 import { appendReminderAudit, loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
 import { useLocale } from './locale/LocaleContext';
 import { getStrings } from './locale/strings';
 import type {
+  AdminEventListRow,
+  AppSurface,
   Department,
   EventItem,
   NavKey,
-  Role,
   SafetyResponse,
   ToastState,
   User,
+  UserCapabilities,
 } from './types';
+import { compareEventsByStartThenCreatedDesc } from './types';
+import { scrollPortalMainToTop } from './lib/scrollPortalMain';
+
+const emptyCaps: UserCapabilities = {
+  canManage: false,
+  canViewTeam: false,
+  hasStaffPortal: false,
+};
 
 interface SessionState {
   isLoggedIn: boolean;
   user: User | null;
-  availableRoles: Role[];
-  currentRole: Role | null;
+  surface: AppSurface;
+  caps: UserCapabilities;
 }
 
-const roleDefaultNav: Record<Role, NavKey> = {
-  employee: 'member-home',
-  supervisor: 'member-home',
-  admin: 'admin-dashboard',
-};
+const ADMIN_ONLY_NAV: NavKey[] = ['admin-dashboard', 'admin-event-detail', 'user-management'];
+const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
+  'member-home',
+  'team-dashboard-home',
+  'employee-event-detail',
+  'supervisor-event-detail',
+  'profile-direct-reports-list',
+  'profile-direct-report-history',
+];
 
 function App() {
   const { locale } = useLocale();
-  const [session, setSession] = useState<SessionState>({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
+  const [session, setSession] = useState<SessionState>({
+    isLoggedIn: false,
+    user: null,
+    surface: 'member',
+    caps: emptyCaps,
+  });
   const [navKey, setNavKey] = useState<NavKey>('member-home');
   const [supervisorTeamNudge, setSupervisorTeamNudge] = useState<null | { pendingPct: number; eventTitle: string }>(null);
   const [supervisorOpenedDetailFrom, setSupervisorOpenedDetailFrom] = useState<'member-home' | 'team-dashboard-home'>(
@@ -107,6 +129,7 @@ function App() {
   const supervisorDashEventIdRef = useRef('');
   const adminDashEventIdRef = useRef('');
   const [adminDepartmentFilter, setAdminDepartmentFilter] = useState<string | null>(null);
+  const [closingAdminEventId, setClosingAdminEventId] = useState<string | null>(null);
   const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
 
   const loadCatalogFromApi = useCallback(async () => {
@@ -131,16 +154,73 @@ function App() {
     }
   }, []);
 
+  const mergeUserIntoList = useCallback((user: User) => {
+    setUsers((prev) => {
+      const idx = prev.findIndex((u) => u.id === user.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = user;
+        return next;
+      }
+      return [...prev, user];
+    });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       await loadCatalogFromApi();
       if (cancelled) return;
+      let token: string | null = null;
+      try {
+        token =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY)?.trim() ?? null
+            : null;
+      } catch {
+        token = null;
+      }
+      if (!token) return;
+      try {
+        const user = await getMyProfileApi();
+        if (cancelled) return;
+        setUseMockOfflineCatalog(false);
+        mergeUserIntoList(user);
+        const capsNext = deriveUserCapabilities(user.roles);
+        let surfaceNext = initialSurfaceFromRoles(user.roles);
+        try {
+          const stored =
+            typeof window !== 'undefined' ? window.localStorage.getItem(PORTAL_SURFACE_STORAGE_KEY) : null;
+          if (stored === 'adminCenter' && capsNext.canManage) surfaceNext = 'adminCenter';
+        } catch {
+          /* ignore */
+        }
+        setSession({
+          isLoggedIn: true,
+          user,
+          surface: surfaceNext,
+          caps: capsNext,
+        });
+        setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
+      } catch {
+        if (!cancelled) clearAccessToken();
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [loadCatalogFromApi]);
+  }, [loadCatalogFromApi, mergeUserIntoList]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn || useMockOfflineCatalog) return;
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(PORTAL_SURFACE_STORAGE_KEY, session.surface);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [session.isLoggedIn, session.surface, useMockOfflineCatalog]);
 
   useEffect(() => {
     if (events.length === 0) return;
@@ -234,14 +314,14 @@ function App() {
         const pendA = a.teamCounts?.pending ?? 0;
         const pendB = b.teamCounts?.pending ?? 0;
         if (pendA !== pendB) return pendB - pendA;
-        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+        return compareEventsByStartThenCreatedDesc(a.event, b.event);
       });
     } else {
       enriched.sort((a, b) => {
         const ap = a.latest ? 1 : 0;
         const bp = b.latest ? 1 : 0;
         if (ap !== bp) return ap - bp;
-        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+        return compareEventsByStartThenCreatedDesc(a.event, b.event);
       });
     }
 
@@ -321,9 +401,9 @@ function App() {
       const ra = a.teamCounts.pending / Math.max(a.teamCounts.total, 1);
       const rb = b.teamCounts.pending / Math.max(b.teamCounts.total, 1);
       if (ra !== rb) return rb - ra;
-      return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+      return compareEventsByStartThenCreatedDesc(a.event, b.event);
     });
-    const closed = build('closed').sort((a, b) => new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime());
+    const closed = build('closed').sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
     return { active, closed };
   }, [hasDirectReports, employeeDeptId, employeeAccessibleEvents, subordinateUserIds, responses]);
 
@@ -338,6 +418,10 @@ function App() {
     if (navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history') return 'profile';
     return navKey;
   }, [navKey, supervisorOpenedDetailFrom]);
+
+  useLayoutEffect(() => {
+    scrollPortalMainToTop();
+  }, [navKey]);
   const selectedEmployeeEvent = useMemo(
     () => events.find((event) => event.id === selectedEmployeeEventId) ?? null,
     [events, selectedEmployeeEventId],
@@ -425,37 +509,51 @@ function App() {
     }
   }, [navKey, session.user?.id, profileSubordinateUserId, profileDirectReportIds]);
 
+  const supervisorUi = session.surface === 'member' && session.caps.canViewTeam;
+  const adminUi = session.surface === 'adminCenter';
+
+  useEffect(() => {
+    if (!session.isLoggedIn || !session.user) return;
+    const { surface, caps } = session;
+    const nk = navKey;
+    if (surface === 'member' && ADMIN_ONLY_NAV.includes(nk)) {
+      setNavKey('member-home');
+      return;
+    }
+    if (surface === 'adminCenter' && MEMBER_EXCLUSIVE_NAV.includes(nk)) {
+      setNavKey('admin-dashboard');
+      return;
+    }
+    if (surface === 'member' && !caps.canViewTeam && (nk === 'team-dashboard-home' || nk === 'supervisor-event-detail')) {
+      setNavKey('member-home');
+    }
+  }, [session.isLoggedIn, session.user, session.surface, session.caps.canViewTeam, navKey]);
+
   const supervisorViewAligned =
-    session.currentRole === 'supervisor' &&
+    supervisorUi &&
     !!supervisorDashboard?.event?.id &&
     supervisorDashboard!.event!.id === selectedSupervisorEventId;
 
   const adminViewAligned =
-    session.currentRole === 'admin' && !!adminDashboard?.event?.id && adminDashboard!.event!.id === selectedAdminEventId;
+    adminUi && !!adminDashboard?.event?.id && adminDashboard!.event!.id === selectedAdminEventId;
 
   /** 不依後端快照、僅以前端快照彙總（事件或角色與 dashboard 對齊失敗時使用） */
   const scopedClientRows = useMemo(() => {
     if (!selectedSupervisorEvent && !selectedAdminEvent) return [];
-    const eventId =
-      session.currentRole === 'admin'
-        ? selectedAdminEvent?.id
-        : session.currentRole === 'supervisor'
-          ? selectedSupervisorEvent?.id
-          : '';
+    const eventId = adminUi ? selectedAdminEvent?.id : supervisorUi ? selectedSupervisorEvent?.id : '';
     const myId = session.user?.id;
     if (!eventId || !myId) return [];
 
-    const supervisorIds = users
-      .filter((user) => user.managerId === myId && user.roles.includes('employee'))
-      .map((user) => user.id);
+    /** 與後端 `list_line_reports` / API `managerId`（derived line manager）一致 */
+    const lineReportIds = users.filter((user) => user.managerId === myId).map((user) => user.id);
 
     const sourceUsers = users.filter((u) => {
-      if (!u.roles.includes('employee')) return false;
-      if (session.currentRole === 'admin') {
+      if (adminUi) {
+        if (!u.roles.includes('employee')) return false;
         const tids = selectedAdminEvent?.targetDepartmentIds ?? [];
         return tids.length === 0 ? true : tids.includes(u.departmentId);
       }
-      return supervisorIds.includes(u.id);
+      return lineReportIds.includes(u.id);
     });
 
     return sourceUsers.map((u) => {
@@ -478,23 +576,70 @@ function App() {
     selectedSupervisorEvent,
     selectedAdminEvent,
     responses,
-    session.currentRole,
+    adminUi,
+    supervisorUi,
     session.user?.id,
     departments,
     users,
   ]);
 
+  const adminEventListRows = useMemo((): AdminEventListRow[] => {
+    return events.map((event) => {
+      const tids = event.targetDepartmentIds ?? [];
+      const sourceUsers = users.filter((u) => {
+        if (!u.roles.includes('employee')) return false;
+        return tids.length === 0 ? true : tids.includes(u.departmentId);
+      });
+      let safe = 0;
+      let needHelp = 0;
+      let pending = 0;
+      let lastTs = new Date(event.startAt ?? event.createdAt).getTime();
+      for (const u of sourceUsers) {
+        const latest = responses
+          .filter((r) => r.eventId === event.id && r.userId === u.id)
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+        const st = latest?.status ?? 'pending';
+        if (st === 'safe') safe++;
+        else if (st === 'need_help') needHelp++;
+        else pending++;
+        if (latest?.updatedAt) {
+          const t = new Date(latest.updatedAt).getTime();
+          if (t > lastTs) lastTs = t;
+        }
+      }
+      const total = sourceUsers.length;
+      const reported = safe + needHelp;
+      const responseRate = total ? Math.round((reported / total) * 100) : 0;
+      return {
+        event,
+        total,
+        safe,
+        needHelp,
+        pending,
+        responseRate,
+        reported,
+        lastActivityAt: lastTs,
+      };
+    })
+    .sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
+  }, [events, users, responses]);
+
   const employeeRows = useMemo(() => {
-    if (session.currentRole === 'supervisor' && supervisorViewAligned && supervisorDashboard?.event?.id === selectedSupervisorEvent?.id) {
+    if (supervisorUi && supervisorViewAligned && supervisorDashboard?.event?.id === selectedSupervisorEvent?.id) {
       const eventId = supervisorDashboard!.event!.id;
       return supervisorDashboard!.team.map((t) => {
         const uid = t.user_id;
         const latest = responses
           .filter((r) => r.eventId === eventId && r.userId === uid)
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-        const stRaw = String(t.status);
-        const st: 'safe' | 'need_help' | 'pending' =
-          stRaw === 'safe' ? 'safe' : stRaw === 'need_help' ? 'need_help' : 'pending';
+        const raw = t.status;
+        let st: 'safe' | 'need_help' | 'pending' = 'pending';
+        if (raw === 'safe' || raw === 'need_help' || raw === 'pending') {
+          st = raw;
+        } else if (latest?.status === 'safe' || latest?.status === 'need_help') {
+          /** API 轉下屬列 status 為 null、或短暫缺 lr 時，沿用與 GET /api/reports 一致的快取 */
+          st = latest.status;
+        }
         const uMeta = users.find((x) => x.id === uid);
         const noteMerge = latest ? [latest.location, latest.comment].filter(Boolean).join(' · ') : undefined;
         return {
@@ -511,7 +656,7 @@ function App() {
     }
     return scopedClientRows;
   }, [
-    session.currentRole,
+    supervisorUi,
     supervisorViewAligned,
     supervisorDashboard,
     selectedSupervisorEvent?.id,
@@ -526,16 +671,16 @@ function App() {
   }, [adminDepartmentFilter, employeeRows]);
 
   const stats = useMemo(() => {
-    if (session.currentRole === 'supervisor' && supervisorViewAligned && supervisorDashboard) {
-      const kpis = supervisorDashboard.kpis;
-      const totalTeam = supervisorDashboard.team.length;
-      const safe = kpis.safe;
-      const needHelp = kpis.need_help;
-      const pending = kpis.pending;
-      const responseRate = totalTeam ? Math.round(((safe + needHelp) / totalTeam) * 100) : 0;
-      return { total: totalTeam, safe, needHelp, pending, responseRate };
+    if (supervisorUi && supervisorViewAligned && supervisorDashboard) {
+      /** 與下方員工表同源：`team` 僅直屬部屬列；勿用 `kpis`（為整棵組織樹匯總）以免總人數與清單不一致 */
+      const total = employeeRows.length;
+      const safe = employeeRows.filter((r) => r.status === 'safe').length;
+      const needHelp = employeeRows.filter((r) => r.status === 'need_help').length;
+      const pending = employeeRows.filter((r) => r.status === 'pending').length;
+      const responseRate = total ? Math.min(100, Math.round(((safe + needHelp) / total) * 100)) : 0;
+      return { total, safe, needHelp, pending, responseRate };
     }
-    if (session.currentRole === 'admin' && adminDepartmentFilter) {
+    if (adminUi && adminDepartmentFilter) {
       const scoped = employeeRows.filter((r) => r.department === adminDepartmentFilter);
       const total = scoped.length;
       const safe = scoped.filter((r) => r.status === 'safe').length;
@@ -544,7 +689,7 @@ function App() {
       const responseRate = total ? Math.round(((safe + needHelp) / total) * 100) : 0;
       return { total, safe, needHelp, pending, responseRate };
     }
-    if (session.currentRole === 'admin' && adminViewAligned && adminDashboard) {
+    if (adminUi && adminViewAligned && adminDashboard) {
       const kpis = adminDashboard.kpis;
       const total = kpis.targeted;
       const safe = kpis.safe;
@@ -560,7 +705,8 @@ function App() {
     const responseRate = total ? Math.round(((safe + needHelp) / total) * 100) : 0;
     return { total, safe, needHelp, pending, responseRate };
   }, [
-    session.currentRole,
+    supervisorUi,
+    adminUi,
     supervisorViewAligned,
     supervisorDashboard,
     adminViewAligned,
@@ -589,12 +735,12 @@ function App() {
       /* retain cache */
     }
     try {
-      if (session.currentRole === 'supervisor') {
+      if (session.surface === 'member' && session.caps.canViewTeam) {
         const eid = supervisorDashEventIdRef.current.trim();
         const sd = await getSupervisorDashboardApi(eid || undefined);
         setSupervisorDashboard(sd);
       }
-      if (session.currentRole === 'admin') {
+      if (session.surface === 'adminCenter') {
         const eid = adminDashEventIdRef.current.trim();
         const ad = await getAdminDashboardApi(eid || undefined);
         setAdminDashboard(ad);
@@ -609,32 +755,12 @@ function App() {
       /* optional */
     }
     setDashboardUpdatedAt(Date.now());
-  }, [session.isLoggedIn, session.currentRole, useMockOfflineCatalog]);
+  }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, useMockOfflineCatalog]);
 
   useEffect(() => {
-    if (!session.isLoggedIn || session.currentRole === null) return;
+    if (!session.isLoggedIn) return;
     void refreshOperationalData();
-  }, [session.isLoggedIn, session.currentRole, refreshOperationalData]);
-
-  useEffect(() => {
-    setAdminDepartmentFilter(null);
-  }, [selectedAdminEventId]);
-
-  useEffect(() => {
-    if (navKey !== 'admin-event-detail') setAdminDepartmentFilter(null);
-  }, [navKey]);
-
-  useEffect(() => {
-    if (!session.isLoggedIn || session.currentRole === null) return undefined;
-    const watchNav =
-      navKey === 'supervisor-event-detail' ||
-      navKey === 'team-dashboard-home' ||
-      navKey === 'admin-event-detail' ||
-      navKey === 'notifications';
-    if (!watchNav) return undefined;
-    const tid = window.setInterval(() => void refreshOperationalData(), 28_000);
-    return () => window.clearInterval(tid);
-  }, [session.isLoggedIn, session.currentRole, navKey, refreshOperationalData]);
+  }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, refreshOperationalData]);
 
   useEffect(() => {
     if (!session.isLoggedIn) return undefined;
@@ -651,29 +777,50 @@ function App() {
   }, [session.isLoggedIn, refreshOperationalData]);
 
   useEffect(() => {
+    setAdminDepartmentFilter(null);
+  }, [selectedAdminEventId]);
+
+  useEffect(() => {
+    if (navKey !== 'admin-event-detail') setAdminDepartmentFilter(null);
+  }, [navKey]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn) return undefined;
+    const supervisorPaths =
+      session.surface === 'member' &&
+      session.caps.canViewTeam &&
+      (navKey === 'supervisor-event-detail' || navKey === 'team-dashboard-home');
+    const adminPaths = session.surface === 'adminCenter' && navKey === 'admin-event-detail';
+    const watchNav = supervisorPaths || adminPaths || navKey === 'notifications';
+    if (!watchNav) return undefined;
+    const tid = window.setInterval(() => void refreshOperationalData(), 28_000);
+    return () => window.clearInterval(tid);
+  }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, navKey, refreshOperationalData]);
+
+  useEffect(() => {
     if (navKey !== 'employee-event-detail') {
       setReportSubmitError(null);
     }
   }, [navKey]);
 
   useEffect(() => {
-    if (!selectedSupervisorEventId || session.currentRole !== 'supervisor') return;
+    if (!selectedSupervisorEventId || !supervisorUi) return;
     setContactedByEvent((prev) => ({
       ...prev,
       [selectedSupervisorEventId]: loadContactedMap(selectedSupervisorEventId),
     }));
-  }, [selectedSupervisorEventId, session.currentRole]);
+  }, [selectedSupervisorEventId, supervisorUi]);
 
   const toggleNeedHelpContact = useCallback(
     (userId: string) => {
-      if (!selectedSupervisorEventId || session.currentRole !== 'supervisor') return;
+      if (!selectedSupervisorEventId || !supervisorUi) return;
       const eid = selectedSupervisorEventId;
       const base = contactedByEvent[eid] ?? loadContactedMap(eid);
       const nextMap = { ...base, [userId]: !(base[userId] ?? false) };
       saveContactedMap(eid, nextMap);
       setContactedByEvent((prev) => ({ ...prev, [eid]: nextMap }));
     },
-    [contactedByEvent, selectedSupervisorEventId, session.currentRole],
+    [contactedByEvent, selectedSupervisorEventId, supervisorUi],
   );
 
   const dispatchRemindersForEvent = useCallback(
@@ -728,27 +875,16 @@ function App() {
     setMyNotifications([]);
     setSupervisorDashboard(null);
     setAdminDashboard(null);
-    const initialRole = account.roles[0];
+    const capsNext = deriveUserCapabilities(mockUser.roles);
+    const surfaceNext = initialSurfaceFromRoles(mockUser.roles);
     setSession({
       isLoggedIn: true,
       user: { ...mockUser },
-      availableRoles: account.roles,
-      currentRole: account.roles.length === 1 ? initialRole : null,
+      surface: surfaceNext,
+      caps: capsNext,
     });
-    setNavKey(roleDefaultNav[initialRole]);
+    setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
     showToast({ tone: 'info', message: 'Demo 模式：資料來自 mockData（未連資料庫）。' });
-  };
-
-  const mergeUserIntoList = (user: User) => {
-    setUsers((prev) => {
-      const idx = prev.findIndex((u) => u.id === user.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = user;
-        return next;
-      }
-      return [...prev, user];
-    });
   };
 
   const handleEmailLogin = async (email: string, password: string) => {
@@ -756,20 +892,27 @@ function App() {
     const { user } = await loginWithEmailApi({ email, password });
     await loadCatalogFromApi();
     mergeUserIntoList(user);
-    const roles = user.roles;
-    const initialRole = roles[0];
+    const capsNext = deriveUserCapabilities(user.roles);
+    const surfaceNext = initialSurfaceFromRoles(user.roles);
     setSession({
       isLoggedIn: true,
       user,
-      availableRoles: roles,
-      currentRole: roles.length === 1 ? initialRole : null,
+      surface: surfaceNext,
+      caps: capsNext,
     });
-    setNavKey(roleDefaultNav[initialRole]);
+    setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
   };
 
-  const pickRole = (role: Role) => {
-    setSession((prev) => ({ ...prev, currentRole: role }));
-    setNavKey(roleDefaultNav[role]);
+  const enterAdminCenter = () => {
+    setSession((prev) => ({ ...prev, surface: 'adminCenter' }));
+    setNavKey('admin-dashboard');
+    setSupervisorOpenedDetailFrom('member-home');
+    setSupervisorTeamNudge(null);
+  };
+
+  const exitAdminCenter = () => {
+    setSession((prev) => ({ ...prev, surface: 'member' }));
+    setNavKey('member-home');
     setSupervisorOpenedDetailFrom('member-home');
     setSupervisorTeamNudge(null);
   };
@@ -777,7 +920,7 @@ function App() {
   const logout = () => {
     clearAccessToken();
     setUseMockOfflineCatalog(false);
-    setSession({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
+    setSession({ isLoggedIn: false, user: null, surface: 'member', caps: emptyCaps });
     void loadCatalogFromApi();
     showToast({ tone: 'info', message: 'Logged out.' });
   };
@@ -823,7 +966,7 @@ function App() {
           ...responses.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
           nextResponse,
         ];
-        if (session.currentRole === 'supervisor' && subordinateUserIds.length > 0) {
+        if (supervisorUi && subordinateUserIds.length > 0) {
           let pend = 0;
           for (const sid of subordinateUserIds) {
             const lr = mergedResponses
@@ -875,7 +1018,7 @@ function App() {
         ...responses.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
         nextResponse,
       ];
-      if (session.currentRole === 'supervisor' && subordinateUserIds.length > 0) {
+      if (supervisorUi && subordinateUserIds.length > 0) {
         let pend = 0;
         for (const sid of subordinateUserIds) {
           const lr = mergedResponses
@@ -929,6 +1072,7 @@ function App() {
         targetDepartmentIds: [],
         status: 'active',
         startAt: new Date(eventForm.startAt).toISOString(),
+        createdAt: new Date().toISOString(),
         cardDepartment: undefined,
         venue: undefined,
       };
@@ -981,10 +1125,19 @@ function App() {
     }
   };
 
+  const closeEventFromList = async (eventId: string) => {
+    setClosingAdminEventId(eventId);
+    try {
+      await closeEvent(eventId);
+    } finally {
+      setClosingAdminEventId(null);
+    }
+  };
+
   const contactedForSupervisorRow = contactedByEvent[selectedSupervisorEventId] ?? {};
 
   const pendingRatioHigh =
-    session.currentRole === 'supervisor' && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
+    supervisorUi && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
   if (!session.isLoggedIn) {
     return (
       <LoginPage
@@ -997,9 +1150,7 @@ function App() {
     );
   }
 
-  if (!session.currentRole) {
-    return <RoleSelectionPage roles={session.availableRoles} onPickRole={pickRole} />;
-  }
+
 
   if (session.user?.needsProfileCompletion) {
     return (
@@ -1009,7 +1160,11 @@ function App() {
           showToast={showToast}
           onCompleted={(nextUser) => {
             mergeUserIntoList(nextUser);
-            setSession((prev) => ({ ...prev, user: nextUser }));
+            setSession((prev) => ({
+              ...prev,
+              user: nextUser,
+              caps: deriveUserCapabilities(nextUser.roles),
+            }));
           }}
         />
         <Toast toast={toast} />
@@ -1020,17 +1175,18 @@ function App() {
   return (
     <>
       <Layout
-        currentRole={session.currentRole}
-        roleOptions={session.availableRoles}
+        surface={session.surface}
+        caps={session.caps}
         currentNav={layoutNavKey}
-        onSwitchRole={pickRole}
-        onSwitchNav={(key) => {
+        onNavigate={(key) => {
           if (key === 'member-home') setSupervisorOpenedDetailFrom('member-home');
           setNavKey(key);
         }}
+        onEnterAdminCenter={enterAdminCenter}
+        onExitAdminCenter={exitAdminCenter}
         onLogout={logout}
       >
-        {navKey === 'member-home' && session.currentRole !== 'admin' && (
+        {navKey === 'member-home' && session.surface === 'member' && (
           <MemberPriorityHomePage
             priorityView={memberPriorityView}
             draftUserId={session.user?.id ?? null}
@@ -1057,7 +1213,7 @@ function App() {
               setSelectedEmployeeEventId(eventId);
               setNavKey('employee-event-detail');
             }}
-            supervisorTeamNudge={session.currentRole === 'supervisor' ? supervisorTeamNudge : null}
+            supervisorTeamNudge={supervisorUi ? supervisorTeamNudge : null}
             onDismissSupervisorNudge={() => setSupervisorTeamNudge(null)}
             onGoTeamDashboardFromNudge={() => {
               setSupervisorTeamNudge(null);
@@ -1065,7 +1221,7 @@ function App() {
             }}
           />
         )}
-        {navKey === 'team-dashboard-home' && session.currentRole === 'supervisor' && (
+        {navKey === 'team-dashboard-home' && supervisorUi && (
           <TeamDashboardHomePage
             activeRows={supervisorTeamDashboardRows.active}
             closedRows={supervisorTeamDashboardRows.closed}
@@ -1077,7 +1233,7 @@ function App() {
             }}
           />
         )}
-        {navKey === 'employee-event-detail' && (
+        {navKey === 'employee-event-detail' && session.surface === 'member' && (
           <EmployeeHomePage
             draftUserId={session.user?.id ?? null}
             userName={session.user?.name ?? ''}
@@ -1106,7 +1262,7 @@ function App() {
             onBackToEvents={() => setNavKey('member-home')}
           />
         )}
-        {navKey === 'supervisor-event-detail' && (
+        {navKey === 'supervisor-event-detail' && supervisorUi && (
           <SupervisorDashboardPage
             event={selectedSupervisorEvent}
             stats={stats}
@@ -1131,11 +1287,10 @@ function App() {
             }
           />
         )}
-        {navKey === 'admin-dashboard' && (
-          <EventSelectionPage
-            variant="admin"
-            events={events}
-            selectedEventId={selectedAdminEventId}
+        {navKey === 'admin-dashboard' && adminUi && (
+          <AdminEventCenterPage
+            rows={adminEventListRows}
+            departments={departments}
             onSelectEvent={(eventId) => {
               setSelectedAdminEventId(eventId);
               setNavKey('admin-event-detail');
@@ -1147,13 +1302,13 @@ function App() {
               departments,
               onSubmitCreate: async () => {
                 const ok = await createEvent();
-                if (ok) setNavKey('event-management');
+                if (ok) setNavKey('admin-dashboard');
                 return ok;
               },
             }}
           />
         )}
-        {navKey === 'admin-event-detail' && (
+        {navKey === 'admin-event-detail' && adminUi && (
           <AdminDashboardPage
             event={selectedAdminEvent}
             stats={stats}
@@ -1166,10 +1321,11 @@ function App() {
             onBackToEvents={() => setNavKey('admin-dashboard')}
             selectedDepartment={adminDepartmentFilter}
             onSelectDepartment={setAdminDepartmentFilter}
+            onCloseEvent={closeEventFromList}
+            closingEventId={closingAdminEventId}
           />
         )}
-        {navKey === 'event-management' && <EventManagementPage events={events} onClose={closeEvent} />}
-        {navKey === 'user-management' && (
+        {navKey === 'user-management' && adminUi && (
           <UserManagementPage
             users={users}
             departments={departments}
@@ -1189,7 +1345,10 @@ function App() {
             onLogout={logout}
             onProfileUpdated={(nextUser) => {
               mergeUserIntoList(nextUser);
-              setSession((prev) => (prev.user ? { ...prev, user: nextUser } : prev));
+              const capsNext = deriveUserCapabilities(nextUser.roles);
+              setSession((prev) =>
+                prev.user ? { ...prev, user: nextUser, caps: capsNext } : prev,
+              );
             }}
             onNavigateToDirectReportsList={() => setNavKey('profile-direct-reports-list')}
             onNavigateToSubordinateHistory={(userId) => {
@@ -1199,7 +1358,7 @@ function App() {
             offlineMockSession={useMockOfflineCatalog}
           />
         )}
-        {navKey === 'profile-direct-reports-list' && (
+        {navKey === 'profile-direct-reports-list' && session.surface === 'member' && (
           <DirectReportsListPage
             directReports={profileDirectReports}
             departments={departments}
@@ -1210,7 +1369,7 @@ function App() {
             }}
           />
         )}
-        {navKey === 'profile-direct-report-history' && profileHistorySubordinate ? (
+        {navKey === 'profile-direct-report-history' && session.surface === 'member' && profileHistorySubordinate ? (
           <DirectReportEventHistoryPage
             subordinate={profileHistorySubordinate}
             events={events}

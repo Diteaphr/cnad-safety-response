@@ -223,27 +223,33 @@ export type StatusBadgeStrings = {
 };
 
 export type LayoutNavStrings = {
-  empHome: string;
-  supervisorHome: string;
-  teamDash: string;
-  reminders: string;
-  profile: string;
+  memberHome: string;
+  teamReports: string;
+  notifications: string;
+  accountSettings: string;
   adminOverview: string;
   adminEvents: string;
   adminUsers: string;
   adminNotifications: string;
+  adminSystemSettings: string;
 };
 
 export type LayoutChromeStrings = {
   offlineBanner: string;
-  sidebarHeadline: string;
-  sidebarSub: string;
+  memberSidebarTitle: string;
+  memberSidebarSub: string;
+  adminSidebarTitle: string;
+  adminSidebarSub: string;
+  enterAdminCenter: string;
+  backToStaffMode: string;
   logout: string;
-  switchRole: string;
-  roleEmployee: string;
-  roleSupervisor: string;
-  roleAdmin: string;
   mobileAppTitle: string;
+  /** 窄屏右上角：進入管理中心（可見標籤） */
+  mobileEnterAdminCenter: string;
+  /** 窄屏右上角：返回主系統（可見標籤） */
+  mobileExitAdminCenter: string;
+  ariaMobileEnterAdmin: string;
+  ariaMobileExitAdmin: string;
 };
 
 /** Admin / supervisor portal pages (event pickers, management, notifications). */
@@ -326,6 +332,23 @@ export type PortalStrings = {
   adminOverviewCreateBody: string;
   adminOverviewCreateCta: string;
   adminCreateModalCancel: string;
+  adminEventCenterSubtitle: string;
+  adminEventCenterSearchPlaceholder: string;
+  adminEventCenterReportProgress: string;
+  adminEventCenterReportedOfTotal: (reported: number, total: number) => string;
+  adminEventCenterStatusColumn: string;
+  adminEventCenterLastUpdate: string;
+  adminEventCenterTip: string;
+  adminEventCenterTipDismissAria: string;
+  adminEventCenterPageRange: (from: number, to: number, total: number) => string;
+  adminEventCenterPerPage: string;
+  adminScopeAllEmployees: string;
+  adminEventCenterEmpty: string;
+  adminEventCenterColEvent: string;
+  adminEventCenterColStatus: string;
+  adminEventCenterColProgress: string;
+  adminEventCenterColStats: string;
+  adminEventCenterColAction: string;
 };
 
 /** Copy for dashboards + profile confirmations (minimal i18n layer). */
@@ -656,51 +679,59 @@ const profilePageEn: ProfilePageStrings = {
 };
 
 const layoutNavZh: LayoutNavStrings = {
-  empHome: '首頁',
-  supervisorHome: '我的狀態',
-  teamDash: '團隊報表',
-  reminders: '通知',
-  profile: '帳號與設定',
+  memberHome: '我的狀態',
+  teamReports: '團隊回報',
+  notifications: '通知',
+  accountSettings: '帳號與設定',
   adminOverview: '總覽',
-  adminEvents: '事件',
+  adminEvents: '事件管理',
   adminUsers: '使用者',
   adminNotifications: '通知',
+  adminSystemSettings: '系統設定',
 };
 
 const layoutNavEn: LayoutNavStrings = {
-  empHome: 'Home',
-  supervisorHome: 'My status',
-  teamDash: 'Team dashboards',
-  reminders: 'Inbox',
-  profile: 'Profile',
+  memberHome: 'My status',
+  teamReports: 'Team reports',
+  notifications: 'Notifications',
+  accountSettings: 'Account & settings',
   adminOverview: 'Overview',
   adminEvents: 'Events',
   adminUsers: 'Users',
   adminNotifications: 'Notifications',
+  adminSystemSettings: 'System settings',
 };
 
 const layoutChromeZh: LayoutChromeStrings = {
   offlineBanner: '目前離線：已快取的資料仍可操作；請恢復連線後再試送出。',
-  sidebarHeadline: '員工安全與回報',
-  sidebarSub: '緊急應變管理中心',
+  memberSidebarTitle: 'Safety Connect',
+  memberSidebarSub: '緊急應變與個人回報',
+  adminSidebarTitle: '管理中心',
+  adminSidebarSub: '事件、派送與權限',
+  enterAdminCenter: '管理中心',
+  backToStaffMode: '返回主系統',
   logout: '登出',
-  switchRole: '切換身分',
-  roleEmployee: '員工',
-  roleSupervisor: '主管',
-  roleAdmin: '管理員',
   mobileAppTitle: 'Safety Connect',
+  mobileEnterAdminCenter: '切換至管理中心',
+  mobileExitAdminCenter: '返回主系統',
+  ariaMobileEnterAdmin: '切換至管理中心視圖',
+  ariaMobileExitAdmin: '離開管理中心，返回主系統／員工介面',
 };
 
 const layoutChromeEn: LayoutChromeStrings = {
   offlineBanner: "You're offline. Cached views still work — reconnect before submitting.",
-  sidebarHeadline: 'Employee Safety & Response',
-  sidebarSub: 'Emergency response operations center',
+  memberSidebarTitle: 'Safety Connect',
+  memberSidebarSub: 'Emergency response',
+  adminSidebarTitle: 'Admin Console',
+  adminSidebarSub: 'Events, broadcasts & directory',
+  enterAdminCenter: 'Admin Console',
+  backToStaffMode: 'Back to main app',
   logout: 'Logout',
-  switchRole: 'Switch role',
-  roleEmployee: 'Employee',
-  roleSupervisor: 'Supervisor',
-  roleAdmin: 'Admin',
   mobileAppTitle: 'Safety Connect',
+  mobileEnterAdminCenter: 'Admin center',
+  mobileExitAdminCenter: 'Main app',
+  ariaMobileEnterAdmin: 'Switch to admin console workspace',
+  ariaMobileExitAdmin: 'Leave admin console and return to staff app',
 };
 
 const portalZh: PortalStrings = {
@@ -783,6 +814,24 @@ const portalZh: PortalStrings = {
   adminOverviewCreateBody: '事件建立後立即生效，並向目標部門員工送出通知。',
   adminOverviewCreateCta: '前往建立事件',
   adminCreateModalCancel: '關閉',
+  adminEventCenterSubtitle: '全域事件清單與狀態總覽',
+  adminEventCenterSearchPlaceholder: '搜尋事件名稱',
+  adminEventCenterReportProgress: '回報進度',
+  adminEventCenterReportedOfTotal: (reported, total) => `${reported} / ${total} 已回報`,
+  adminEventCenterStatusColumn: '狀態統計',
+  adminEventCenterLastUpdate: '最後更新',
+  adminEventCenterTip:
+    '小提醒：點擊事件可查看詳細資訊與人員名單，並進行後續處置與通知。',
+  adminEventCenterTipDismissAria: '關閉提示',
+  adminEventCenterPageRange: (from, to, total) => `顯示 ${from} - ${to} / ${total} 筆`,
+  adminEventCenterPerPage: '每頁顯示',
+  adminScopeAllEmployees: '全公司',
+  adminEventCenterEmpty: '目前沒有符合條件的事件。',
+  adminEventCenterColEvent: '事件',
+  adminEventCenterColStatus: '狀態',
+  adminEventCenterColProgress: '回報進度',
+  adminEventCenterColStats: '狀態統計',
+  adminEventCenterColAction: '操作',
 };
 
 const portalEn: PortalStrings = {
@@ -866,6 +915,24 @@ const portalEn: PortalStrings = {
   adminOverviewCreateBody: 'New events go live immediately and send activation notices to targeted employees.',
   adminOverviewCreateCta: 'Go to create event',
   adminCreateModalCancel: 'Close',
+  adminEventCenterSubtitle: 'Global event list and status overview',
+  adminEventCenterSearchPlaceholder: 'Search event title',
+  adminEventCenterReportProgress: 'Reporting progress',
+  adminEventCenterReportedOfTotal: (reported, total) => `${reported} / ${total} reported`,
+  adminEventCenterStatusColumn: 'Status breakdown',
+  adminEventCenterLastUpdate: 'Last updated',
+  adminEventCenterTip:
+    'Tip: open an event to see details, roster, follow-up actions, and notifications.',
+  adminEventCenterTipDismissAria: 'Dismiss tip',
+  adminEventCenterPageRange: (from, to, total) => `Showing ${from}–${to} of ${total}`,
+  adminEventCenterPerPage: 'Rows per page',
+  adminScopeAllEmployees: 'All employees',
+  adminEventCenterEmpty: 'No events match the current filters.',
+  adminEventCenterColEvent: 'Event',
+  adminEventCenterColStatus: 'Status',
+  adminEventCenterColProgress: 'Reporting progress',
+  adminEventCenterColStats: 'Status breakdown',
+  adminEventCenterColAction: 'Actions',
 };
 
 const statusBadgeZh: StatusBadgeStrings = {

@@ -1,4 +1,5 @@
 import { fetchWithTimeout, isProbablyTransientNetworkError, withRetries } from './lib/httpClient';
+import { sanitizedRolesFromApi } from './lib/portalSessionRoles';
 import type { Department, EventItem, EventTypeCatalogItem, Role, SafetyResponse, User } from './types';
 
 /** `/api/dashboard/supervisor` 回傳之 team 項目 */
@@ -14,7 +15,8 @@ export type SupervisorTeamMemberApi = {
 
 export type SupervisorDashboardApi = {
   event: EventItem | null;
-  kpis: { safe: number; need_help: number; responded: number; pending: number };
+  /** 後端匯總（整棵部門樹）；主管儀表板 KPI 數字請改由 `employeeRows`（`team` 直屬列）計算以與清單一致 */
+  kpis: { safe: number; need_help: number; responded: number; pending: number; total?: number };
   team: SupervisorTeamMemberApi[];
 };
 
@@ -98,15 +100,44 @@ export const demoAccountsFallbackSeeded: DemoAccount[] = [
   },
 ];
 
-/** JWT（記憶體）；POST /api/reports、/api/events 等須 Bearer，見後端 `get_current_user`。 */
+/** localStorage：Email 登入後跨重新整理保留 JWT（Demo 模式不寫入）。 */
+export const PORTAL_ACCESS_TOKEN_STORAGE_KEY = 'cnad_portal_access_token';
+export const PORTAL_SURFACE_STORAGE_KEY = 'cnad_portal_surface';
+
+/** JWT；與 `localStorage` 同步（`setAccessToken` / `clearAccessToken`）。 */
 let accessToken: string | null = null;
+
+function readAccessTokenFromStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const t = window.localStorage.getItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY)?.trim();
+    accessToken = t || null;
+  } catch {
+    accessToken = null;
+  }
+}
+readAccessTokenFromStorage();
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+  try {
+    if (typeof window === 'undefined') return;
+    if (token) window.localStorage.setItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY, token);
+    else window.localStorage.removeItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY);
+  } catch {
+    /* private / quota */
+  }
 }
 
 export function clearAccessToken(): void {
   accessToken = null;
+  try {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem(PORTAL_SURFACE_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** 空字串 = 與目前網頁同源（Vite `server.proxy` 或 nginx 的 `/api` 轉發）。有值 = 直連後端，例如 `http://localhost:8000`。 */
@@ -251,7 +282,7 @@ function mapProfileToUser(data: {
     name: data.name,
     email: data.email,
     departmentId: data.departmentId ?? '',
-    roles: data.roles,
+    roles: sanitizedRolesFromApi(data.roles),
     pushEnabled: data.pushEnabled ?? true,
     pushEmergencyEnabled: data.pushEmergencyEnabled ?? true,
     pushReminderEnabled: data.pushReminderEnabled ?? true,

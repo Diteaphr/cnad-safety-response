@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { DemoAccount } from '../../api';
-import type { Role } from '../../types';
 
 export function LoginPage({
   accounts,
@@ -22,6 +21,7 @@ export function LoginPage({
   const [emailSubmitting, setEmailSubmitting] = useState(false);
 
   const submitEmail = async () => {
+    if (!email.trim() || !password || loading || emailSubmitting) return;
     setEmailLoginError(null);
     setEmailSubmitting(true);
     try {
@@ -41,35 +41,42 @@ export function LoginPage({
         {loading && <p className="muted-text">載入後端資料…</p>}
         {error && <p className="muted-text" style={{ color: 'var(--danger, #c0392b)' }}>{error}</p>}
 
-        <h2 className="auth-section-title">使用 Email 登入</h2>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
-          disabled={loading}
-        />
-        <input
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-          disabled={loading}
-        />
-        {emailLoginError ? <p className="auth-inline-error">{emailLoginError}</p> : null}
-        <button
-          className="btn primary"
-          onClick={() => void submitEmail()}
-          type="button"
-          disabled={loading || emailSubmitting || !email.trim() || !password}
+        <form
+          className="auth-email-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submitEmail();
+          }}
         >
-          {emailSubmitting ? '登入中…' : 'Sign in'}
-        </button>
-        <p className="muted-text auth-footnote" style={{ marginTop: 12 }}>
-          新帳號由管理員建立；不提供公開註冊。
-        </p>
+          <h2 className="auth-section-title">使用 Email 登入</h2>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            disabled={loading}
+          />
+          <input
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            disabled={loading}
+          />
+          {emailLoginError ? <p className="auth-inline-error">{emailLoginError}</p> : null}
+          <button
+            className="btn primary"
+            type="submit"
+            disabled={loading || emailSubmitting || !email.trim() || !password}
+          >
+            {emailSubmitting ? '登入中…' : 'Sign in'}
+          </button>
+          <p className="muted-text auth-footnote" style={{ marginTop: 12 }}>
+            新帳號由管理員建立；不提供公開註冊。
+          </p>
+        </form>
 
         <hr className="auth-divider" />
         <h2 className="auth-section-title">Demo（原型）</h2>
@@ -96,26 +103,3 @@ export function LoginPage({
   );
 }
 
-export function RoleSelectionPage({ roles, onPickRole }: { roles: Role[]; onPickRole: (role: Role) => void }) {
-  return (
-    <div className="auth-shell">
-      <div className="auth-card role-pick prettier-role-select">
-        <h2>Choose Your Role</h2>
-        <div className="role-cards">
-          {roles.map((role) => (
-            <button key={role} className="role-card" onClick={() => onPickRole(role)} type="button">
-              <strong>{role}</strong>
-              <p>
-                {role === 'employee'
-                  ? 'Quickly report your own status.'
-                  : role === 'supervisor'
-                    ? 'Monitor your team responses.'
-                    : 'Manage events and global response.'}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}

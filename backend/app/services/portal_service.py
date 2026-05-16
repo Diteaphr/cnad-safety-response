@@ -416,9 +416,14 @@ class PortalService:
             db, event_id=active_event.event_id, manager_id=target_manager_id
         )
 
-        # Team: direct reports only (primary dept's department.manager_id == target manager)
-        direct_reports = self._users.list_subordinates(db, target_manager_id)
-        employee_ids = [u.user_id for u in direct_reports if "employee" in _role_names(u)]
+        # Team: line reports (same rule as API managerId / derived_manager_id), not raw dept.manager_id membership
+        direct_reports = self._users.list_line_reports(db, target_manager_id)
+        # 僅「純主管列」走轉下屬匯總；具 employee 身分之副主管／組長仍應顯示本人回報狀態
+        def _rollup_supervisor_only(u: User) -> bool:
+            r = _role_names(u)
+            return "supervisor" in r and "employee" not in r
+
+        employee_ids = [u.user_id for u in direct_reports if not _rollup_supervisor_only(u)]
         latest_responses = self._responses.latest_for_users(
             db, active_event.event_id, employee_ids
         )
@@ -429,7 +434,7 @@ class PortalService:
             u_roles = _role_names(u)
             did = prim.get(u.user_id)
             dname = nm.get(did, "-") if did else "-"
-            if "supervisor" in u_roles:
+            if _rollup_supervisor_only(u):
                 sub_kpis = self._responses.kpi_for_manager_subordinates(
                     db, event_id=active_event.event_id, manager_id=u.user_id
                 )

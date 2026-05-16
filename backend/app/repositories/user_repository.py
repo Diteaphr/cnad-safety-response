@@ -178,6 +178,22 @@ class UserRepository:
         )
         return list(db.scalars(stmt).unique().all())
 
+    def list_line_reports(self, db: Session, manager_id: uuid.UUID) -> list[User]:
+        """Users whose derived line manager (primary-dept chain) is ``manager_id``.
+
+        Matches :meth:`derived_manager_id` / API ``managerId`` / SPA supervisor roster
+        (not the same set as :meth:`list_subordinates`). May include any role (e.g. admin)
+        if org/seed assigns them as a line report.
+        """
+        stmt = (
+            select(User)
+            .options(selectinload(User.user_roles).selectinload(UserRole.role))
+            .where(User.user_id != manager_id)
+            .order_by(User.name)
+        )
+        rows = list(db.scalars(stmt).unique().all())
+        return [u for u in rows if self.derived_manager_id(db, u.user_id) == manager_id]
+
     def list_all_subordinates(self, db: Session, manager_id: uuid.UUID) -> list[User]:
         """Users whose primary department lies in a subtree rooted at a department managed by manager_id."""
         rows = db.execute(
