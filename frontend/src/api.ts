@@ -1,4 +1,5 @@
 import { fetchWithTimeout, isProbablyTransientNetworkError, withRetries } from './lib/httpClient';
+import { sanitizedRolesFromApi } from './lib/portalSessionRoles';
 import type { Department, EventItem, EventTypeCatalogItem, Role, SafetyResponse, User } from './types';
 
 /** `/api/dashboard/supervisor` 回傳之 team 項目 */
@@ -252,7 +253,7 @@ function mapProfileToUser(data: {
     name: data.name,
     email: data.email,
     departmentId: data.departmentId ?? '',
-    roles: data.roles,
+    roles: sanitizedRolesFromApi(data.roles),
     pushEnabled: data.pushEnabled ?? true,
     pushEmergencyEnabled: data.pushEmergencyEnabled ?? true,
     pushReminderEnabled: data.pushReminderEnabled ?? true,

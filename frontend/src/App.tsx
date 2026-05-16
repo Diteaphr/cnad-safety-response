@@ -38,6 +38,7 @@ import {
   type PortalNotificationRow,
   type SupervisorDashboardApi,
 } from './api';
+import { portalSwitcherRoles } from './lib/portalSessionRoles';
 import { cloneMockCatalog, demoRoleAccounts } from './mockData';
 import { appendReminderAudit, loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
@@ -732,12 +733,13 @@ function App() {
     setMyNotifications([]);
     setSupervisorDashboard(null);
     setAdminDashboard(null);
-    const initialRole = account.roles[0];
+    const portalRoles = portalSwitcherRoles(mockUser.roles);
+    const initialRole = portalRoles[0] ?? mockUser.roles[0];
     setSession({
       isLoggedIn: true,
       user: { ...mockUser },
-      availableRoles: account.roles,
-      currentRole: account.roles.length === 1 ? initialRole : null,
+      availableRoles: portalRoles,
+      currentRole: portalRoles.length === 1 ? initialRole : null,
     });
     setNavKey(roleDefaultNav[initialRole]);
     showToast({ tone: 'info', message: 'Demo 模式：資料來自 mockData（未連資料庫）。' });
@@ -760,13 +762,13 @@ function App() {
     const { user } = await loginWithEmailApi({ email, password });
     await loadCatalogFromApi();
     mergeUserIntoList(user);
-    const roles = user.roles;
-    const initialRole = roles[0];
+    const portalRoles = portalSwitcherRoles(user.roles);
+    const initialRole = portalRoles[0] ?? user.roles[0];
     setSession({
       isLoggedIn: true,
       user,
-      availableRoles: roles,
-      currentRole: roles.length === 1 ? initialRole : null,
+      availableRoles: portalRoles,
+      currentRole: portalRoles.length === 1 ? initialRole : null,
     });
     setNavKey(roleDefaultNav[initialRole]);
   };
