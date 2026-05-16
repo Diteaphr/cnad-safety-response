@@ -47,7 +47,6 @@ export type DashboardStrings = {
   deptRanking: string;
   deptRankingHint: string;
   deptFilterAll: string;
-  adminDeptFilteredSubtitle: (deptName: string) => string;
   criticalAlerts: string;
   noResponseQueue: string;
   mapPlaceholder: string;
@@ -70,6 +69,8 @@ export type DashboardStrings = {
   employeeTableFootnote: (shown: number, total: number) => string;
   /** Explains the stacked bar under 回報分布 */
   distributionHint: string;
+  /** Shorter hint when verbose copy is hidden (admin detail compact strip). */
+  distributionCompactHint: string;
   /** a11y summary for the bar */
   distributionCaption: (
     safe: number,
@@ -79,6 +80,55 @@ export type DashboardStrings = {
     pctNeed: number,
     pctPending: number,
   ) => string;
+  /** Admin event detail — tabs */
+  tabOverview: string;
+  tabTracking: string;
+  tabDepartments: string;
+  tabOverviewShort: string;
+  tabTrackingShort: string;
+  tabDepartmentsShort: string;
+  /** Scope bar — admin event detail */
+  adminScopeCurrentRangeHeading: string;
+  adminScopeChipAllDepartments: string;
+  adminScopeChipAllDepartmentsShort: string;
+  adminScopeSelectDepartmentPlaceholder: string;
+  adminScopeEmployeesOnlyHint: (deptName: string) => string;
+  adminScopeEmployeesOnlyHintShort: string;
+  /** Stats overview hero — aligns with admin event list progress language */
+  adminDetailReportRateLine: (rate: number) => string;
+  adminDetailCompletedRatio: (done: number, total: number) => string;
+  /** Overview — department block title */
+  adminDeptReportStatusTitle: string;
+  adminDeptColDept: string;
+  adminDeptColRate: string;
+  adminDeptColSafe: string;
+  adminDeptColNeed: string;
+  adminDeptColPending: string;
+  adminDeptActionView: string;
+  /** Departments tab */
+  adminDeptSituationHeading: string;
+  adminDeptSituationSortHint: string;
+  adminDeptPersonnelHeading: string;
+  /** Tracking tab */
+  trackingNeedHelpSection: string;
+  trackingNeedHelpIntro: string;
+  trackingPendingSection: string;
+  trackingPendingIntro: string;
+  trackingPendingEmptyTitle: string;
+  trackingPendingEmptyBody: string;
+  adminViewDetail: string;
+  adminReportedAt: string;
+  /** Close event flow */
+  eventActionsTrigger: string;
+  eventActionsAria: string;
+  adminCloseEventOutlineLabel: string;
+  adminCloseEventTitle: string;
+  adminCloseEventOutstandingSummary: (needHelp: number, pending: number) => string;
+  adminCloseEventNote: string;
+  adminCloseEventAllDoneNote: string;
+  adminCloseEventCancel: string;
+  adminCloseEventConfirmAnyway: string;
+  adminCloseEventConfirmOk: string;
 };
 
 export type ProfileStrings = {
@@ -436,7 +486,6 @@ const dashZh: DashboardStrings = {
   deptRanking: '部門回報排名',
   deptRankingHint: '點選部門可僅檢視該部門儀表與名單；再點「全部部門」恢復全公司視角。',
   deptFilterAll: '全部部門',
-  adminDeptFilteredSubtitle: (deptName) => `目前篩選：${deptName}（僅顯示該部門員工）`,
   criticalAlerts: '緊急名單',
   noResponseQueue: '未回報佇列',
   mapPlaceholder: '地圖／位置總覽（原型占位）',
@@ -459,8 +508,56 @@ const dashZh: DashboardStrings = {
   employeeTableFootnote: (shown, total) => `顯示 ${shown} / ${total} 位`,
   distributionHint:
     '色塊長度＝各狀態人數占「總人數」的比例；下方列出人數與百分比（與上方圓餅右側數字一致）。',
+  distributionCompactHint: '下方為各狀態人數與占比。',
   distributionCaption: (sf, nh, pd, ps, pn, pp) =>
     `平安 ${sf} 人（${ps}%）、需協助 ${nh} 人（${pn}%）、未回報 ${pd} 人（${pp}%）。`,
+  tabOverview: '統計總覽',
+  tabTracking: '追蹤中心',
+  tabDepartments: '部門狀況',
+  tabOverviewShort: '統計',
+  tabTrackingShort: '追蹤',
+  tabDepartmentsShort: '部門',
+  adminScopeCurrentRangeHeading: '目前範圍',
+  adminScopeChipAllDepartments: '全部部門',
+  adminScopeChipAllDepartmentsShort: '全部',
+  adminScopeSelectDepartmentPlaceholder: '選擇部門',
+  adminScopeEmployeesOnlyHint: (deptName) => `僅顯示「${deptName}」員工資料`,
+  adminScopeEmployeesOnlyHintShort: '僅顯示此部門資料',
+  adminDetailReportRateLine: (rate) => `${rate}% 已回報`,
+  adminDetailCompletedRatio: (done, total) => `${done} / ${total} 人已完成安全回報`,
+  adminDeptReportStatusTitle: '部門狀況摘要',
+  adminDeptColDept: '部門',
+  adminDeptColRate: '回報率',
+  adminDeptColSafe: '平安',
+  adminDeptColNeed: '需協助',
+  adminDeptColPending: '未回報',
+  adminDeptActionView: '查看',
+  adminDeptSituationHeading: '部門狀況',
+  adminDeptSituationSortHint: '依未回報與需要協助人數排序',
+  adminDeptPersonnelHeading: '人員狀態',
+  trackingNeedHelpSection: '需要協助',
+  trackingNeedHelpIntro: '已明確回報需要協助的人員，請優先追蹤。',
+  trackingPendingSection: '未回報追蹤',
+  trackingPendingIntro:
+    '系統會依提醒規則自動通知未回報員工；以下為仍未完成回報的人員。',
+  trackingPendingEmptyTitle: '未回報追蹤',
+  trackingPendingEmptyBody:
+    '目前沒有未回報人員。系統會依提醒規則自動通知未回報員工；若有人仍未完成回報，將會顯示於此。',
+  adminViewDetail: '查看詳情',
+  adminReportedAt: '回報時間',
+  eventActionsTrigger: '事件操作',
+  eventActionsAria: '事件操作選單',
+  adminCloseEventOutlineLabel: '結束事件',
+  adminCloseEventTitle: '結束事件？',
+  adminCloseEventOutstandingSummary: (nh, pend) =>
+    `目前仍有 ${nh} 人需要協助、${pend} 人尚未回報。`,
+  adminCloseEventNote:
+    '結束後，員工將無法再提交或修改此事件的安全回報；事件會移至已結束列表，管理員仍可查看統計與名單。',
+  adminCloseEventAllDoneNote:
+    '所有人員皆已完成回報且目前無人需要協助。結束後，此事件將移至已結束列表；員工將無法再提交或修改安全回報，管理員仍可查看統計與名單。',
+  adminCloseEventCancel: '取消',
+  adminCloseEventConfirmAnyway: '仍要結束事件',
+  adminCloseEventConfirmOk: '確認結束',
 };
 
 const dashEn: DashboardStrings = {
@@ -514,7 +611,6 @@ const dashEn: DashboardStrings = {
   deptRanking: 'Department ranking',
   deptRankingHint: 'Click a department to drill into that department’s dashboard and lists. Use “All departments” to reset.',
   deptFilterAll: 'All departments',
-  adminDeptFilteredSubtitle: (deptName) => `Filtered to: ${deptName} (employees in this department only)`,
   criticalAlerts: 'Critical alerts',
   noResponseQueue: 'No-response queue',
   mapPlaceholder: 'Map / location overview (prototype)',
@@ -537,8 +633,56 @@ const dashEn: DashboardStrings = {
   employeeTableFootnote: (shown, total) => `Showing ${shown} of ${total} employees`,
   distributionHint:
     'Bar length is each status count as a share of total people in scope; numbers below match the KPI column.',
+  distributionCompactHint: 'Counts and percentages by status are listed below.',
   distributionCaption: (sf, nh, pd, ps, pn, pp) =>
     `Safe ${sf} (${ps}%), need help ${nh} (${pn}%), no response ${pd} (${pp}%).`,
+  tabOverview: 'Stats overview',
+  tabTracking: 'Tracking center',
+  tabDepartments: 'Departments',
+  tabOverviewShort: 'Stats',
+  tabTrackingShort: 'Track',
+  tabDepartmentsShort: 'Depts',
+  adminScopeCurrentRangeHeading: 'Current scope',
+  adminScopeChipAllDepartments: 'All departments',
+  adminScopeChipAllDepartmentsShort: 'All',
+  adminScopeSelectDepartmentPlaceholder: 'Select department',
+  adminScopeEmployeesOnlyHint: (deptName) => `Showing employees in “${deptName}” only`,
+  adminScopeEmployeesOnlyHintShort: 'Showing this department only',
+  adminDetailReportRateLine: (rate) => `${rate}% reported`,
+  adminDetailCompletedRatio: (done, total) => `${done} / ${total} employees completed a safety report`,
+  adminDeptReportStatusTitle: 'Department summary',
+  adminDeptColDept: 'Department',
+  adminDeptColRate: 'Rate',
+  adminDeptColSafe: 'Safe',
+  adminDeptColNeed: 'Need help',
+  adminDeptColPending: 'Pending',
+  adminDeptActionView: 'View',
+  adminDeptSituationHeading: 'Department status',
+  adminDeptSituationSortHint: 'Sorted by need-help and pending counts',
+  adminDeptPersonnelHeading: 'Personnel status',
+  trackingNeedHelpSection: 'Need help',
+  trackingNeedHelpIntro: 'Employees who reported they need assistance — prioritize follow-up.',
+  trackingPendingSection: 'Pending responses',
+  trackingPendingIntro:
+    'Automated reminders follow your notification rules; listed below are employees who still have not reported.',
+  trackingPendingEmptyTitle: 'Pending responses',
+  trackingPendingEmptyBody:
+    'There are no pending responders right now. Reminders keep running automatically; anyone who still owes a report will appear here.',
+  adminViewDetail: 'View details',
+  adminReportedAt: 'Reported at',
+  eventActionsTrigger: 'Event actions',
+  eventActionsAria: 'Event actions menu',
+  adminCloseEventOutlineLabel: 'Close event',
+  adminCloseEventTitle: 'Close this event?',
+  adminCloseEventOutstandingSummary: (nh, pend) =>
+    `${nh} employee(s) still need assistance and ${pend} have not reported.`,
+  adminCloseEventNote:
+    'After closing, employees cannot submit or edit safety responses; the event moves to closed and admins can still view stats and rosters.',
+  adminCloseEventAllDoneNote:
+    'Everyone targeted has reported and no one currently needs assistance. Closing moves this event to the closed list; employees cannot submit or edit responses afterward, while admins can still review statistics.',
+  adminCloseEventCancel: 'Cancel',
+  adminCloseEventConfirmAnyway: 'Close anyway',
+  adminCloseEventConfirmOk: 'Confirm close',
 };
 
 const profileZh: ProfileStrings = {
