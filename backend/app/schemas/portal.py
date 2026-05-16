@@ -38,7 +38,11 @@ class EventItemOut(BaseModel):
         description="Deprecated: always empty in API responses; events are company-wide.",
     )
     status: Literal["active", "closed"]
-    startAt: str
+    startAt: Optional[str] = Field(
+        default=None,
+        description="events.start_time ISO; null if unset.",
+    )
+    createdAt: str = Field(description="events.created_at ISO")
     cardDepartment: Optional[str] = None
     venue: Optional[str] = None
 
