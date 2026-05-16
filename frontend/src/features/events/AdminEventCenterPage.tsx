@@ -24,21 +24,11 @@ import {
   type EventFormState,
 } from './EventAndAdminPages';
 import { scrollPortalMainToTop } from '../../lib/scrollPortalMain';
-
-function typeLabel(ev: string, p: ReturnType<typeof getStrings>['portal']) {
-  switch (ev) {
-    case 'Earthquake':
-      return p.eventTypeEarthquake;
-    case 'Typhoon':
-      return p.eventTypeTyphoon;
-    case 'Fire':
-      return p.eventTypeFire;
-    case 'Other':
-      return p.eventTypeOther;
-    default:
-      return ev;
-  }
-}
+import {
+  formatAdminEventTypeLabel,
+  formatEventImpactScope,
+  stripRedundantStatusFromTitle,
+} from '../../lib/adminEventDisplay';
 
 function TypeIcon({ type }: { type: string }) {
   const common = { size: 22 as const, strokeWidth: 2.1 as const, 'aria-hidden': true as const };
@@ -54,30 +44,6 @@ function TypeIcon({ type }: { type: string }) {
     default:
       return <HelpCircle {...common} />;
   }
-}
-
-function scopeOnly(
-  row: AdminEventListRow,
-  departments: Department[],
-  p: ReturnType<typeof getStrings>['portal'],
-): string {
-  const ev = row.event;
-  const tids = ev.targetDepartmentIds ?? [];
-  if (tids.length === 0) return p.adminScopeAllEmployees;
-  if (ev.cardDepartment?.trim()) return ev.cardDepartment.trim();
-  const names = tids
-    .map((id) => departments.find((d) => d.id === id)?.name)
-    .filter(Boolean) as string[];
-  if (names.length === 0) return `—`;
-  if (names.length <= 2) return names.join('、');
-  return `${names[0]} · +${names.length - 1}`;
-}
-
-function stripRedundantStatusFromTitle(title: string): string {
-  return title
-    .replace(/（進行中）|（已結案）|（已結束）/g, '')
-    .replace(/\s*\(In progress\)\s*|\s*\(Closed\)\s*|\s*\(Resolved\)\s*/gi, '')
-    .trim();
 }
 
 /** 事件開始時間（後端 start_time）；未設定時顯示 — */
@@ -286,7 +252,7 @@ export function AdminEventCenterPage({
                   const { event, total, safe, needHelp, pending, responseRate, reported } = row;
                   const progressTone = responseRate >= 70 ? 'is-high' : 'is-mid';
                   const barWidth = total > 0 ? Math.min(100, responseRate) : 0;
-                  const scopeTime = `${scopeOnly(row, departments, p)} · ${formatEventStart(event.startAt, locale)}`;
+                  const scopeTime = `${formatEventImpactScope(event, departments, p)} · ${formatEventStart(event.startAt, locale)}`;
                   const titleDisplay = stripRedundantStatusFromTitle(event.title);
                   return (
                     <div
@@ -305,7 +271,7 @@ export function AdminEventCenterPage({
                           </div>
                           <div className="admin-event-center-event-text">
                             <span className="muted-text small admin-event-center-event-type">
-                              {typeLabel(event.type, p)}
+                              {formatAdminEventTypeLabel(event.type, p)}
                             </span>
                             <strong className="admin-event-center-event-title">{titleDisplay}</strong>
                             <span className="muted-text small admin-event-center-event-sub">{scopeTime}</span>

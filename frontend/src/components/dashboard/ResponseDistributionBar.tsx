@@ -6,11 +6,13 @@ export function ResponseDistributionBar({
   needHelp,
   pending,
   strings,
+  compact,
 }: {
   safe: number;
   needHelp: number;
   pending: number;
   strings: DashboardStrings;
+  compact?: boolean;
 }) {
   const sum = Math.max(safe + needHelp + pending, 1);
   const ps = Math.round((safe / sum) * 1000) / 10;
@@ -22,7 +24,7 @@ export function ResponseDistributionBar({
 
   return (
     <div className="dash-dist-section">
-      <p className="muted-text dash-dist-hint">{strings.distributionHint}</p>
+      <p className="muted-text dash-dist-hint">{compact ? strings.distributionCompactHint : strings.distributionHint}</p>
       <div className="dash-dist-bar" role="img" aria-label={strings.distributionCaption(safe, needHelp, pending, ps, pn, pp)}>
         <div className="dash-dist-bar-track">
           <div className="dash-dist-seg dash-dist-seg--safe" style={{ width: ws }} />
