@@ -98,7 +98,13 @@ class PortalService:
         }
 
     def _event_out(self, event: Event, name_map: dict[uuid.UUID, str]) -> dict[str, Any]:
-        st = event.start_time or event.created_at
+        def _iso(dt: datetime | None) -> str | None:
+            if dt is None:
+                return None
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc).isoformat()
+            return dt.isoformat()
+
         et = event.event_type
         return {
             "id": str(event.event_id),
@@ -107,7 +113,8 @@ class PortalService:
             "description": event.description or "",
             "targetDepartmentIds": [str(d.department_id) for d in event.target_departments],
             "status": event.status,
-            "startAt": st.replace(tzinfo=timezone.utc).isoformat() if st.tzinfo is None else st.isoformat(),
+            "startAt": _iso(event.start_time),
+            "createdAt": _iso(event.created_at),
             "cardDepartment": None,
             "venue": event.location or None,
         }
