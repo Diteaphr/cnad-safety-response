@@ -445,17 +445,16 @@ function App() {
     const myId = session.user?.id;
     if (!eventId || !myId) return [];
 
-    const supervisorIds = users
-      .filter((user) => user.managerId === myId && user.roles.includes('employee'))
-      .map((user) => user.id);
+    /** 與後端 `list_line_reports` / API `managerId`（derived line manager）一致 */
+    const lineReportIds = users.filter((user) => user.managerId === myId).map((user) => user.id);
 
     const sourceUsers = users.filter((u) => {
-      if (!u.roles.includes('employee')) return false;
       if (session.currentRole === 'admin') {
+        if (!u.roles.includes('employee')) return false;
         const tids = selectedAdminEvent?.targetDepartmentIds ?? [];
         return tids.length === 0 ? true : tids.includes(u.departmentId);
       }
-      return supervisorIds.includes(u.id);
+      return lineReportIds.includes(u.id);
     });
 
     return sourceUsers.map((u) => {
@@ -492,9 +491,14 @@ function App() {
         const latest = responses
           .filter((r) => r.eventId === eventId && r.userId === uid)
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-        const stRaw = String(t.status);
-        const st: 'safe' | 'need_help' | 'pending' =
-          stRaw === 'safe' ? 'safe' : stRaw === 'need_help' ? 'need_help' : 'pending';
+        const raw = t.status;
+        let st: 'safe' | 'need_help' | 'pending' = 'pending';
+        if (raw === 'safe' || raw === 'need_help' || raw === 'pending') {
+          st = raw;
+        } else if (latest?.status === 'safe' || latest?.status === 'need_help') {
+          /** API 轉下屬列 status 為 null、或短暫缺 lr 時，沿用與 GET /api/reports 一致的快取 */
+          st = latest.status;
+        }
         const uMeta = users.find((x) => x.id === uid);
         const noteMerge = latest ? [latest.location, latest.comment].filter(Boolean).join(' · ') : undefined;
         return {
@@ -527,13 +531,13 @@ function App() {
 
   const stats = useMemo(() => {
     if (session.currentRole === 'supervisor' && supervisorViewAligned && supervisorDashboard) {
-      const kpis = supervisorDashboard.kpis;
-      const totalTeam = supervisorDashboard.team.length;
-      const safe = kpis.safe;
-      const needHelp = kpis.need_help;
-      const pending = kpis.pending;
-      const responseRate = totalTeam ? Math.round(((safe + needHelp) / totalTeam) * 100) : 0;
-      return { total: totalTeam, safe, needHelp, pending, responseRate };
+      /** 與下方員工表同源：`team` 僅直屬部屬列；勿用 `kpis`（為整棵組織樹匯總）以免總人數與清單不一致 */
+      const total = employeeRows.length;
+      const safe = employeeRows.filter((r) => r.status === 'safe').length;
+      const needHelp = employeeRows.filter((r) => r.status === 'need_help').length;
+      const pending = employeeRows.filter((r) => r.status === 'pending').length;
+      const responseRate = total ? Math.min(100, Math.round(((safe + needHelp) / total) * 100)) : 0;
+      return { total, safe, needHelp, pending, responseRate };
     }
     if (session.currentRole === 'admin' && adminDepartmentFilter) {
       const scoped = employeeRows.filter((r) => r.department === adminDepartmentFilter);

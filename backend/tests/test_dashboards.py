@@ -4,7 +4,8 @@ Integration tests for:
   GET /api/dashboard/admin?event_id=...
 
 Org model: users belong to departments via ``user_departments`` (primary row);
-supervision uses ``departments.manager_id`` and the department tree.
+supervisor **team** roster uses the same rule as API ``managerId`` (derived line manager).
+KPI subtree still uses departments rooted at ``departments.manager_id``.
 """
 from __future__ import annotations
 
@@ -124,7 +125,7 @@ def test_supervisor_dashboard_shows_team_reports(client, make_user, make_departm
 
 
 # ---------------------------------------------------------------------------
-# Supervisor dashboard — hierarchical KPI + direct-only team list
+# Supervisor dashboard — hierarchical KPI + line-report team list
 # ---------------------------------------------------------------------------
 
 def test_supervisor_kpi_includes_indirect_subordinates(client, make_user, make_department, make_event):
@@ -182,7 +183,7 @@ def test_supervisor_kpi_three_levels_deep(client, make_user, make_department, ma
 
 
 def test_supervisor_team_is_direct_only(client, make_user, make_department, make_event):
-    """Team list: only users whose primary department lists this user as manager; KPI includes subtree."""
+    """Team list: line reports (derived managerId); KPI still uses managed dept subtree."""
     root = make_department("Root")
     child = make_department("Child", parent_id=root.department_id)
     sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=root.department_id)

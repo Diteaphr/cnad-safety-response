@@ -14,7 +14,8 @@ export type SupervisorTeamMemberApi = {
 
 export type SupervisorDashboardApi = {
   event: EventItem | null;
-  kpis: { safe: number; need_help: number; responded: number; pending: number };
+  /** 後端匯總（整棵部門樹）；主管儀表板 KPI 數字請改由 `employeeRows`（`team` 直屬列）計算以與清單一致 */
+  kpis: { safe: number; need_help: number; responded: number; pending: number; total?: number };
   team: SupervisorTeamMemberApi[];
 };
 
