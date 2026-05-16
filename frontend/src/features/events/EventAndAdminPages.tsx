@@ -141,52 +141,32 @@ function AdminQuickCreateFormFields({
           placeholder="例：台北總部 3F 會議室"
         />
       </label>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span className="event-form-field-label">通知對象</span>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => setEventForm({ ...eventForm, targetDepartmentIds: [] })}
-            style={{
-              flex: 1,
-              padding: '8px 0',
-              borderRadius: 8,
-              border: 'none',
-              fontWeight: 700,
-              cursor: 'pointer',
-              background: !limitToDept ? '#1a6fc4' : '#eef3fa',
-              color: !limitToDept ? '#fff' : '#17385b',
-              transition: 'background 0.15s',
-            }}
-          >
-            全體員工
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!limitToDept) {
-                setEventForm({ ...eventForm, targetDepartmentIds: flatDepts.length > 0 ? [flatDepts[0].dept.id] : [] });
-              }
-            }}
-            style={{
-              flex: 1,
-              padding: '8px 0',
-              borderRadius: 8,
-              border: 'none',
-              fontWeight: 700,
-              cursor: 'pointer',
-              background: limitToDept ? '#1a6fc4' : '#eef3fa',
-              color: limitToDept ? '#fff' : '#17385b',
-              transition: 'background 0.15s',
-            }}
-          >
-            限定部門
-          </button>
-        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className="event-form-field-label">通知對象</span>
+          <div className="admin-scope-toggle-row">
+            <button
+              type="button"
+              className={`admin-scope-toggle${!limitToDept ? ' is-active' : ''}`}
+              onClick={() => setEventForm({ ...eventForm, targetDepartmentIds: [] })}
+            >
+              全體員工
+            </button>
+            <button
+              type="button"
+              className={`admin-scope-toggle${limitToDept ? ' is-active' : ''}`}
+              onClick={() => {
+                if (!limitToDept) {
+                  setEventForm({ ...eventForm, targetDepartmentIds: flatDepts.length > 0 ? [flatDepts[0].dept.id] : [] });
+                }
+              }}
+            >
+              限定部門
+            </button>
+          </div>
         {limitToDept && flatDepts.length > 0 && (
-          <div style={{ border: '1px solid #d4e0ef', borderRadius: 8, padding: '8px 12px', maxHeight: 220, overflowY: 'auto' }}>
+          <div className="admin-dept-picker-box">
             {flatDepts.map(({ dept, depth }) => (
-              <label key={dept.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', paddingLeft: depth * 16, cursor: 'pointer', userSelect: 'none' }}>
+              <label key={dept.id} className="admin-dept-picker-row" style={{ paddingLeft: depth * 16 }}>
                 <input
                   type="checkbox"
                   checked={eventForm.targetDepartmentIds.includes(dept.id)}
@@ -268,7 +248,7 @@ export function EventSelectionPage({
     <section className="page-section portal-event-picker">
       {variant === 'admin' && adminQuickCreate && createModalOpen ? (
         <div
-          className="modal-backdrop"
+          className="modal-backdrop admin-create-event-backdrop"
           role="presentation"
           onClick={() => !createSubmitting && setCreateModalOpen(false)}
         >

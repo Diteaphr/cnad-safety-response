@@ -10,16 +10,16 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 
 _ALGORITHM = "HS256"
-_EXPIRE_HOURS = 8
 
 
 def create_access_token(user_id: uuid.UUID, roles: list[str]) -> str:
     now = datetime.now(timezone.utc)
+    expire_hours = max(1, int(settings.jwt_access_token_expire_hours))
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "roles": roles,
         "iat": now,
-        "exp": now + timedelta(hours=_EXPIRE_HOURS),
+        "exp": now + timedelta(hours=expire_hours),
         "jti": str(uuid.uuid4()),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=_ALGORITHM)

@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { LocaleProvider } from './locale/LocaleContext';
+import './styles/design-tokens.css';
 import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
 

@@ -40,34 +40,36 @@ export function ProfileOnboardingPage({
   return (
     <div className="auth-shell profile-onboarding-shell">
       <div className="auth-card profile-onboarding-card">
-        <h1>{pp.onboardingTitle}</h1>
-        <p className="muted-text">{pp.onboardingSubtitle}</p>
-        <label className="event-form-field">
-          <span className="event-form-field-label">{pp.onboardingNameLabel}</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" disabled={submitting} />
-        </label>
-        <label className="event-form-field">
-          <span className="event-form-field-label">{pp.onboardingPhoneLabel}</span>
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder={pp.onboardingPhonePlaceholder}
-            inputMode="tel"
-            autoComplete="tel"
-            disabled={submitting}
-          />
-        </label>
-        <p className="muted-text" style={{ fontSize: '0.85rem' }}>
-          {pp.onboardingNoSkip}
-        </p>
-        <button
-          className="btn primary"
-          type="button"
-          disabled={submitting || !name.trim() || !phone.trim()}
-          onClick={() => void submit()}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
         >
-          {submitting ? '…' : pp.onboardingContinue}
-        </button>
+          <h1>{pp.onboardingTitle}</h1>
+          <p className="muted-text">{pp.onboardingSubtitle}</p>
+          <label className="event-form-field">
+            <span className="event-form-field-label">{pp.onboardingNameLabel}</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" disabled={submitting} />
+          </label>
+          <label className="event-form-field">
+            <span className="event-form-field-label">{pp.onboardingPhoneLabel}</span>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder={pp.onboardingPhonePlaceholder}
+              inputMode="tel"
+              autoComplete="tel"
+              disabled={submitting}
+            />
+          </label>
+          <p className="muted-text" style={{ fontSize: '0.85rem' }}>
+            {pp.onboardingNoSkip}
+          </p>
+          <button className="btn primary" type="submit" disabled={submitting || !name.trim() || !phone.trim()}>
+            {submitting ? '…' : pp.onboardingContinue}
+          </button>
+        </form>
       </div>
     </div>
   );

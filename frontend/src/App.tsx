@@ -28,10 +28,13 @@ import {
   getEventTypesApi,
   getEvents,
   getMyNotificationsApi,
+  getMyProfileApi,
   getReports,
   getSupervisorDashboardApi,
   getUsers,
   loginWithEmailApi,
+  PORTAL_ACCESS_TOKEN_STORAGE_KEY,
+  PORTAL_SURFACE_STORAGE_KEY,
   submitReportApi,
   sendEventRemindersApi,
   type AdminDashboardApi,
@@ -148,16 +151,73 @@ function App() {
     }
   }, []);
 
+  const mergeUserIntoList = useCallback((user: User) => {
+    setUsers((prev) => {
+      const idx = prev.findIndex((u) => u.id === user.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = user;
+        return next;
+      }
+      return [...prev, user];
+    });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       await loadCatalogFromApi();
       if (cancelled) return;
+      let token: string | null = null;
+      try {
+        token =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY)?.trim() ?? null
+            : null;
+      } catch {
+        token = null;
+      }
+      if (!token) return;
+      try {
+        const user = await getMyProfileApi();
+        if (cancelled) return;
+        setUseMockOfflineCatalog(false);
+        mergeUserIntoList(user);
+        const capsNext = deriveUserCapabilities(user.roles);
+        let surfaceNext = initialSurfaceFromRoles(user.roles);
+        try {
+          const stored =
+            typeof window !== 'undefined' ? window.localStorage.getItem(PORTAL_SURFACE_STORAGE_KEY) : null;
+          if (stored === 'adminCenter' && capsNext.canManage) surfaceNext = 'adminCenter';
+        } catch {
+          /* ignore */
+        }
+        setSession({
+          isLoggedIn: true,
+          user,
+          surface: surfaceNext,
+          caps: capsNext,
+        });
+        setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
+      } catch {
+        if (!cancelled) clearAccessToken();
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [loadCatalogFromApi]);
+  }, [loadCatalogFromApi, mergeUserIntoList]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn || useMockOfflineCatalog) return;
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(PORTAL_SURFACE_STORAGE_KEY, session.surface);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [session.isLoggedIn, session.surface, useMockOfflineCatalog]);
 
   useEffect(() => {
     if (events.length === 0) return;
@@ -777,18 +837,6 @@ function App() {
     });
     setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
     showToast({ tone: 'info', message: 'Demo 模式：資料來自 mockData（未連資料庫）。' });
-  };
-
-  const mergeUserIntoList = (user: User) => {
-    setUsers((prev) => {
-      const idx = prev.findIndex((u) => u.id === user.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = user;
-        return next;
-      }
-      return [...prev, user];
-    });
   };
 
   const handleEmailLogin = async (email: string, password: string) => {
