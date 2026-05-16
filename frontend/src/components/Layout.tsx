@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, LayoutDashboard, Menu } from 'lucide-react';
+import { ChevronRight, Home, LayoutDashboard, Menu } from 'lucide-react';
 import { useLocale } from '../locale/LocaleContext';
 import type { AppLocale } from '../locale/LocaleContext';
 import { getStrings } from '../locale/strings';
@@ -22,8 +22,7 @@ function navItemsMember(locale: AppLocale, canViewTeam: boolean): Array<{ key: N
 function navItemsAdmin(locale: AppLocale): Array<{ key: NavKey; label: string }> {
   const { layoutNav: L } = getStrings(locale);
   return [
-    { key: 'admin-dashboard', label: L.adminOverview },
-    { key: 'event-management', label: L.adminEvents },
+    { key: 'admin-dashboard', label: L.adminEvents },
     { key: 'user-management', label: L.adminUsers },
     { key: 'notifications', label: L.adminNotifications },
     { key: 'profile', label: L.adminSystemSettings },
@@ -168,7 +167,7 @@ export function Layout({
                 onExitAdminCenter();
               }}
             >
-              <ChevronLeft size={18} strokeWidth={2.1} aria-hidden />
+              <Home size={18} strokeWidth={2.1} aria-hidden />
               <span className="mobile-shell-switch-btn__label">{chrome.mobileExitAdminCenter}</span>
             </button>
           ) : null}

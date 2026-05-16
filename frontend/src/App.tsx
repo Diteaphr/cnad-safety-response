@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Toast } from './components/Toast';
 import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
@@ -8,11 +8,10 @@ import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
 import { LoginPage } from './features/auth/AuthScreens';
 import { SupervisorDashboardPage, AdminDashboardPage, TeamDashboardHomePage } from './features/dashboard/DashboardPages';
 import {
-  EventManagementPage,
-  EventSelectionPage,
   GlobalNotificationInboxPage,
   UserManagementPage,
 } from './features/events/EventAndAdminPages';
+import { AdminEventCenterPage } from './features/events/AdminEventCenterPage';
 import {
   EmployeeHomePage,
   MemberPriorityHomePage,
@@ -48,6 +47,7 @@ import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
 import { useLocale } from './locale/LocaleContext';
 import { getStrings } from './locale/strings';
 import type {
+  AdminEventListRow,
   AppSurface,
   Department,
   EventItem,
@@ -57,6 +57,8 @@ import type {
   User,
   UserCapabilities,
 } from './types';
+import { compareEventsByStartThenCreatedDesc } from './types';
+import { scrollPortalMainToTop } from './lib/scrollPortalMain';
 
 const emptyCaps: UserCapabilities = {
   canManage: false,
@@ -71,7 +73,7 @@ interface SessionState {
   caps: UserCapabilities;
 }
 
-const ADMIN_ONLY_NAV: NavKey[] = ['admin-dashboard', 'admin-event-detail', 'event-management', 'user-management'];
+const ADMIN_ONLY_NAV: NavKey[] = ['admin-dashboard', 'admin-event-detail', 'user-management'];
 const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
   'member-home',
   'team-dashboard-home',
@@ -127,6 +129,7 @@ function App() {
   const supervisorDashEventIdRef = useRef('');
   const adminDashEventIdRef = useRef('');
   const [adminDepartmentFilter, setAdminDepartmentFilter] = useState<string | null>(null);
+  const [closingAdminEventId, setClosingAdminEventId] = useState<string | null>(null);
   const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
 
   const loadCatalogFromApi = useCallback(async () => {
@@ -311,14 +314,14 @@ function App() {
         const pendA = a.teamCounts?.pending ?? 0;
         const pendB = b.teamCounts?.pending ?? 0;
         if (pendA !== pendB) return pendB - pendA;
-        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+        return compareEventsByStartThenCreatedDesc(a.event, b.event);
       });
     } else {
       enriched.sort((a, b) => {
         const ap = a.latest ? 1 : 0;
         const bp = b.latest ? 1 : 0;
         if (ap !== bp) return ap - bp;
-        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+        return compareEventsByStartThenCreatedDesc(a.event, b.event);
       });
     }
 
@@ -398,9 +401,9 @@ function App() {
       const ra = a.teamCounts.pending / Math.max(a.teamCounts.total, 1);
       const rb = b.teamCounts.pending / Math.max(b.teamCounts.total, 1);
       if (ra !== rb) return rb - ra;
-      return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+      return compareEventsByStartThenCreatedDesc(a.event, b.event);
     });
-    const closed = build('closed').sort((a, b) => new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime());
+    const closed = build('closed').sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
     return { active, closed };
   }, [hasDirectReports, employeeDeptId, employeeAccessibleEvents, subordinateUserIds, responses]);
 
@@ -415,6 +418,10 @@ function App() {
     if (navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history') return 'profile';
     return navKey;
   }, [navKey, supervisorOpenedDetailFrom]);
+
+  useLayoutEffect(() => {
+    scrollPortalMainToTop();
+  }, [navKey]);
   const selectedEmployeeEvent = useMemo(
     () => events.find((event) => event.id === selectedEmployeeEventId) ?? null,
     [events, selectedEmployeeEventId],
@@ -575,6 +582,47 @@ function App() {
     departments,
     users,
   ]);
+
+  const adminEventListRows = useMemo((): AdminEventListRow[] => {
+    return events.map((event) => {
+      const tids = event.targetDepartmentIds ?? [];
+      const sourceUsers = users.filter((u) => {
+        if (!u.roles.includes('employee')) return false;
+        return tids.length === 0 ? true : tids.includes(u.departmentId);
+      });
+      let safe = 0;
+      let needHelp = 0;
+      let pending = 0;
+      let lastTs = new Date(event.startAt ?? event.createdAt).getTime();
+      for (const u of sourceUsers) {
+        const latest = responses
+          .filter((r) => r.eventId === event.id && r.userId === u.id)
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+        const st = latest?.status ?? 'pending';
+        if (st === 'safe') safe++;
+        else if (st === 'need_help') needHelp++;
+        else pending++;
+        if (latest?.updatedAt) {
+          const t = new Date(latest.updatedAt).getTime();
+          if (t > lastTs) lastTs = t;
+        }
+      }
+      const total = sourceUsers.length;
+      const reported = safe + needHelp;
+      const responseRate = total ? Math.round((reported / total) * 100) : 0;
+      return {
+        event,
+        total,
+        safe,
+        needHelp,
+        pending,
+        responseRate,
+        reported,
+        lastActivityAt: lastTs,
+      };
+    })
+    .sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
+  }, [events, users, responses]);
 
   const employeeRows = useMemo(() => {
     if (supervisorUi && supervisorViewAligned && supervisorDashboard?.event?.id === selectedSupervisorEvent?.id) {
@@ -1024,6 +1072,7 @@ function App() {
         targetDepartmentIds: [],
         status: 'active',
         startAt: new Date(eventForm.startAt).toISOString(),
+        createdAt: new Date().toISOString(),
         cardDepartment: undefined,
         venue: undefined,
       };
@@ -1073,6 +1122,15 @@ function App() {
       showToast({ tone: 'info', message: 'Event closed.' });
     } catch (e) {
       showToast({ tone: 'danger', message: e instanceof Error ? e.message : '關閉失敗' });
+    }
+  };
+
+  const closeEventFromList = async (eventId: string) => {
+    setClosingAdminEventId(eventId);
+    try {
+      await closeEvent(eventId);
+    } finally {
+      setClosingAdminEventId(null);
     }
   };
 
@@ -1230,10 +1288,9 @@ function App() {
           />
         )}
         {navKey === 'admin-dashboard' && adminUi && (
-          <EventSelectionPage
-            variant="admin"
-            events={events}
-            selectedEventId={selectedAdminEventId}
+          <AdminEventCenterPage
+            rows={adminEventListRows}
+            departments={departments}
             onSelectEvent={(eventId) => {
               setSelectedAdminEventId(eventId);
               setNavKey('admin-event-detail');
@@ -1245,7 +1302,7 @@ function App() {
               departments,
               onSubmitCreate: async () => {
                 const ok = await createEvent();
-                if (ok) setNavKey('event-management');
+                if (ok) setNavKey('admin-dashboard');
                 return ok;
               },
             }}
@@ -1264,9 +1321,10 @@ function App() {
             onBackToEvents={() => setNavKey('admin-dashboard')}
             selectedDepartment={adminDepartmentFilter}
             onSelectDepartment={setAdminDepartmentFilter}
+            onCloseEvent={closeEventFromList}
+            closingEventId={closingAdminEventId}
           />
         )}
-        {navKey === 'event-management' && adminUi && <EventManagementPage events={events} onClose={closeEvent} />}
         {navKey === 'user-management' && adminUi && (
           <UserManagementPage
             users={users}

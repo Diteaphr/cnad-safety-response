@@ -344,6 +344,8 @@ export function AdminDashboardPage({
   failedReminderLoading,
   onRefreshFailedReminders,
   onRetryFailedReminder,
+  onCloseEvent,
+  closingEventId,
 }: {
   event: EventItem | null;
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
@@ -363,6 +365,8 @@ export function AdminDashboardPage({
   failedReminderLoading?: boolean;
   onRefreshFailedReminders?: () => void;
   onRetryFailedReminder?: (notificationId: string) => void;
+  onCloseEvent?: (eventId: string) => void | Promise<void>;
+  closingEventId?: string | null;
 }) {
   const { locale } = useLocale();
   const { dash, portal: portalStrings } = getStrings(locale);
@@ -371,13 +375,8 @@ export function AdminDashboardPage({
   const critical = rows.filter((row) => row.status === 'need_help');
   const pending = rows.filter((row) => row.status === 'pending');
 
-  const uiStatus = deriveEventUiStatus(event, {
-    total: stats.total,
-    safe: stats.safe,
-    needHelp: stats.needHelp,
-    pending: stats.pending,
-  });
-  const statusLabel = dash.statusLabels[uiStatus];
+  const uiStatus = event?.status === 'closed' ? 'resolved' : 'active';
+  const statusLabel = event?.status === 'closed' ? dash.closed : dash.ongoing;
   const eventTitle = event?.title ?? '—';
   const typeLabel = event?.type ?? '—';
   const description = event?.description?.trim() || dash.eventDescriptionFallback;
@@ -425,6 +424,19 @@ export function AdminDashboardPage({
               );
             })}
         </div>
+        {event?.status === 'active' && onCloseEvent ? (
+          <div className="admin-dash-close-row">
+            <button
+              type="button"
+              className="btn danger btn-sm"
+              disabled={closingEventId === event.id}
+              aria-label={portalStrings.closeEventButton}
+              onClick={() => void Promise.resolve(onCloseEvent(event.id))}
+            >
+              {closingEventId === event.id ? '…' : portalStrings.closeEventButton}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {dashMismatchHint ? <p className="dash-scope-hint muted-text">{dashMismatchHint}</p> : null}

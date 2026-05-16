@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ClipboardList } from 'lucide-react';
 import type { EventItem, SafetyResponse, SafetyStatus, User } from '../types';
+import { compareEventsByStartThenCreatedDesc } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 
 export function DirectReportEventHistoryPage({
@@ -30,7 +31,7 @@ export function DirectReportEventHistoryPage({
         const status: SafetyStatus = latest?.status ?? 'pending';
         return { event, status, updatedAt: latest?.updatedAt };
       })
-      .sort((a, b) => new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime());
+      .sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
     return list;
   }, [events, responses, subordinate.departmentId, subordinate.id]);
 
@@ -81,7 +82,9 @@ export function DirectReportEventHistoryPage({
               <div className="profile-settings-history-card-main">
                 <strong>{row.event.title}</strong>
                 <p>
-                  {new Date(row.event.startAt).toLocaleString()}
+                  {row.event.startAt != null && row.event.startAt !== ''
+                    ? new Date(row.event.startAt).toLocaleString()
+                    : '—'}
                   {row.updatedAt ? ` · Updated ${new Date(row.updatedAt).toLocaleString()}` : ''}
                 </p>
               </div>

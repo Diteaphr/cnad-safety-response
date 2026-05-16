@@ -19,7 +19,6 @@ export type NavKey =
   | 'supervisor-event-detail'
   | 'admin-dashboard'
   | 'admin-event-detail'
-  | 'event-management'
   | 'user-management'
   | 'notifications'
   | 'profile'
@@ -71,12 +70,42 @@ export interface EventItem {
   description: string;
   targetDepartmentIds: string[];
   status: 'active' | 'closed';
-  startAt: string;
+  /** 對應後端 events.start_time（ISO）；未設定時可能為 null */
+  startAt: string | null;
+  /** 對應後端 events.created_at（ISO） */
+  createdAt: string;
   /** 列表卡上顯示的部門／單位（如 R&D） */
   cardDepartment?: string;
   /** 列表卡上顯示的地點摘要 */
   venue?: string;
 }
+
+/** 列表排序：優先 start_time（startAt）降序，缺欄或同分再以 createdAt 降序。 */
+export function compareEventsByStartThenCreatedDesc(a: EventItem, b: EventItem): number {
+  const ta =
+    a.startAt != null && a.startAt !== '' ? new Date(a.startAt).getTime() : null;
+  const tb =
+    b.startAt != null && b.startAt !== '' ? new Date(b.startAt).getTime() : null;
+  if (ta != null && tb != null && tb !== ta) return tb - ta;
+  if (ta != null && tb == null) return -1;
+  if (ta == null && tb != null) return 1;
+  if (ta != null && tb != null && tb === ta) {
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  }
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+}
+
+/** 管理中心事件列表列（前端由 users／responses 彙總） */
+export type AdminEventListRow = {
+  event: EventItem;
+  total: number;
+  safe: number;
+  needHelp: number;
+  pending: number;
+  responseRate: number;
+  reported: number;
+  lastActivityAt: number;
+};
 
 export interface SafetyResponse {
   id: string;

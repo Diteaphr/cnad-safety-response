@@ -1,4 +1,3 @@
-import { EventCard } from '../../components/EventCard';
 import { StatCard } from '../../components/StatCard';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
@@ -8,7 +7,7 @@ import type { FailedNotificationRow } from '../../api';
 import { adminCreateUserApi, type PortalNotificationRow } from '../../api';
 import type { Department, EventItem, NotificationSummary, User } from '../../types';
 
-type EventFormState = {
+export type EventFormState = {
   title: string;
   type: string;
   customType: string;
@@ -58,7 +57,7 @@ function flattenDepts(depts: Department[]): { dept: Department; depth: number }[
   return result;
 }
 
-function AdminQuickCreateFormFields({
+export function AdminQuickCreateFormFields({
   p,
   eventForm,
   setEventForm,
@@ -333,36 +332,6 @@ export function EventSelectionPage({
           <Plus size={26} strokeWidth={2.4} aria-hidden />
         </button>
       ) : null}
-    </section>
-  );
-}
-
-export function EventManagementPage({
-  events,
-  onClose,
-}: {
-  events: EventItem[];
-  onClose: (eventId: string) => void;
-}) {
-  const { locale } = useLocale();
-  const p = getStrings(locale).portal;
-
-  return (
-    <section className="page-section portal-event-mgmt">
-      <h2>{p.eventManagement}</h2>
-      <p className="muted-text">{p.eventManagementIntro}</p>
-      <div className="list event-mgmt-list">
-        {events.map((event) => (
-          <div key={event.id} className="panel event-mgmt-card">
-            <EventCard
-              event={event}
-              managementClose={
-                event.status === 'active' ? { onClose: () => onClose(event.id), label: p.closeEventButton } : undefined
-              }
-            />
-          </div>
-        ))}
-      </div>
     </section>
   );
 }

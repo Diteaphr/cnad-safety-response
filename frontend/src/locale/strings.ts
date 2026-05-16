@@ -332,6 +332,23 @@ export type PortalStrings = {
   adminOverviewCreateBody: string;
   adminOverviewCreateCta: string;
   adminCreateModalCancel: string;
+  adminEventCenterSubtitle: string;
+  adminEventCenterSearchPlaceholder: string;
+  adminEventCenterReportProgress: string;
+  adminEventCenterReportedOfTotal: (reported: number, total: number) => string;
+  adminEventCenterStatusColumn: string;
+  adminEventCenterLastUpdate: string;
+  adminEventCenterTip: string;
+  adminEventCenterTipDismissAria: string;
+  adminEventCenterPageRange: (from: number, to: number, total: number) => string;
+  adminEventCenterPerPage: string;
+  adminScopeAllEmployees: string;
+  adminEventCenterEmpty: string;
+  adminEventCenterColEvent: string;
+  adminEventCenterColStatus: string;
+  adminEventCenterColProgress: string;
+  adminEventCenterColStats: string;
+  adminEventCenterColAction: string;
 };
 
 /** Copy for dashboards + profile confirmations (minimal i18n layer). */
@@ -797,6 +814,24 @@ const portalZh: PortalStrings = {
   adminOverviewCreateBody: '事件建立後立即生效，並向目標部門員工送出通知。',
   adminOverviewCreateCta: '前往建立事件',
   adminCreateModalCancel: '關閉',
+  adminEventCenterSubtitle: '全域事件清單與狀態總覽',
+  adminEventCenterSearchPlaceholder: '搜尋事件名稱',
+  adminEventCenterReportProgress: '回報進度',
+  adminEventCenterReportedOfTotal: (reported, total) => `${reported} / ${total} 已回報`,
+  adminEventCenterStatusColumn: '狀態統計',
+  adminEventCenterLastUpdate: '最後更新',
+  adminEventCenterTip:
+    '小提醒：點擊事件可查看詳細資訊與人員名單，並進行後續處置與通知。',
+  adminEventCenterTipDismissAria: '關閉提示',
+  adminEventCenterPageRange: (from, to, total) => `顯示 ${from} - ${to} / ${total} 筆`,
+  adminEventCenterPerPage: '每頁顯示',
+  adminScopeAllEmployees: '全公司',
+  adminEventCenterEmpty: '目前沒有符合條件的事件。',
+  adminEventCenterColEvent: '事件',
+  adminEventCenterColStatus: '狀態',
+  adminEventCenterColProgress: '回報進度',
+  adminEventCenterColStats: '狀態統計',
+  adminEventCenterColAction: '操作',
 };
 
 const portalEn: PortalStrings = {
@@ -880,6 +915,24 @@ const portalEn: PortalStrings = {
   adminOverviewCreateBody: 'New events go live immediately and send activation notices to targeted employees.',
   adminOverviewCreateCta: 'Go to create event',
   adminCreateModalCancel: 'Close',
+  adminEventCenterSubtitle: 'Global event list and status overview',
+  adminEventCenterSearchPlaceholder: 'Search event title',
+  adminEventCenterReportProgress: 'Reporting progress',
+  adminEventCenterReportedOfTotal: (reported, total) => `${reported} / ${total} reported`,
+  adminEventCenterStatusColumn: 'Status breakdown',
+  adminEventCenterLastUpdate: 'Last updated',
+  adminEventCenterTip:
+    'Tip: open an event to see details, roster, follow-up actions, and notifications.',
+  adminEventCenterTipDismissAria: 'Dismiss tip',
+  adminEventCenterPageRange: (from, to, total) => `Showing ${from}–${to} of ${total}`,
+  adminEventCenterPerPage: 'Rows per page',
+  adminScopeAllEmployees: 'All employees',
+  adminEventCenterEmpty: 'No events match the current filters.',
+  adminEventCenterColEvent: 'Event',
+  adminEventCenterColStatus: 'Status',
+  adminEventCenterColProgress: 'Reporting progress',
+  adminEventCenterColStats: 'Status breakdown',
+  adminEventCenterColAction: 'Actions',
 };
 
 const statusBadgeZh: StatusBadgeStrings = {
