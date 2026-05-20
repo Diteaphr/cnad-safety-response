@@ -79,8 +79,6 @@ const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
   'team-dashboard-home',
   'employee-event-detail',
   'supervisor-event-detail',
-  'profile-direct-reports-list',
-  'profile-direct-report-history',
 ];
 
 function App() {
@@ -151,6 +149,15 @@ function App() {
       setCatalogError(e instanceof Error ? e.message : '無法載入資料');
     } finally {
       setCatalogLoaded(true);
+    }
+  }, []);
+
+  const refreshEventTypes = useCallback(async () => {
+    try {
+      const typeRows = await getEventTypesApi();
+      setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
+    } catch {
+      /* keep cached catalog */
     }
   }, []);
 
@@ -636,9 +643,15 @@ function App() {
         let st: 'safe' | 'need_help' | 'pending' = 'pending';
         if (raw === 'safe' || raw === 'need_help' || raw === 'pending') {
           st = raw;
+        } else if (t.sub_team_summary) {
+          const sub = t.sub_team_summary;
+          if (sub.need_help > 0) st = 'need_help';
+          else if (sub.pending > 0) st = 'pending';
+          else st = 'safe';
         } else if (latest?.status === 'safe' || latest?.status === 'need_help') {
-          /** API 轉下屬列 status 為 null、或短暫缺 lr 時，沿用與 GET /api/reports 一致的快取 */
           st = latest.status;
+        } else if (t.needs_follow_up === false) {
+          st = 'safe';
         }
         const uMeta = users.find((x) => x.id === uid);
         const noteMerge = latest ? [latest.location, latest.comment].filter(Boolean).join(' · ') : undefined;
@@ -737,12 +750,12 @@ function App() {
     try {
       if (session.surface === 'member' && session.caps.canViewTeam) {
         const eid = supervisorDashEventIdRef.current.trim();
-        const sd = await getSupervisorDashboardApi(eid || undefined);
+        const sd = await getSupervisorDashboardApi(eid ? eid : undefined);
         setSupervisorDashboard(sd);
       }
       if (session.surface === 'adminCenter') {
         const eid = adminDashEventIdRef.current.trim();
-        const ad = await getAdminDashboardApi(eid || undefined);
+        const ad = await getAdminDashboardApi(eid ? eid : undefined);
         setAdminDashboard(ad);
       }
     } catch {
@@ -783,6 +796,40 @@ function App() {
   useEffect(() => {
     if (navKey !== 'admin-event-detail') setAdminDepartmentFilter(null);
   }, [navKey]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn || useMockOfflineCatalog) return;
+    if (!supervisorUi || !selectedSupervisorEventId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const sd = await getSupervisorDashboardApi(selectedSupervisorEventId);
+        if (!cancelled) setSupervisorDashboard(sd);
+      } catch {
+        /* keep prior snapshot */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.isLoggedIn, supervisorUi, selectedSupervisorEventId, useMockOfflineCatalog]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn || useMockOfflineCatalog) return;
+    if (!adminUi || !selectedAdminEventId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ad = await getAdminDashboardApi(selectedAdminEventId);
+        if (!cancelled) setAdminDashboard(ad);
+      } catch {
+        /* keep prior snapshot */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.isLoggedIn, adminUi, selectedAdminEventId, useMockOfflineCatalog]);
 
   useEffect(() => {
     if (!session.isLoggedIn) return undefined;
@@ -1058,7 +1105,6 @@ function App() {
 
   const createEvent = async (): Promise<boolean> => {
     if (!session.user) return false;
-    const custom = eventForm.type.trim().toLowerCase() === 'other' ? eventForm.customType.trim() : '';
     if (useMockOfflineCatalog) {
       const eid =
         typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -1088,7 +1134,6 @@ function App() {
         startAt: new Date(eventForm.startAt).toISOString(),
         targetDepartmentIds: eventForm.targetDepartmentIds,
         ...(eventForm.location.trim() ? { location: eventForm.location.trim() } : {}),
-        ...(custom ? { customTypeName: custom } : {}),
       });
       setEvents((prev) => [out.event, ...prev]);
       showToast({
@@ -1300,6 +1345,8 @@ function App() {
               setEventForm,
               eventTypeCatalog,
               departments,
+              onEventTypesChanged: refreshEventTypes,
+              showToast,
               onSubmitCreate: async () => {
                 const ok = await createEvent();
                 if (ok) setNavKey('admin-dashboard');
@@ -1358,7 +1405,7 @@ function App() {
             offlineMockSession={useMockOfflineCatalog}
           />
         )}
-        {navKey === 'profile-direct-reports-list' && session.surface === 'member' && (
+        {navKey === 'profile-direct-reports-list' && (
           <DirectReportsListPage
             directReports={profileDirectReports}
             departments={departments}
@@ -1369,14 +1416,16 @@ function App() {
             }}
           />
         )}
-        {navKey === 'profile-direct-report-history' && session.surface === 'member' && profileHistorySubordinate ? (
+        {navKey === 'profile-direct-report-history' && profileHistorySubordinate ? (
           <DirectReportEventHistoryPage
             subordinate={profileHistorySubordinate}
             events={events}
             responses={responses}
             onBack={() => {
               setProfileSubordinateUserId(null);
-              setNavKey('profile');
+              setNavKey(
+                profileDirectReports.length > 1 ? 'profile-direct-reports-list' : 'profile',
+              );
             }}
           />
         ) : null}

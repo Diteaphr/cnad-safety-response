@@ -7,10 +7,18 @@ export type SupervisorTeamMemberApi = {
   user_id: string;
   name: string;
   department: string;
-  status: string;
+  status: string | null;
   reported_at: string | null;
   needs_follow_up: boolean;
   phone?: string | null;
+  is_supervisor?: boolean;
+  sub_team_summary?: {
+    safe: number;
+    need_help: number;
+    pending: number;
+    responded?: number;
+    total?: number;
+  } | null;
 };
 
 export type SupervisorDashboardApi = {
@@ -204,6 +212,13 @@ export async function getEventTypesApi(): Promise<EventTypeCatalogItem[]> {
   return data.eventTypes;
 }
 
+export async function adminCreateEventTypeApi(name: string): Promise<EventTypeCatalogItem> {
+  return apiFetch<EventTypeCatalogItem>('/api/admin/event-types', {
+    method: 'POST',
+    body: JSON.stringify({ name: name.trim() }),
+  });
+}
+
 export async function getUsers(): Promise<User[]> {
   const data = await apiFetch<{ users: Parameters<typeof mapProfileToUser>[0][] }>('/api/users');
   return data.users.map((u) => mapProfileToUser(u));
@@ -326,6 +341,8 @@ export async function updateMyProfileApi(body: {
 export async function adminCreateUserApi(body: {
   name: string;
   email: string;
+  phone: string;
+  employeeNo: string;
   password?: string;
   departmentId: string;
   roles?: Role[];
@@ -349,6 +366,8 @@ export async function adminCreateUserApi(body: {
     body: JSON.stringify({
       name: body.name,
       email: body.email,
+      phone: body.phone,
+      employeeNo: body.employeeNo,
       departmentId: body.departmentId,
       roles: body.roles ?? ['employee'],
       ...(body.password ? { password: body.password } : {}),

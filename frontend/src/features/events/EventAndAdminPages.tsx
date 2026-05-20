@@ -2,9 +2,8 @@ import { StatCard } from '../../components/StatCard';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactElement } from 'react';
 import type { FailedNotificationRow } from '../../api';
-import { adminCreateUserApi, type PortalNotificationRow } from '../../api';
+import { adminCreateEventTypeApi, adminCreateUserApi, type PortalNotificationRow } from '../../api';
 import type { Department, EventItem, NotificationSummary, User } from '../../types';
 
 export type EventFormState = {
@@ -16,7 +15,7 @@ export type EventFormState = {
   location: string;
   targetDepartmentIds: string[];
 };
-import { Plus } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 
 function typeLabel(ev: string, p: ReturnType<typeof getStrings>['portal']) {
   switch (ev) {
@@ -38,7 +37,11 @@ function statusChip(status: EventItem['status'], p: ReturnType<typeof getStrings
   return p.eventChipClosed;
 }
 
-const BUILTIN_TYPE_ORDER = ['Earthquake', 'Typhoon', 'Fire', 'Other'] as const;
+const BUILTIN_TYPE_ORDER = ['Earthquake', 'Typhoon', 'Fire'] as const;
+
+function isOtherEventType(name: string) {
+  return name.trim().toLowerCase() === 'other';
+}
 
 function flattenDepts(depts: Department[]): { dept: Department; depth: number }[] {
   const childMap: Record<string, Department[]> = {};
@@ -57,19 +60,87 @@ function flattenDepts(depts: Department[]): { dept: Department; depth: number }[
   return result;
 }
 
+export function AdminDeptHierarchyList({
+  flatDepts,
+  mode,
+  selectedId,
+  selectedIds = [],
+  onSelectId,
+  onToggleId,
+  hint,
+  countLabel,
+}: {
+  flatDepts: { dept: Department; depth: number }[];
+  mode: 'single' | 'multiple';
+  selectedId?: string;
+  selectedIds?: string[];
+  onSelectId?: (id: string) => void;
+  onToggleId?: (id: string, checked: boolean) => void;
+  hint?: string;
+  countLabel?: string;
+}) {
+  if (flatDepts.length === 0) return null;
+  return (
+    <div className="admin-notify-dept-picker">
+      {hint || countLabel ? (
+        <div className="admin-notify-dept-picker-head">
+          {hint ? <p className="muted-text small admin-notify-dept-hint">{hint}</p> : <span />}
+          {countLabel ? <span className="admin-notify-dept-count">{countLabel}</span> : null}
+        </div>
+      ) : null}
+      <ul className="admin-notify-dept-checklist">
+        {flatDepts.map(({ dept, depth }) => {
+          const checked =
+            mode === 'single' ? selectedId === dept.id : selectedIds.includes(dept.id);
+          return (
+            <li key={dept.id}>
+              <label
+                className={`admin-notify-dept-check-item${checked ? ' is-checked' : ''}`}
+                style={{ paddingLeft: 12 + depth * 16 }}
+              >
+                <input
+                  type={mode === 'single' ? 'radio' : 'checkbox'}
+                  name={mode === 'single' ? 'admin-dept-pick' : undefined}
+                  className="admin-notify-dept-check-input"
+                  checked={checked}
+                  onChange={(e) => {
+                    if (mode === 'single') {
+                      onSelectId?.(dept.id);
+                    } else {
+                      onToggleId?.(dept.id, e.target.checked);
+                    }
+                  }}
+                />
+                <span className="admin-notify-dept-check-label">{dept.name}</span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function AdminQuickCreateFormFields({
   p,
   eventForm,
   setEventForm,
   eventTypeCatalog,
   departments,
+  onEventTypesChanged,
+  showToast,
 }: {
   p: ReturnType<typeof getStrings>['portal'];
   eventForm: EventFormState;
   setEventForm: (value: EventFormState) => void;
   eventTypeCatalog: { name: string }[] | null;
   departments: Department[];
+  onEventTypesChanged?: () => void | Promise<void>;
+  showToast?: (t: { tone: 'success' | 'warning' | 'danger' | 'info'; message: string }) => void;
 }) {
+  const [addTypeOpen, setAddTypeOpen] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [addingType, setAddingType] = useState(false);
   const flatDepts = useMemo(() => flattenDepts(departments), [departments]);
   const limitToDept = eventForm.targetDepartmentIds.length > 0;
   const typeSelectRows = useMemo(() => {
@@ -80,11 +151,40 @@ export function AdminQuickCreateFormFields({
       const i = BUILTIN_TYPE_ORDER.indexOf(name as (typeof BUILTIN_TYPE_ORDER)[number]);
       return i === -1 ? 100 : i;
     };
-    return [...eventTypeCatalog].sort((a, b) => {
-      const d = rank(a.name) - rank(b.name);
-      return d !== 0 ? d : a.name.localeCompare(b.name);
-    });
+    return [...eventTypeCatalog]
+      .filter((row) => !isOtherEventType(row.name))
+      .sort((a, b) => {
+        const d = rank(a.name) - rank(b.name);
+        return d !== 0 ? d : a.name.localeCompare(b.name);
+      });
   }, [eventTypeCatalog]);
+
+  useEffect(() => {
+    if (!isOtherEventType(eventForm.type)) return;
+    const next = typeSelectRows[0]?.name;
+    if (next) setEventForm({ ...eventForm, type: next, customType: '' });
+  }, [eventForm.type, typeSelectRows]);
+
+  const submitNewEventType = async () => {
+    const name = newTypeName.trim();
+    if (!name || addingType) return;
+    setAddingType(true);
+    try {
+      const created = await adminCreateEventTypeApi(name);
+      await onEventTypesChanged?.();
+      setEventForm({ ...eventForm, type: created.name, customType: '' });
+      setNewTypeName('');
+      setAddTypeOpen(false);
+      showToast?.({ tone: 'success', message: created.name });
+    } catch (e) {
+      showToast?.({
+        tone: 'danger',
+        message: e instanceof Error ? e.message : 'Failed to add event type',
+      });
+    } finally {
+      setAddingType(false);
+    }
+  };
 
   return (
     <div className="event-form admin-quick-create-form">
@@ -105,17 +205,42 @@ export function AdminQuickCreateFormFields({
             </option>
           ))}
         </select>
+        {!addTypeOpen ? (
+          <button type="button" className="auth-link event-form-add-type-link" onClick={() => setAddTypeOpen(true)}>
+            {p.addEventTypeLink}
+          </button>
+        ) : (
+          <div className="event-form-add-type-panel">
+            <input
+              value={newTypeName}
+              onChange={(e) => setNewTypeName(e.target.value)}
+              placeholder={p.addEventTypePlaceholder}
+              disabled={addingType}
+            />
+            <div className="event-form-add-type-actions">
+              <button
+                type="button"
+                className="btn ghost btn-sm"
+                disabled={addingType}
+                onClick={() => {
+                  setAddTypeOpen(false);
+                  setNewTypeName('');
+                }}
+              >
+                {p.addEventTypeCancel}
+              </button>
+              <button
+                type="button"
+                className="btn primary btn-sm"
+                disabled={addingType || !newTypeName.trim()}
+                onClick={() => void submitNewEventType()}
+              >
+                {addingType ? '…' : p.addEventTypeSubmit}
+              </button>
+            </div>
+          </div>
+        )}
       </label>
-      {eventForm.type.trim().toLowerCase() === 'other' ? (
-        <label className="event-form-field">
-          <span className="event-form-field-label muted-text">{p.formLabelCustomTypeDetail}</span>
-          <input
-            value={eventForm.customType}
-            onChange={(e) => setEventForm({ ...eventForm, customType: e.target.value })}
-            placeholder={p.placeholderCustomType}
-          />
-        </label>
-      ) : null}
       <label className="event-form-field">
         <span className="event-form-field-label">{p.placeholderDescription}</span>
         <textarea
@@ -140,49 +265,56 @@ export function AdminQuickCreateFormFields({
           placeholder="例：台北總部 3F 會議室"
         />
       </label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span className="event-form-field-label">通知對象</span>
-          <div className="admin-scope-toggle-row">
-            <button
-              type="button"
-              className={`admin-scope-toggle${!limitToDept ? ' is-active' : ''}`}
-              onClick={() => setEventForm({ ...eventForm, targetDepartmentIds: [] })}
-            >
-              全體員工
-            </button>
-            <button
-              type="button"
-              className={`admin-scope-toggle${limitToDept ? ' is-active' : ''}`}
-              onClick={() => {
-                if (!limitToDept) {
-                  setEventForm({ ...eventForm, targetDepartmentIds: flatDepts.length > 0 ? [flatDepts[0].dept.id] : [] });
+      <div className="event-form-field admin-notify-scope-field">
+          <span className="event-form-field-label">{p.formLabelNotifyTarget}</span>
+          <div className="admin-notify-scope-panel">
+            <div className="admin-scope-toggle-row admin-notify-scope-mode" role="group" aria-label={p.formLabelNotifyTarget}>
+              <button
+                type="button"
+                className={`admin-scope-toggle${!limitToDept ? ' is-active' : ''}`}
+                onClick={() => setEventForm({ ...eventForm, targetDepartmentIds: [] })}
+              >
+                {p.notifyScopeAll}
+              </button>
+              <button
+                type="button"
+                className={`admin-scope-toggle${limitToDept ? ' is-active' : ''}`}
+                onClick={() => {
+                  if (!limitToDept) {
+                    setEventForm({
+                      ...eventForm,
+                      targetDepartmentIds: flatDepts.length > 0 ? [flatDepts[0].dept.id] : [],
+                    });
+                  }
+                }}
+              >
+                {p.notifyScopeDepartments}
+              </button>
+            </div>
+            {limitToDept && flatDepts.length > 0 ? (
+              <AdminDeptHierarchyList
+                mode="multiple"
+                flatDepts={flatDepts}
+                selectedIds={eventForm.targetDepartmentIds}
+                hint={p.notifyScopeDeptHint}
+                countLabel={
+                  eventForm.targetDepartmentIds.length > 0
+                    ? `${eventForm.targetDepartmentIds.length} / ${flatDepts.length}`
+                    : undefined
                 }
-              }}
-            >
-              限定部門
-            </button>
+                onToggleId={(id, checked) => {
+                  const next = checked
+                    ? [...eventForm.targetDepartmentIds, id]
+                    : eventForm.targetDepartmentIds.filter((d) => d !== id);
+                  setEventForm({
+                    ...eventForm,
+                    targetDepartmentIds: next.length > 0 ? next : [id],
+                  });
+                }}
+              />
+            ) : null}
           </div>
-        {limitToDept && flatDepts.length > 0 && (
-          <div className="admin-dept-picker-box">
-            {flatDepts.map(({ dept, depth }) => (
-              <label key={dept.id} className="admin-dept-picker-row" style={{ paddingLeft: depth * 16 }}>
-                <input
-                  type="checkbox"
-                  checked={eventForm.targetDepartmentIds.includes(dept.id)}
-                  onChange={(e) => {
-                    const next = e.target.checked
-                      ? [...eventForm.targetDepartmentIds, dept.id]
-                      : eventForm.targetDepartmentIds.filter((id) => id !== dept.id);
-                    setEventForm({ ...eventForm, targetDepartmentIds: next.length > 0 ? next : [dept.id] });
-                  }}
-                />
-                {dept.name}
-              </label>
-            ))}
-            <p className="muted-text small" style={{ marginTop: 6, marginBottom: 0 }}>子部門會自動包含</p>
-          </div>
-        )}
-      </div>
+        </div>
     </div>
   );
 }
@@ -352,35 +484,48 @@ export function UserManagementPage({
 }) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
-  const subordinateRows = userList.filter((user) => user.managerId);
-  const childMap = deptList.reduce<Record<string, string[]>>((acc, department) => {
-    const parent = department.parentId ?? 'root';
-    acc[parent] = [...(acc[parent] ?? []), department.id];
-    return acc;
-  }, {});
-  const renderDepartmentTree = (parentId: string | null, depth = 0): ReactElement[] =>
-    (childMap[parentId ?? 'root'] ?? []).flatMap((deptId) => {
-      const department = deptList.find((item) => item.id === deptId);
-      if (!department) return [];
-      return [
-        <div className="list-item" key={`${deptId}-${depth}`}>
-          <span>{`${'— '.repeat(depth)}${department.name}`}</span>
-          <span>{p.deptIdLabel(department.id)}</span>
-        </div>,
-        ...renderDepartmentTree(department.id, depth + 1),
-      ];
-    });
+  const flatDepts = useMemo(() => flattenDepts(deptList), [deptList]);
+  const employees = useMemo(
+    () => userList.filter((u) => u.roles.includes('employee')),
+    [userList],
+  );
+  const employeesByDept = useMemo(() => {
+    const map = new Map<string, User[]>();
+    for (const emp of employees) {
+      const key = emp.departmentId || '__none__';
+      const bucket = map.get(key) ?? [];
+      bucket.push(emp);
+      map.set(key, bucket);
+    }
+    for (const bucket of map.values()) {
+      bucket.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return map;
+  }, [employees]);
 
+  const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newEmployeeNo, setNewEmployeeNo] = useState('');
   const [newDeptId, setNewDeptId] = useState(deptList[0]?.id ?? '');
   const [creating, setCreating] = useState(false);
 
   const submitNewUser = async () => {
     const name = newName.trim();
     const email = newEmail.trim();
+    const phone = newPhone.trim();
+    const employeeNo = newEmployeeNo.trim();
     if (!name || !email) {
       showToast({ tone: 'danger', message: 'Name and email are required.' });
+      return;
+    }
+    if (!phone) {
+      showToast({ tone: 'danger', message: p.userMgmtPhoneRequired });
+      return;
+    }
+    if (!employeeNo) {
+      showToast({ tone: 'danger', message: p.userMgmtEmployeeNoRequired });
       return;
     }
     if (!newDeptId) {
@@ -398,6 +543,8 @@ export function UserManagementPage({
           id: uid,
           name,
           email,
+          phone,
+          employeeCode: employeeNo,
           departmentId: newDeptId,
           roles: ['employee'],
           pushEnabled: true,
@@ -405,13 +552,17 @@ export function UserManagementPage({
         onUserCreated(newUser);
         setNewName('');
         setNewEmail('');
+        setNewPhone('');
+        setNewEmployeeNo('');
         showToast({ tone: 'success', message: 'Demo：已加入本機使用者清單。' });
         return;
       }
-      const out = await adminCreateUserApi({ name, email, departmentId: newDeptId });
+      const out = await adminCreateUserApi({ name, email, phone, employeeNo, departmentId: newDeptId });
       onUserCreated(out.user);
       setNewName('');
       setNewEmail('');
+      setNewPhone('');
+      setNewEmployeeNo('');
       if (out.temporaryPassword) {
         showToast({ tone: 'success', message: p.userMgmtTempPassword(out.temporaryPassword) });
       } else {
@@ -424,11 +575,25 @@ export function UserManagementPage({
     }
   };
 
+
+  const rosterTitle =
+    selectedDeptId === '__none__'
+      ? locale === 'zh-Hant'
+        ? '未分配部門'
+        : 'Unassigned'
+      : (deptList.find((d) => d.id === selectedDeptId)?.name ?? '');
+  const rosterEmployees =
+    selectedDeptId === '__none__'
+      ? (employeesByDept.get('__none__') ?? [])
+      : selectedDeptId
+        ? (employeesByDept.get(selectedDeptId) ?? [])
+        : [];
+
   return (
     <section className="page-section portal-user-mgmt">
       <h2>{p.userDeptManagement}</h2>
-      <div className="grid-2">
-        <section className="panel">
+      <div className="portal-user-mgmt-layout">
+        <section className="panel portal-user-mgmt-add">
           <h3>{p.userMgmtAddAccount}</h3>
           <div className="event-form" style={{ marginTop: 12 }}>
             <label className="event-form-field">
@@ -447,40 +612,106 @@ export function UserManagementPage({
               />
             </label>
             <label className="event-form-field">
-              <span className="event-form-field-label">{p.userMgmtDeptLabel}</span>
-              <select value={newDeptId} onChange={(e) => setNewDeptId(e.target.value)} disabled={creating || deptList.length === 0}>
-                {deptList.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
+              <span className="event-form-field-label">{p.userMgmtPhoneLabel}</span>
+              <input
+                type="tel"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder={p.userMgmtPhonePlaceholder}
+                disabled={creating}
+                autoComplete="off"
+                inputMode="tel"
+              />
             </label>
+            <label className="event-form-field">
+              <span className="event-form-field-label">{p.userMgmtEmployeeNoLabel}</span>
+              <input
+                value={newEmployeeNo}
+                onChange={(e) => setNewEmployeeNo(e.target.value)}
+                placeholder={p.userMgmtEmployeeNoPlaceholder}
+                disabled={creating}
+                autoComplete="off"
+              />
+            </label>
+            <div className="event-form-field admin-notify-scope-field">
+              <span className="event-form-field-label">{p.userMgmtDeptLabel}</span>
+              <div className="admin-notify-scope-panel">
+                <AdminDeptHierarchyList
+                  mode="single"
+                  flatDepts={flatDepts}
+                  selectedId={newDeptId}
+                  onSelectId={setNewDeptId}
+                  hint={p.userMgmtDeptPickHint}
+                />
+              </div>
+            </div>
             <button type="button" className="btn primary" disabled={creating || deptList.length === 0} onClick={() => void submitNewUser()}>
               {creating ? '…' : p.userMgmtCreateSubmit}
             </button>
           </div>
-          <h3 style={{ marginTop: 24 }}>{p.employees}</h3>
-          {userList.map((user) => (
-            <div className="list-item" key={user.id}>
-              <div>
-                <strong>{user.name}</strong>
-                <p>{user.email}</p>
-              </div>
-              <span>{user.pushEnabled ? p.pushEnabled : p.pushNotEnabled}</span>
-            </div>
-          ))}
         </section>
-        <section className="panel">
-          <h3>{p.departmentHierarchy}</h3>
-          {renderDepartmentTree(null)}
-          <h4>{p.managerSubordinatesHeading}</h4>
-          {subordinateRows.map((user) => (
-            <div className="list-item" key={`sub-${user.id}`}>
-              <span>{userList.find((manager) => manager.id === user.managerId)?.name ?? p.unknownManager}</span>
-              <span>{user.name}</span>
-            </div>
-          ))}
+        <section className="panel portal-user-mgmt-roster">
+          {selectedDeptId ? (
+            <>
+              <button type="button" className="btn ghost user-mgmt-back" onClick={() => setSelectedDeptId(null)}>
+                ← {p.userMgmtBackToDepts}
+              </button>
+              <h3>{p.userMgmtDeptRosterTitle(rosterTitle)}</h3>
+              {rosterEmployees.length === 0 ? (
+                <p className="muted-text empty">{p.userMgmtNoEmployeesInDept}</p>
+              ) : (
+                <div className="user-mgmt-roster-list">
+
+                  {rosterEmployees.map((user) => (
+                    <div className="list-item user-mgmt-roster-row" key={user.id}>
+                      <div>
+                        <strong>{user.name}</strong>
+                        <p>{user.email}</p>
+                        {user.phone ? <p className="muted-text small">{user.phone}</p> : null}
+                      </div>
+                      <span className="muted-text small">{user.pushEnabled ? p.pushEnabled : p.pushNotEnabled}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <h3>{p.userMgmtEmployeesByDept}</h3>
+              <p className="muted-text small">{p.userMgmtEmployeesByDeptDesc}</p>
+              <div className="user-mgmt-dept-list">
+                {flatDepts.map(({ dept, depth }) => {
+                  const count = employeesByDept.get(dept.id)?.length ?? 0;
+                  return (
+                    <button
+                      type="button"
+                      key={dept.id}
+                      className="user-mgmt-dept-row"
+                      style={{ paddingLeft: 12 + depth * 14 }}
+                      onClick={() => setSelectedDeptId(dept.id)}
+                    >
+                      <span className="user-mgmt-dept-name">{dept.name}</span>
+                      <span className="user-mgmt-dept-meta">
+                        <span className="muted-text">{p.userMgmtEmployeeCount(count)}</span>
+                        <ChevronRight size={18} aria-hidden />
+                      </span>
+                    </button>
+                  );
+                })}
+                {(employeesByDept.get('__none__')?.length ?? 0) > 0 ? (
+                  <button type="button" className="user-mgmt-dept-row" onClick={() => setSelectedDeptId('__none__')}>
+                    <span className="user-mgmt-dept-name">{locale === 'zh-Hant' ? '未分配部門' : 'Unassigned'}</span>
+                    <span className="user-mgmt-dept-meta">
+                      <span className="muted-text">
+                        {p.userMgmtEmployeeCount(employeesByDept.get('__none__')?.length ?? 0)}
+                      </span>
+                      <ChevronRight size={18} aria-hidden />
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
         </section>
       </div>
     </section>

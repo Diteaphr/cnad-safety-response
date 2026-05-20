@@ -41,6 +41,45 @@ function adminDeptResponseRate(row: DeptAgg): number {
   return t ? Math.round(((row.safe + row.need_help) / t) * 100) : 0;
 }
 
+function AdminDeptStatusList({
+  rows,
+  dash,
+  onViewDepartment,
+}: {
+  rows: DeptAgg[];
+  dash: DashboardStrings;
+  onViewDepartment: (department: string) => void;
+}) {
+  return (
+    <div className="admin-dept-status-list">
+      {rows.map((row) => {
+        const rate = adminDeptResponseRate(row);
+        return (
+          <article key={row.department} className="admin-dept-status-card">
+            <div className="admin-dept-status-card-body">
+              <strong className="admin-dept-status-card-title">{row.department}</strong>
+              <p className="admin-dept-status-card-rate">{rate}%</p>
+              <p className="muted-text small admin-dept-status-card-stats">
+                {dash.kpiSafe} {row.safe} · {dash.kpiNeedHelp} {row.need_help} · {dash.kpiNoResponse} {row.pending}
+              </p>
+            </div>
+            <div className="admin-dept-status-card-footer">
+              <button
+                type="button"
+                className="btn ghost btn-sm admin-dept-view-btn"
+                onClick={() => onViewDepartment(row.department)}
+              >
+                {dash.adminDeptActionView}
+                <ChevronRight size={16} aria-hidden />
+              </button>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 function formatAdminReportTime(iso: string | undefined, locale: string): string {
   if (!iso) return '—';
   try {
@@ -570,78 +609,14 @@ export function AdminDashboardPage({
         {overviewDeptRows.length === 0 ? (
           <p className="empty">{dash.noRows}</p>
         ) : (
-          <>
-            <div className="admin-dept-table-desktop">
-              <table className="admin-dept-status-table">
-                <thead>
-                  <tr>
-                    <th scope="col">{dash.adminDeptColDept}</th>
-                    <th scope="col">{dash.adminDeptColRate}</th>
-                    <th scope="col">{dash.adminDeptColSafe}</th>
-                    <th scope="col">{dash.adminDeptColNeed}</th>
-                    <th scope="col">{dash.adminDeptColPending}</th>
-                    <th scope="col">
-                      <span className="sr-only">{dash.adminDeptActionView}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {overviewDeptRows.map((row) => {
-                    const rate = adminDeptResponseRate(row);
-                    return (
-                      <tr key={row.department}>
-                        <td>{row.department}</td>
-                        <td>{rate}%</td>
-                        <td>{row.safe}</td>
-                        <td>{row.need_help}</td>
-                        <td>{row.pending}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn ghost btn-sm admin-dept-view-btn"
-                            onClick={() => {
-                              onSelectDepartment(row.department);
-                              setDetailTab('departments');
-                            }}
-                          >
-                            {dash.adminDeptActionView}
-                            <ChevronRight size={16} aria-hidden />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="admin-dept-cards-mobile">
-              {overviewDeptRows.map((row) => {
-                const rate = adminDeptResponseRate(row);
-                return (
-                  <div key={row.department} className="admin-dept-mobile-card">
-                    <div className="admin-dept-mobile-card-top">
-                      <strong>{row.department}</strong>
-                      <span className="muted-text">{rate}%</span>
-                    </div>
-                    <p className="muted-text small admin-dept-mobile-stats">
-                      {dash.kpiSafe} {row.safe} · {dash.kpiNeedHelp} {row.need_help} · {dash.kpiNoResponse} {row.pending}
-                    </p>
-                    <button
-                      type="button"
-                      className="btn ghost btn-sm admin-dept-view-btn"
-                      onClick={() => {
-                        onSelectDepartment(row.department);
-                        setDetailTab('departments');
-                      }}
-                    >
-                      {dash.adminDeptActionView}
-                      <ChevronRight size={16} aria-hidden />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </>
+          <AdminDeptStatusList
+            rows={overviewDeptRows}
+            dash={dash}
+            onViewDepartment={(department) => {
+              onSelectDepartment(department);
+              setDetailTab('departments');
+            }}
+          />
         )}
       </section>
     </div>
@@ -689,76 +664,7 @@ export function AdminDashboardPage({
           {deptAggSorted.length === 0 ? (
             <p className="empty">{dash.noRows}</p>
           ) : (
-            <>
-              <div className="admin-dept-table-desktop">
-                <table className="admin-dept-status-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">{dash.adminDeptColDept}</th>
-                      <th scope="col">{dash.adminDeptColRate}</th>
-                      <th scope="col">{dash.adminDeptColSafe}</th>
-                      <th scope="col">{dash.adminDeptColNeed}</th>
-                      <th scope="col">{dash.adminDeptColPending}</th>
-                      <th scope="col">
-                        <span className="sr-only">{dash.adminDeptActionView}</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deptAggSorted.map((row) => {
-                      const rate = adminDeptResponseRate(row);
-                      return (
-                        <tr key={row.department}>
-                          <td>{row.department}</td>
-                          <td>{rate}%</td>
-                          <td>{row.safe}</td>
-                          <td>{row.need_help}</td>
-                          <td>{row.pending}</td>
-                          <td>
-                            <button
-                              type="button"
-                              className="btn ghost btn-sm admin-dept-view-btn"
-                              onClick={() => onSelectDepartment(row.department)}
-                            >
-                              {dash.adminDeptActionView}
-                              <ChevronRight size={16} aria-hidden />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="admin-dept-cards-mobile">
-                {deptAggSorted.map((row) => {
-                  const rate = adminDeptResponseRate(row);
-                  return (
-                    <div key={row.department} className="admin-dept-mobile-card">
-                      <div className="admin-dept-mobile-card-top">
-                        <strong>{row.department}</strong>
-                        <span className="muted-text">{rate}%</span>
-                      </div>
-                      <div className="progress-track admin-dept-mini-progress">
-                        <div className="progress-fill" style={{ width: `${rate}%` }} />
-                      </div>
-                      <p className="muted-text small admin-dept-mobile-stats">
-                        {dash.kpiSafe} {row.safe} · {dash.kpiNeedHelp} {row.need_help} · {dash.kpiNoResponse}{' '}
-                        {row.pending}
-                      </p>
-                      <button
-                        type="button"
-                        className="btn ghost btn-sm admin-dept-view-btn"
-                        onClick={() => onSelectDepartment(row.department)}
-                      >
-                        {dash.adminDeptActionView}
-                        <ChevronRight size={16} aria-hidden />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
+            <AdminDeptStatusList rows={deptAggSorted} dash={dash} onViewDepartment={onSelectDepartment} />
           )}
         </section>
       ) : (

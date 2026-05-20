@@ -68,6 +68,8 @@ export function AdminEventCenterPage({
     eventTypeCatalog: { name: string }[] | null;
     departments: Department[];
     onSubmitCreate: () => Promise<boolean>;
+    onEventTypesChanged?: () => void | Promise<void>;
+    showToast?: (t: { tone: 'success' | 'warning' | 'danger' | 'info'; message: string }) => void;
   };
 }) {
   const { locale } = useLocale();
@@ -173,6 +175,8 @@ export function AdminEventCenterPage({
               setEventForm={adminQuickCreate.setEventForm}
               eventTypeCatalog={adminQuickCreate.eventTypeCatalog}
               departments={adminQuickCreate.departments}
+              onEventTypesChanged={adminQuickCreate.onEventTypesChanged}
+              showToast={adminQuickCreate.showToast}
             />
             <div className="modal-actions">
               <button

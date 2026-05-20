@@ -337,6 +337,10 @@ export type PortalStrings = {
   activateButton: string;
   closeEventButton: string;
   formLabelEventType: string;
+  formLabelNotifyTarget: string;
+  notifyScopeAll: string;
+  notifyScopeDepartments: string;
+  notifyScopeDeptHint: string;
   formLabelCustomTypeDetail: string;
   eventTypeEarthquake: string;
   eventTypeTyphoon: string;
@@ -377,7 +381,24 @@ export type PortalStrings = {
   userMgmtNamePlaceholder: string;
   userMgmtEmailPlaceholder: string;
   userMgmtDeptLabel: string;
+  userMgmtPhoneLabel: string;
+  userMgmtPhonePlaceholder: string;
+  userMgmtEmployeeNoLabel: string;
+  userMgmtEmployeeNoPlaceholder: string;
+  userMgmtDeptPickHint: string;
+  userMgmtPhoneRequired: string;
+  userMgmtEmployeeNoRequired: string;
   userMgmtTempPassword: (pw: string) => string;
+  addEventTypeLink: string;
+  addEventTypePlaceholder: string;
+  addEventTypeSubmit: string;
+  addEventTypeCancel: string;
+  userMgmtEmployeesByDept: string;
+  userMgmtEmployeesByDeptDesc: string;
+  userMgmtEmployeeCount: (n: number) => string;
+  userMgmtDeptRosterTitle: (deptName: string) => string;
+  userMgmtBackToDepts: string;
+  userMgmtNoEmployeesInDept: string;
   adminOverviewCreateTitle: string;
   adminOverviewCreateBody: string;
   adminOverviewCreateCta: string;
@@ -913,6 +934,10 @@ const portalZh: PortalStrings = {
   activateButton: '啟用',
   closeEventButton: '結束',
   formLabelEventType: '事件類型',
+  formLabelNotifyTarget: '通知對象',
+  notifyScopeAll: '全體員工',
+  notifyScopeDepartments: '限定部門',
+  notifyScopeDeptHint: '已選部門之子部門員工亦會收到通知。',
   formLabelCustomTypeDetail: '自訂類型說明',
   eventTypeEarthquake: '地震',
   eventTypeTyphoon: '颱風',
@@ -953,7 +978,24 @@ const portalZh: PortalStrings = {
   userMgmtNamePlaceholder: '姓名',
   userMgmtEmailPlaceholder: 'Email',
   userMgmtDeptLabel: '部門',
+  userMgmtPhoneLabel: '手機／電話',
+  userMgmtPhonePlaceholder: '例：+886912345678',
+  userMgmtEmployeeNoLabel: '員工編號',
+  userMgmtEmployeeNoPlaceholder: '例：EMP2024001',
+  userMgmtDeptPickHint: '點選一個部門（可依階層瀏覽）。',
+  userMgmtPhoneRequired: '請填寫電話或手機號碼。',
+  userMgmtEmployeeNoRequired: '請填寫員工編號。',
   userMgmtTempPassword: (pw) => `系統已產生暫時密碼（請轉交使用者並請其登入後變更）：${pw}`,
+  addEventTypeLink: '＋ 新增事件類型',
+  addEventTypePlaceholder: '新類型名稱（例：化學品外洩）',
+  addEventTypeSubmit: '新增並選用',
+  addEventTypeCancel: '取消',
+  userMgmtEmployeesByDept: '員工（依部門）',
+  userMgmtEmployeesByDeptDesc: '點選部門查看該部門員工名單。',
+  userMgmtEmployeeCount: (n) => `${n} 人`,
+  userMgmtDeptRosterTitle: (deptName) => `${deptName} · 員工名單`,
+  userMgmtBackToDepts: '返回部門列表',
+  userMgmtNoEmployeesInDept: '此部門尚無員工帳號。',
   adminOverviewCreateTitle: '建立新事件',
   adminOverviewCreateBody: '事件建立後立即生效，並向目標部門員工送出通知。',
   adminOverviewCreateCta: '前往建立事件',
@@ -1014,6 +1056,10 @@ const portalEn: PortalStrings = {
   activateButton: 'Activate',
   closeEventButton: 'Close',
   formLabelEventType: 'Event type',
+  formLabelNotifyTarget: 'Notify',
+  notifyScopeAll: 'All employees',
+  notifyScopeDepartments: 'Selected departments',
+  notifyScopeDeptHint: 'Employees in sub-departments of your selection are included.',
   formLabelCustomTypeDetail: 'Custom type detail',
   eventTypeEarthquake: 'Earthquake',
   eventTypeTyphoon: 'Typhoon',
@@ -1054,7 +1100,24 @@ const portalEn: PortalStrings = {
   userMgmtNamePlaceholder: 'Name',
   userMgmtEmailPlaceholder: 'Email',
   userMgmtDeptLabel: 'Department',
+  userMgmtPhoneLabel: 'Phone',
+  userMgmtPhonePlaceholder: 'e.g. +14155550100',
+  userMgmtEmployeeNoLabel: 'Employee number',
+  userMgmtEmployeeNoPlaceholder: 'e.g. EMP2024001',
+  userMgmtDeptPickHint: 'Select one department (hierarchy shown below).',
+  userMgmtPhoneRequired: 'Phone number is required.',
+  userMgmtEmployeeNoRequired: 'Employee number is required.',
   userMgmtTempPassword: (pw) => `Temporary password generated (share securely; user should change after login): ${pw}`,
+  addEventTypeLink: '+ Add event type',
+  addEventTypePlaceholder: 'New type name (e.g. Chemical spill)',
+  addEventTypeSubmit: 'Add and select',
+  addEventTypeCancel: 'Cancel',
+  userMgmtEmployeesByDept: 'Employees by department',
+  userMgmtEmployeesByDeptDesc: 'Tap a department to view its employee roster.',
+  userMgmtEmployeeCount: (n) => `${n}`,
+  userMgmtDeptRosterTitle: (deptName) => `${deptName} · Employees`,
+  userMgmtBackToDepts: 'Back to departments',
+  userMgmtNoEmployeesInDept: 'No employee accounts in this department.',
   adminOverviewCreateTitle: 'Create a new event',
   adminOverviewCreateBody: 'New events go live immediately and send activation notices to targeted employees.',
   adminOverviewCreateCta: 'Go to create event',
