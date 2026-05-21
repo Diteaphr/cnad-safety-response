@@ -31,6 +31,7 @@ services:
       - ./backend:/app
     environment:
       - ENV=development
+      - PORT=8000
       - USE_GCP=false
       - DATABASE_URL=postgresql+psycopg://user:password@postgres:5432/employee_safety
       - TEST_DATABASE_URL=postgresql+psycopg://user:password@postgres:5432/employee_safety_test

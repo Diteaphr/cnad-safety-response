@@ -186,6 +186,37 @@ curl -sS https://safety-response-api-zc5lsyet2q-de.a.run.app/health
 
 `redis` 是 `skipped` 是正常的，因為 Phase 1 還沒有部署 Memorystore。
 
+目前後端提供以下 health 檢查節點：
+
+| Endpoint | 用途 | 是否檢查外部依賴 |
+| --- | --- | --- |
+| `/live` | 輕量 liveness，確認 app process 可以回 HTTP | 否 |
+| `/ready` | readiness，確認 app、Cloud SQL、Redis 設定狀態 | 是 |
+| `/health` | 舊有相容 endpoint，目前等同 `/ready` | 是 |
+| `/health/db` | 資料庫診斷，回傳目前 DB name / schema | 是 |
+| `/health/deep` | 深層診斷，檢查必要資料表與 `alembic_version` | 是 |
+
+建議用法：
+
+- Cloud Run liveness probe：使用 `/live`，不要依賴 Cloud SQL，避免 DB 短暫故障時重啟所有 instance。
+- Cloud Run startup/readiness 或人工驗證：使用 `/ready` 或 `/health`。
+- migration / schema 交接驗證：使用 `/health/deep`。
+
+如果 `/ready`、`/health`、`/health/db` 或 `/health/deep` 檢查失敗，API 會回 HTTP `503`，避免只看 HTTP status 的監控誤判。
+
+深層檢查：
+
+```bash
+curl -sS https://safety-response-api-zc5lsyet2q-de.a.run.app/health/deep
+```
+
+應確認：
+
+- `status` 是 `ok`
+- `database` 是 `ok`
+- `schema.missing_tables` 是空陣列
+- `migration.alembic_version` 等於 `migration.expected_head`
+
 ### 2. 確認 Cloud SQL 是 private IP only
 
 ```bash

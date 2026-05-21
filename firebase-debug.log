@@ -1,0 +1,219 @@
+[debug] [2026-05-21T10:34:14.106Z] ----------------------------------------------------------------------
+[debug] [2026-05-21T10:34:14.110Z] Command:       /opt/homebrew/Cellar/node/25.8.2/bin/node /opt/homebrew/bin/firebase deploy --only hosting --project cnad-safety-response
+[debug] [2026-05-21T10:34:14.110Z] CLI Version:   15.18.0
+[debug] [2026-05-21T10:34:14.110Z] Platform:      darwin
+[debug] [2026-05-21T10:34:14.110Z] Node Version:  v25.8.2
+[debug] [2026-05-21T10:34:14.110Z] Time:          Thu May 21 2026 18:34:14 GMT+0800 (Taiwan Standard Time)
+[debug] [2026-05-21T10:34:14.110Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-21T10:34:14.981Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-21T10:34:14.982Z] > authorizing via signed-in user (dascupt@gmail.com)
+[debug] [2026-05-21T10:34:14.982Z] [iam] checking project cnad-safety-response for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-05-21T10:34:14.982Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:14.983Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:14.983Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/cnad-safety-response:testIamPermissions [none]
+[debug] [2026-05-21T10:34:14.983Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/cnad-safety-response:testIamPermissions  x-goog-user-project=cnad-safety-response
+[debug] [2026-05-21T10:34:14.983Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/cnad-safety-response:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-05-21T10:34:15.830Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/cnad-safety-response:testIamPermissions 200
+[debug] [2026-05-21T10:34:15.831Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/cnad-safety-response:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-05-21T10:34:15.832Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:15.832Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:15.833Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/cnad-safety-response [none]
+[debug] [2026-05-21T10:34:16.137Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/cnad-safety-response 200
+[debug] [2026-05-21T10:34:16.137Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/cnad-safety-response {"projectId":"cnad-safety-response","projectNumber":"959534192972","displayName":"CNAD Safety Response","name":"projects/cnad-safety-response","resources":{"hostingSite":"cnad-safety-response"},"state":"ACTIVE","etag":"1_3af5755c-1865-4f93-8856-6c04e7ff4172"}
+[info] 
+[info] === Deploying to 'cnad-safety-response'...
+[info] 
+[info] i  deploying hosting 
+[debug] [2026-05-21T10:34:16.141Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:16.141Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:16.141Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/cnad-safety-response/sites/cnad-safety-response [none]
+[debug] [2026-05-21T10:34:16.741Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/cnad-safety-response/sites/cnad-safety-response 200
+[debug] [2026-05-21T10:34:16.741Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/cnad-safety-response/sites/cnad-safety-response {"name":"projects/cnad-safety-response/sites/cnad-safety-response","defaultUrl":"https://cnad-safety-response.web.app","type":"DEFAULT_SITE"}
+[debug] [2026-05-21T10:34:16.743Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:16.743Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:16.743Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/versions [none]
+[debug] [2026-05-21T10:34:16.743Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2026-05-21T10:34:18.503Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/versions 200
+[debug] [2026-05-21T10:34:18.503Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/versions {"name":"projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[cnad-safety-response]: beginning deploy... 
+[info] i  hosting[cnad-safety-response]: found 10 files in frontend/dist 
+[debug] [2026-05-21T10:34:18.521Z] [hosting] uploading with 200 concurrency
+[debug] [2026-05-21T10:34:18.521Z] [hosting] hash cache [ZnJvbnRlbmQvZGlzdA] not populated
+[debug] [2026-05-21T10:34:18.533Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:18.534Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:18.534Z] [hosting] hash cache [ZnJvbnRlbmQvZGlzdA] stored for 10 files
+[debug] [2026-05-21T10:34:18.534Z] [hosting][hash queue][FINAL] {"max":9,"min":3,"avg":5.1,"active":0,"complete":10,"success":10,"errored":0,"retried":0,"total":10,"elapsed":12}
+[debug] [2026-05-21T10:34:18.535Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77:populateFiles [none]
+[debug] [2026-05-21T10:34:18.535Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77:populateFiles {"files":{"/manifest.json":"f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837","/firebase-messaging-sw.js":"f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837","/sw.js":"a920746bc4bdd71c7c148db97fd615218160aca03e7badd1b439efe2ac608944","/manifest.webmanifest":"3b3b9b80bd97e3bb36f640773a1b941b13eafd56bb79386b479e03ead3fe6ffa","/assets/workbox-window.prod.es5-vqzQaGvo.js":"c3915bb95fad36b559a98d8b904c2aecf04447317daefec6a6778413e677fef0","/workbox-8c29f6e4.js":"b1c1196c231a1f86c0214c426750920656d12a1cc156a68eb27a61a349c95f1e","/index.html":"54da171d7425322ac19b32f4c8029663078894ac45ff2a1829559d70627b327e","/assets/index-CMQp2-e_.css":"19e52a67bf3c8340147beca2ae0b33b86052e5bc33d94325b67ea382d24498fe","/assets/App-PwERF0KN.js":"73c2676e43431e97f3a5f558ab90876844a317c7bbb4d6b7481099e13e01ee3c","/assets/index-aS8tnkKl.js":"1eae3fa18354450da9b492eb2a1644a5e946a966c2be6cf74d5bfa2c6876364e"}}
+[debug] [2026-05-21T10:34:19.321Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77:populateFiles 200
+[debug] [2026-05-21T10:34:19.322Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77:populateFiles {"uploadRequiredHashes":["3b3b9b80bd97e3bb36f640773a1b941b13eafd56bb79386b479e03ead3fe6ffa","73c2676e43431e97f3a5f558ab90876844a317c7bbb4d6b7481099e13e01ee3c","1eae3fa18354450da9b492eb2a1644a5e946a966c2be6cf74d5bfa2c6876364e","c3915bb95fad36b559a98d8b904c2aecf04447317daefec6a6778413e677fef0","19e52a67bf3c8340147beca2ae0b33b86052e5bc33d94325b67ea382d24498fe","f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837","a920746bc4bdd71c7c148db97fd615218160aca03e7badd1b439efe2ac608944","b1c1196c231a1f86c0214c426750920656d12a1cc156a68eb27a61a349c95f1e","54da171d7425322ac19b32f4c8029663078894ac45ff2a1829559d70627b327e"],"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files"}
+[debug] [2026-05-21T10:34:19.323Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.323Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.323Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.323Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.324Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.324Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.324Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.324Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.324Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.325Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:19.326Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/3b3b9b80bd97e3bb36f640773a1b941b13eafd56bb79386b479e03ead3fe6ffa [none]
+[debug] [2026-05-21T10:34:19.326Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/3b3b9b80bd97e3bb36f640773a1b941b13eafd56bb79386b479e03ead3fe6ffa [stream]
+[debug] [2026-05-21T10:34:19.328Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/73c2676e43431e97f3a5f558ab90876844a317c7bbb4d6b7481099e13e01ee3c [none]
+[debug] [2026-05-21T10:34:19.328Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/73c2676e43431e97f3a5f558ab90876844a317c7bbb4d6b7481099e13e01ee3c [stream]
+[debug] [2026-05-21T10:34:19.330Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/1eae3fa18354450da9b492eb2a1644a5e946a966c2be6cf74d5bfa2c6876364e [none]
+[debug] [2026-05-21T10:34:19.330Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/1eae3fa18354450da9b492eb2a1644a5e946a966c2be6cf74d5bfa2c6876364e [stream]
+[debug] [2026-05-21T10:34:19.331Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/c3915bb95fad36b559a98d8b904c2aecf04447317daefec6a6778413e677fef0 [none]
+[debug] [2026-05-21T10:34:19.331Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/c3915bb95fad36b559a98d8b904c2aecf04447317daefec6a6778413e677fef0 [stream]
+[debug] [2026-05-21T10:34:19.333Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/19e52a67bf3c8340147beca2ae0b33b86052e5bc33d94325b67ea382d24498fe [none]
+[debug] [2026-05-21T10:34:19.333Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/19e52a67bf3c8340147beca2ae0b33b86052e5bc33d94325b67ea382d24498fe [stream]
+[debug] [2026-05-21T10:34:19.335Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837 [none]
+[debug] [2026-05-21T10:34:19.335Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837 [stream]
+[debug] [2026-05-21T10:34:19.336Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/a920746bc4bdd71c7c148db97fd615218160aca03e7badd1b439efe2ac608944 [none]
+[debug] [2026-05-21T10:34:19.336Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/a920746bc4bdd71c7c148db97fd615218160aca03e7badd1b439efe2ac608944 [stream]
+[debug] [2026-05-21T10:34:19.337Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/b1c1196c231a1f86c0214c426750920656d12a1cc156a68eb27a61a349c95f1e [none]
+[debug] [2026-05-21T10:34:19.337Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/b1c1196c231a1f86c0214c426750920656d12a1cc156a68eb27a61a349c95f1e [stream]
+[debug] [2026-05-21T10:34:19.337Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/54da171d7425322ac19b32f4c8029663078894ac45ff2a1829559d70627b327e [none]
+[debug] [2026-05-21T10:34:19.338Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/54da171d7425322ac19b32f4c8029663078894ac45ff2a1829559d70627b327e [stream]
+[debug] [2026-05-21T10:34:19.338Z] [hosting][populate queue][FINAL] {"max":793,"min":793,"avg":793,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":805}
+[debug] [2026-05-21T10:34:19.339Z] [hosting] uploads queued: 9
+[debug] [2026-05-21T10:34:20.425Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/c3915bb95fad36b559a98d8b904c2aecf04447317daefec6a6778413e677fef0 200
+[debug] [2026-05-21T10:34:20.426Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/c3915bb95fad36b559a98d8b904c2aecf04447317daefec6a6778413e677fef0 [stream]
+[debug] [2026-05-21T10:34:20.438Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/b1c1196c231a1f86c0214c426750920656d12a1cc156a68eb27a61a349c95f1e 200
+[debug] [2026-05-21T10:34:20.439Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/b1c1196c231a1f86c0214c426750920656d12a1cc156a68eb27a61a349c95f1e [stream]
+[info] i  hosting: uploading new files [2/9] (22%) 
+[debug] [2026-05-21T10:34:20.643Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837 200
+[debug] [2026-05-21T10:34:20.643Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837 [stream]
+[debug] [2026-05-21T10:34:20.726Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/3b3b9b80bd97e3bb36f640773a1b941b13eafd56bb79386b479e03ead3fe6ffa 200
+[debug] [2026-05-21T10:34:20.726Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/3b3b9b80bd97e3bb36f640773a1b941b13eafd56bb79386b479e03ead3fe6ffa [stream]
+[debug] [2026-05-21T10:34:20.741Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/19e52a67bf3c8340147beca2ae0b33b86052e5bc33d94325b67ea382d24498fe 200
+[debug] [2026-05-21T10:34:20.742Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/19e52a67bf3c8340147beca2ae0b33b86052e5bc33d94325b67ea382d24498fe [stream]
+[debug] [2026-05-21T10:34:20.745Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/1eae3fa18354450da9b492eb2a1644a5e946a966c2be6cf74d5bfa2c6876364e 200
+[debug] [2026-05-21T10:34:20.746Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/1eae3fa18354450da9b492eb2a1644a5e946a966c2be6cf74d5bfa2c6876364e [stream]
+[debug] [2026-05-21T10:34:20.750Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/a920746bc4bdd71c7c148db97fd615218160aca03e7badd1b439efe2ac608944 200
+[debug] [2026-05-21T10:34:20.750Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/a920746bc4bdd71c7c148db97fd615218160aca03e7badd1b439efe2ac608944 [stream]
+[debug] [2026-05-21T10:34:20.782Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/54da171d7425322ac19b32f4c8029663078894ac45ff2a1829559d70627b327e 200
+[debug] [2026-05-21T10:34:20.782Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/54da171d7425322ac19b32f4c8029663078894ac45ff2a1829559d70627b327e [stream]
+[debug] [2026-05-21T10:34:21.037Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/73c2676e43431e97f3a5f558ab90876844a317c7bbb4d6b7481099e13e01ee3c 200
+[debug] [2026-05-21T10:34:21.037Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/cnad-safety-response/versions/6c0e677906e59f77/files/73c2676e43431e97f3a5f558ab90876844a317c7bbb4d6b7481099e13e01ee3c [stream]
+[debug] [2026-05-21T10:34:21.037Z] [hosting][upload queue][FINAL] {"max":1714,"min":1102,"avg":1375,"active":0,"complete":9,"success":9,"errored":0,"retried":0,"total":9,"elapsed":1715}
+[info] i  hosting: upload complete 
+[info] ✔  hosting[cnad-safety-response]: file upload complete 
+[debug] [2026-05-21T10:34:21.038Z] [hosting] deploy completed after 2532ms
+[debug] [2026-05-21T10:34:21.038Z] [
+  {
+    "config": {
+      "public": "frontend/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "headers": [
+        {
+          "source": "/index.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate, max-age=0"
+            }
+          ]
+        },
+        {
+          "source": "/sw.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate, max-age=0"
+            }
+          ]
+        },
+        {
+          "source": "/firebase-messaging-sw.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate, max-age=0"
+            }
+          ]
+        },
+        {
+          "source": "/registerSW.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate, max-age=0"
+            }
+          ]
+        },
+        {
+          "source": "/manifest.webmanifest",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate, max-age=0"
+            }
+          ]
+        },
+        {
+          "source": "/workbox-*.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate, max-age=0"
+            }
+          ]
+        },
+        {
+          "source": "/assets/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=31536000, immutable"
+            }
+          ]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "site": "cnad-safety-response"
+    },
+    "version": "projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77"
+  }
+]
+[info] i  hosting[cnad-safety-response]: finalizing version... 
+[debug] [2026-05-21T10:34:21.041Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:21.041Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:21.042Z] >>> [apiv2][query] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/versions/6c0e677906e59f77 updateMask=status%2Cconfig
+[debug] [2026-05-21T10:34:21.042Z] >>> [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/versions/6c0e677906e59f77 {"status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}],"headers":[{"glob":"/index.html","headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"}},{"glob":"/sw.js","headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"}},{"glob":"/firebase-messaging-sw.js","headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"}},{"glob":"/registerSW.js","headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"}},{"glob":"/manifest.webmanifest","headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"}},{"glob":"/workbox-*.js","headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"}},{"glob":"/assets/**","headers":{"Cache-Control":"public, max-age=31536000, immutable"}}]}}
+[debug] [2026-05-21T10:34:21.936Z] <<< [apiv2][status] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/versions/6c0e677906e59f77 200
+[debug] [2026-05-21T10:34:21.936Z] <<< [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/versions/6c0e677906e59f77 {"name":"projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77","status":"FINALIZED","config":{"headers":[{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/index.html"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/sw.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/firebase-messaging-sw.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/registerSW.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/manifest.webmanifest"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/workbox-*.js"},{"headers":{"Cache-Control":"public, max-age=31536000, immutable"},"glob":"/assets/**"}],"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-05-21T10:34:17.124893Z","createUser":{"email":"dascupt@gmail.com"},"finalizeTime":"2026-05-21T10:34:21.781532Z","finalizeUser":{"email":"dascupt@gmail.com"}}
+[debug] [2026-05-21T10:34:21.936Z] [hosting] finalized version for cnad-safety-response:[object Object]
+[info] ✔  hosting[cnad-safety-response]: version finalized 
+[info] i  hosting[cnad-safety-response]: releasing new version... 
+[debug] [2026-05-21T10:34:21.937Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:21.937Z] Checked if tokens are valid: true, expires at: 1779362607244
+[debug] [2026-05-21T10:34:21.937Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/channels/live/releases versionName=projects%2F959534192972%2Fsites%2Fcnad-safety-response%2Fversions%2F6c0e677906e59f77
+[debug] [2026-05-21T10:34:21.937Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/channels/live/releases {}
+[debug] [2026-05-21T10:34:22.636Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/channels/live/releases 200
+[debug] [2026-05-21T10:34:22.636Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/cnad-safety-response/channels/live/releases {"name":"projects/959534192972/sites/cnad-safety-response/channels/live/releases/1779359661804000","version":{"name":"projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77","status":"FINALIZED","config":{"headers":[{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/index.html"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/sw.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/firebase-messaging-sw.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/registerSW.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/manifest.webmanifest"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/workbox-*.js"},{"headers":{"Cache-Control":"public, max-age=31536000, immutable"},"glob":"/assets/**"}],"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-05-21T10:34:17.124893Z","createUser":{"email":"dascupt@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLC6MigDueuWDEEw_AskixTBrfnvPpdsdlXhzE2E4Dqfb-frEeiig"},"finalizeTime":"2026-05-21T10:34:21.781532Z","finalizeUser":{"email":"dascupt@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLC6MigDueuWDEEw_AskixTBrfnvPpdsdlXhzE2E4Dqfb-frEeiig"}},"type":"DEPLOY","releaseTime":"2026-05-21T10:34:21.804Z","releaseUser":{"email":"dascupt@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLC6MigDueuWDEEw_AskixTBrfnvPpdsdlXhzE2E4Dqfb-frEeiig"}}
+[debug] [2026-05-21T10:34:22.637Z] [hosting] release: {"name":"projects/959534192972/sites/cnad-safety-response/channels/live/releases/1779359661804000","version":{"name":"projects/959534192972/sites/cnad-safety-response/versions/6c0e677906e59f77","status":"FINALIZED","config":{"headers":[{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/index.html"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/sw.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/firebase-messaging-sw.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/registerSW.js"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/manifest.webmanifest"},{"headers":{"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0"},"glob":"/workbox-*.js"},{"headers":{"Cache-Control":"public, max-age=31536000, immutable"},"glob":"/assets/**"}],"rewrites":[{"glob":"**","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-05-21T10:34:17.124893Z","createUser":{"email":"dascupt@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLC6MigDueuWDEEw_AskixTBrfnvPpdsdlXhzE2E4Dqfb-frEeiig"},"finalizeTime":"2026-05-21T10:34:21.781532Z","finalizeUser":{"email":"dascupt@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLC6MigDueuWDEEw_AskixTBrfnvPpdsdlXhzE2E4Dqfb-frEeiig"}},"type":"DEPLOY","releaseTime":"2026-05-21T10:34:21.804Z","releaseUser":{"email":"dascupt@gmail.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLC6MigDueuWDEEw_AskixTBrfnvPpdsdlXhzE2E4Dqfb-frEeiig"}}
+[info] ✔  hosting[cnad-safety-response]: release complete 
+[info] 
+[info] ✔  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/cnad-safety-response/overview
+[info] Hosting URL: https://cnad-safety-response.web.app
