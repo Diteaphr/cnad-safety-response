@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ConfirmModal } from './components/ConfirmModal';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Toast } from './components/Toast';
 import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
 import { DirectReportsListPage } from './profile/DirectReportsListPage';
+import { ProfileOnboardingPage } from './profile/ProfileOnboardingPage';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
-import { LoginPage, RegisterPage, RoleSelectionPage } from './features/auth/AuthScreens';
+import { LoginPage } from './features/auth/AuthScreens';
 import { SupervisorDashboardPage, AdminDashboardPage, TeamDashboardHomePage } from './features/dashboard/DashboardPages';
-import { EventManagementPage, EventSelectionPage, NotificationPage, UserManagementPage } from './features/events/EventAndAdminPages';
+import {
+  GlobalNotificationInboxPage,
+  UserManagementPage,
+} from './features/events/EventAndAdminPages';
+import { AdminEventCenterPage } from './features/events/AdminEventCenterPage';
 import {
   EmployeeHomePage,
   MemberPriorityHomePage,
@@ -15,70 +19,76 @@ import {
   type MemberHomeRow,
 } from './features/member/memberScreens';
 import {
-  activateEventApi,
   clearAccessToken,
   closeEventApi,
   createEventApi,
-  demoAccountsFallbackSeeded,
   getAdminDashboardApi,
-  getDemoAccounts,
   getDepartments,
   getEventTypesApi,
   getEvents,
-  getFailedNotificationsForEventApi,
   getMyNotificationsApi,
+  getMyProfileApi,
   getReports,
   getSupervisorDashboardApi,
   getUsers,
-  loginDemoUserApi,
   loginWithEmailApi,
-  retryFailedNotificationApi,
+  PORTAL_ACCESS_TOKEN_STORAGE_KEY,
+  PORTAL_SURFACE_STORAGE_KEY,
   submitReportApi,
   sendEventRemindersApi,
   type AdminDashboardApi,
-  type DemoAccount,
-  type FailedNotificationRow,
   type PortalNotificationRow,
   type SupervisorDashboardApi,
 } from './api';
-import {
-  appendReminderAudit,
-  buildNotificationPageSummary,
-  loadContactedMap,
-  reminderHistoryForEvent,
-  saveContactedMap,
-} from './lib/eventLocalPersist';
+import { deriveUserCapabilities, initialSurfaceFromRoles } from './lib/portalSessionRoles';
+import { cloneMockCatalog, demoRoleAccounts } from './mockData';
+import { appendReminderAudit, loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
 import { useLocale } from './locale/LocaleContext';
 import { getStrings } from './locale/strings';
 import type {
+  AdminEventListRow,
+  AppSurface,
   Department,
   EventItem,
   NavKey,
-  Role,
   SafetyResponse,
   ToastState,
   User,
+  UserCapabilities,
 } from './types';
+import { compareEventsByStartThenCreatedDesc } from './types';
+import { scrollPortalMainToTop } from './lib/scrollPortalMain';
 
-type AuthMode = 'login' | 'register';
+const emptyCaps: UserCapabilities = {
+  canManage: false,
+  canViewTeam: false,
+  hasStaffPortal: false,
+};
 
 interface SessionState {
   isLoggedIn: boolean;
   user: User | null;
-  availableRoles: Role[];
-  currentRole: Role | null;
+  surface: AppSurface;
+  caps: UserCapabilities;
 }
 
-const roleDefaultNav: Record<Role, NavKey> = {
-  employee: 'member-home',
-  supervisor: 'member-home',
-  admin: 'admin-dashboard',
-};
+const ADMIN_ONLY_NAV: NavKey[] = ['admin-dashboard', 'admin-event-detail', 'user-management'];
+const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
+  'member-home',
+  'team-dashboard-home',
+  'employee-event-detail',
+  'supervisor-event-detail',
+];
 
 function App() {
   const { locale } = useLocale();
-  const [session, setSession] = useState<SessionState>({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
+  const [session, setSession] = useState<SessionState>({
+    isLoggedIn: false,
+    user: null,
+    surface: 'member',
+    caps: emptyCaps,
+  });
   const [navKey, setNavKey] = useState<NavKey>('member-home');
   const [supervisorTeamNudge, setSupervisorTeamNudge] = useState<null | { pendingPct: number; eventTitle: string }>(null);
   const [supervisorOpenedDetailFrom, setSupervisorOpenedDetailFrom] = useState<'member-home' | 'team-dashboard-home'>(
@@ -86,8 +96,8 @@ function App() {
   );
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([]);
+  /** Demo 登入：畫面資料來自 `mockData.ts`，不呼叫後端（方便前端離線預覽）。 */
+  const [useMockOfflineCatalog, setUseMockOfflineCatalog] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -108,58 +118,116 @@ function App() {
   const [supervisorDashboard, setSupervisorDashboard] = useState<SupervisorDashboardApi | null>(null);
   const [adminDashboard, setAdminDashboard] = useState<AdminDashboardApi | null>(null);
   const [myNotifications, setMyNotifications] = useState<PortalNotificationRow[]>([]);
-  const [failedNotificationRows, setFailedNotificationRows] = useState<FailedNotificationRow[]>([]);
-  const [loadingFailedRows, setLoadingFailedRows] = useState(false);
   const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<number | null>(null);
   const [contactedByEvent, setContactedByEvent] = useState<Record<string, Record<string, boolean>>>({});
-  const [auditEpoch, setAuditEpoch] = useState(0);
-  const [showActivateModal, setShowActivateModal] = useState(false);
-  const [eventToActivate, setEventToActivate] = useState<string | null>(null);
   const [selectedEmployeeEventId, setSelectedEmployeeEventId] = useState('');
   const [selectedSupervisorEventId, setSelectedSupervisorEventId] = useState('');
   const [selectedAdminEventId, setSelectedAdminEventId] = useState('');
-  const [selectedNotificationEventId, setSelectedNotificationEventId] = useState('');
   const eventsSelectionInitialized = useRef(false);
   const supervisorDashEventIdRef = useRef('');
   const adminDashEventIdRef = useRef('');
+  const [adminDepartmentFilter, setAdminDepartmentFilter] = useState<string | null>(null);
+  const [closingAdminEventId, setClosingAdminEventId] = useState<string | null>(null);
+  const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
 
-  const demoAccountsForLogin = useMemo(
-    () => (demoAccounts.length > 0 ? demoAccounts : demoAccountsFallbackSeeded),
-    [demoAccounts],
-  );
+  const loadCatalogFromApi = useCallback(async () => {
+    setCatalogError(null);
+    try {
+      const [deptRows, userRows, evRows, respRows, typeRows] = await Promise.all([
+        getDepartments(),
+        getUsers(),
+        getEvents(),
+        getReports(),
+        getEventTypesApi().catch(() => []),
+      ]);
+      setDepartments(deptRows);
+      setUsers(userRows);
+      setEvents(evRows);
+      setResponses(respRows);
+      setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
+    } catch (e) {
+      setCatalogError(e instanceof Error ? e.message : '無法載入資料');
+    } finally {
+      setCatalogLoaded(true);
+    }
+  }, []);
+
+  const refreshEventTypes = useCallback(async () => {
+    try {
+      const typeRows = await getEventTypesApi();
+      setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
+    } catch {
+      /* keep cached catalog */
+    }
+  }, []);
+
+  const mergeUserIntoList = useCallback((user: User) => {
+    setUsers((prev) => {
+      const idx = prev.findIndex((u) => u.id === user.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = user;
+        return next;
+      }
+      return [...prev, user];
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
+      await loadCatalogFromApi();
+      if (cancelled) return;
+      let token: string | null = null;
       try {
-        setCatalogError(null);
-        const [accounts, deptRows, userRows, evRows, respRows, typeRows] = await Promise.all([
-          getDemoAccounts(),
-          getDepartments(),
-          getUsers(),
-          getEvents(),
-          getReports(),
-          getEventTypesApi().catch(() => []),
-        ]);
+        token =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY)?.trim() ?? null
+            : null;
+      } catch {
+        token = null;
+      }
+      if (!token) return;
+      try {
+        const user = await getMyProfileApi();
         if (cancelled) return;
-        setDemoAccounts(accounts);
-        setDepartments(deptRows);
-        setUsers(userRows);
-        setEvents(evRows);
-        setResponses(respRows);
-        setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
-        setCatalogLoaded(true);
-      } catch (e) {
-        if (!cancelled) {
-          setCatalogError(e instanceof Error ? e.message : '無法載入資料');
-          setCatalogLoaded(true);
+        setUseMockOfflineCatalog(false);
+        mergeUserIntoList(user);
+        const capsNext = deriveUserCapabilities(user.roles);
+        let surfaceNext = initialSurfaceFromRoles(user.roles);
+        try {
+          const stored =
+            typeof window !== 'undefined' ? window.localStorage.getItem(PORTAL_SURFACE_STORAGE_KEY) : null;
+          if (stored === 'adminCenter' && capsNext.canManage) surfaceNext = 'adminCenter';
+        } catch {
+          /* ignore */
         }
+        setSession({
+          isLoggedIn: true,
+          user,
+          surface: surfaceNext,
+          caps: capsNext,
+        });
+        setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
+      } catch {
+        if (!cancelled) clearAccessToken();
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadCatalogFromApi, mergeUserIntoList]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn || useMockOfflineCatalog) return;
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(PORTAL_SURFACE_STORAGE_KEY, session.surface);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [session.isLoggedIn, session.surface, useMockOfflineCatalog]);
 
   useEffect(() => {
     if (events.length === 0) return;
@@ -169,7 +237,6 @@ function App() {
     setSelectedEmployeeEventId(id);
     setSelectedSupervisorEventId(id);
     setSelectedAdminEventId(id);
-    setSelectedNotificationEventId(id);
   }, [events]);
 
   useEffect(() => {
@@ -181,20 +248,25 @@ function App() {
 
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
-  const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
   const [eventForm, setEventForm] = useState({
     title: '',
     type: 'Earthquake',
     customType: '',
     description: '',
     startAt: new Date().toISOString().slice(0, 16),
+    location: '',
+    targetDepartmentIds: [] as string[],
   });
 
   const employeeDeptId = session.user?.departmentId;
 
   const employeeAccessibleEvents = useMemo(() => {
-    if (!employeeDeptId) return [];
-    return events.filter((event) => event.status !== 'draft' && event.targetDepartmentIds.includes(employeeDeptId));
+    return events.filter((event) => {
+      if (event.status !== 'active' && event.status !== 'closed') return false;
+      const tids = event.targetDepartmentIds;
+      if (tids.length === 0) return true; // company-wide: visible to everyone
+      return !!employeeDeptId && tids.includes(employeeDeptId);
+    });
   }, [events, employeeDeptId]);
 
   const subordinateUserIds = useMemo(
@@ -249,14 +321,14 @@ function App() {
         const pendA = a.teamCounts?.pending ?? 0;
         const pendB = b.teamCounts?.pending ?? 0;
         if (pendA !== pendB) return pendB - pendA;
-        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+        return compareEventsByStartThenCreatedDesc(a.event, b.event);
       });
     } else {
       enriched.sort((a, b) => {
         const ap = a.latest ? 1 : 0;
         const bp = b.latest ? 1 : 0;
         if (ap !== bp) return ap - bp;
-        return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+        return compareEventsByStartThenCreatedDesc(a.event, b.event);
       });
     }
 
@@ -336,9 +408,9 @@ function App() {
       const ra = a.teamCounts.pending / Math.max(a.teamCounts.total, 1);
       const rb = b.teamCounts.pending / Math.max(b.teamCounts.total, 1);
       if (ra !== rb) return rb - ra;
-      return new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime();
+      return compareEventsByStartThenCreatedDesc(a.event, b.event);
     });
-    const closed = build('closed').sort((a, b) => new Date(b.event.startAt).getTime() - new Date(a.event.startAt).getTime());
+    const closed = build('closed').sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
     return { active, closed };
   }, [hasDirectReports, employeeDeptId, employeeAccessibleEvents, subordinateUserIds, responses]);
 
@@ -350,10 +422,13 @@ function App() {
       return 'member-home';
     }
     if (navKey === 'admin-event-detail') return 'admin-dashboard';
-    if (navKey === 'notifications-event-detail') return 'notifications';
     if (navKey === 'profile-direct-reports-list' || navKey === 'profile-direct-report-history') return 'profile';
     return navKey;
   }, [navKey, supervisorOpenedDetailFrom]);
+
+  useLayoutEffect(() => {
+    scrollPortalMainToTop();
+  }, [navKey]);
   const selectedEmployeeEvent = useMemo(
     () => events.find((event) => event.id === selectedEmployeeEventId) ?? null,
     [events, selectedEmployeeEventId],
@@ -441,37 +516,51 @@ function App() {
     }
   }, [navKey, session.user?.id, profileSubordinateUserId, profileDirectReportIds]);
 
+  const supervisorUi = session.surface === 'member' && session.caps.canViewTeam;
+  const adminUi = session.surface === 'adminCenter';
+
+  useEffect(() => {
+    if (!session.isLoggedIn || !session.user) return;
+    const { surface, caps } = session;
+    const nk = navKey;
+    if (surface === 'member' && ADMIN_ONLY_NAV.includes(nk)) {
+      setNavKey('member-home');
+      return;
+    }
+    if (surface === 'adminCenter' && MEMBER_EXCLUSIVE_NAV.includes(nk)) {
+      setNavKey('admin-dashboard');
+      return;
+    }
+    if (surface === 'member' && !caps.canViewTeam && (nk === 'team-dashboard-home' || nk === 'supervisor-event-detail')) {
+      setNavKey('member-home');
+    }
+  }, [session.isLoggedIn, session.user, session.surface, session.caps.canViewTeam, navKey]);
+
   const supervisorViewAligned =
-    session.currentRole === 'supervisor' &&
+    supervisorUi &&
     !!supervisorDashboard?.event?.id &&
     supervisorDashboard!.event!.id === selectedSupervisorEventId;
 
   const adminViewAligned =
-    session.currentRole === 'admin' && !!adminDashboard?.event?.id && adminDashboard!.event!.id === selectedAdminEventId;
+    adminUi && !!adminDashboard?.event?.id && adminDashboard!.event!.id === selectedAdminEventId;
 
   /** 不依後端快照、僅以前端快照彙總（事件或角色與 dashboard 對齊失敗時使用） */
   const scopedClientRows = useMemo(() => {
     if (!selectedSupervisorEvent && !selectedAdminEvent) return [];
-    const eventId =
-      session.currentRole === 'admin'
-        ? selectedAdminEvent?.id
-        : session.currentRole === 'supervisor'
-          ? selectedSupervisorEvent?.id
-          : '';
+    const eventId = adminUi ? selectedAdminEvent?.id : supervisorUi ? selectedSupervisorEvent?.id : '';
     const myId = session.user?.id;
     if (!eventId || !myId) return [];
 
-    const supervisorIds = users
-      .filter((user) => user.managerId === myId && user.roles.includes('employee'))
-      .map((user) => user.id);
+    /** 與後端 `list_line_reports` / API `managerId`（derived line manager）一致 */
+    const lineReportIds = users.filter((user) => user.managerId === myId).map((user) => user.id);
 
     const sourceUsers = users.filter((u) => {
-      if (!u.roles.includes('employee')) return false;
-      if (session.currentRole === 'admin') {
+      if (adminUi) {
+        if (!u.roles.includes('employee')) return false;
         const tids = selectedAdminEvent?.targetDepartmentIds ?? [];
         return tids.length === 0 ? true : tids.includes(u.departmentId);
       }
-      return supervisorIds.includes(u.id);
+      return lineReportIds.includes(u.id);
     });
 
     return sourceUsers.map((u) => {
@@ -494,23 +583,76 @@ function App() {
     selectedSupervisorEvent,
     selectedAdminEvent,
     responses,
-    session.currentRole,
+    adminUi,
+    supervisorUi,
     session.user?.id,
     departments,
     users,
   ]);
 
+  const adminEventListRows = useMemo((): AdminEventListRow[] => {
+    return events.map((event) => {
+      const tids = event.targetDepartmentIds ?? [];
+      const sourceUsers = users.filter((u) => {
+        if (!u.roles.includes('employee')) return false;
+        return tids.length === 0 ? true : tids.includes(u.departmentId);
+      });
+      let safe = 0;
+      let needHelp = 0;
+      let pending = 0;
+      let lastTs = new Date(event.startAt ?? event.createdAt).getTime();
+      for (const u of sourceUsers) {
+        const latest = responses
+          .filter((r) => r.eventId === event.id && r.userId === u.id)
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+        const st = latest?.status ?? 'pending';
+        if (st === 'safe') safe++;
+        else if (st === 'need_help') needHelp++;
+        else pending++;
+        if (latest?.updatedAt) {
+          const t = new Date(latest.updatedAt).getTime();
+          if (t > lastTs) lastTs = t;
+        }
+      }
+      const total = sourceUsers.length;
+      const reported = safe + needHelp;
+      const responseRate = total ? Math.round((reported / total) * 100) : 0;
+      return {
+        event,
+        total,
+        safe,
+        needHelp,
+        pending,
+        responseRate,
+        reported,
+        lastActivityAt: lastTs,
+      };
+    })
+    .sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
+  }, [events, users, responses]);
+
   const employeeRows = useMemo(() => {
-    if (session.currentRole === 'supervisor' && supervisorViewAligned && supervisorDashboard?.event?.id === selectedSupervisorEvent?.id) {
+    if (supervisorUi && supervisorViewAligned && supervisorDashboard?.event?.id === selectedSupervisorEvent?.id) {
       const eventId = supervisorDashboard!.event!.id;
       return supervisorDashboard!.team.map((t) => {
         const uid = t.user_id;
         const latest = responses
           .filter((r) => r.eventId === eventId && r.userId === uid)
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-        const stRaw = String(t.status);
-        const st: 'safe' | 'need_help' | 'pending' =
-          stRaw === 'safe' ? 'safe' : stRaw === 'need_help' ? 'need_help' : 'pending';
+        const raw = t.status;
+        let st: 'safe' | 'need_help' | 'pending' = 'pending';
+        if (raw === 'safe' || raw === 'need_help' || raw === 'pending') {
+          st = raw;
+        } else if (t.sub_team_summary) {
+          const sub = t.sub_team_summary;
+          if (sub.need_help > 0) st = 'need_help';
+          else if (sub.pending > 0) st = 'pending';
+          else st = 'safe';
+        } else if (latest?.status === 'safe' || latest?.status === 'need_help') {
+          st = latest.status;
+        } else if (t.needs_follow_up === false) {
+          st = 'safe';
+        }
         const uMeta = users.find((x) => x.id === uid);
         const noteMerge = latest ? [latest.location, latest.comment].filter(Boolean).join(' · ') : undefined;
         return {
@@ -527,7 +669,7 @@ function App() {
     }
     return scopedClientRows;
   }, [
-    session.currentRole,
+    supervisorUi,
     supervisorViewAligned,
     supervisorDashboard,
     selectedSupervisorEvent?.id,
@@ -536,17 +678,31 @@ function App() {
     scopedClientRows,
   ]);
 
+  const adminEventDetailRows = useMemo(() => {
+    if (!adminDepartmentFilter) return employeeRows;
+    return employeeRows.filter((r) => r.department === adminDepartmentFilter);
+  }, [adminDepartmentFilter, employeeRows]);
+
   const stats = useMemo(() => {
-    if (session.currentRole === 'supervisor' && supervisorViewAligned && supervisorDashboard) {
-      const kpis = supervisorDashboard.kpis;
-      const totalTeam = supervisorDashboard.team.length;
-      const safe = kpis.safe;
-      const needHelp = kpis.need_help;
-      const pending = kpis.pending;
-      const responseRate = totalTeam ? Math.round(((safe + needHelp) / totalTeam) * 100) : 0;
-      return { total: totalTeam, safe, needHelp, pending, responseRate };
+    if (supervisorUi && supervisorViewAligned && supervisorDashboard) {
+      /** 與下方員工表同源：`team` 僅直屬部屬列；勿用 `kpis`（為整棵組織樹匯總）以免總人數與清單不一致 */
+      const total = employeeRows.length;
+      const safe = employeeRows.filter((r) => r.status === 'safe').length;
+      const needHelp = employeeRows.filter((r) => r.status === 'need_help').length;
+      const pending = employeeRows.filter((r) => r.status === 'pending').length;
+      const responseRate = total ? Math.min(100, Math.round(((safe + needHelp) / total) * 100)) : 0;
+      return { total, safe, needHelp, pending, responseRate };
     }
-    if (session.currentRole === 'admin' && adminViewAligned && adminDashboard) {
+    if (adminUi && adminDepartmentFilter) {
+      const scoped = employeeRows.filter((r) => r.department === adminDepartmentFilter);
+      const total = scoped.length;
+      const safe = scoped.filter((r) => r.status === 'safe').length;
+      const needHelp = scoped.filter((r) => r.status === 'need_help').length;
+      const pending = scoped.filter((r) => r.status === 'pending').length;
+      const responseRate = total ? Math.round(((safe + needHelp) / total) * 100) : 0;
+      return { total, safe, needHelp, pending, responseRate };
+    }
+    if (adminUi && adminViewAligned && adminDashboard) {
       const kpis = adminDashboard.kpis;
       const total = kpis.targeted;
       const safe = kpis.safe;
@@ -561,7 +717,17 @@ function App() {
     const pending = total - safe - needHelp;
     const responseRate = total ? Math.round(((safe + needHelp) / total) * 100) : 0;
     return { total, safe, needHelp, pending, responseRate };
-  }, [session.currentRole, supervisorViewAligned, supervisorDashboard, adminViewAligned, adminDashboard, scopedClientRows]);
+  }, [
+    supervisorUi,
+    adminUi,
+    supervisorViewAligned,
+    supervisorDashboard,
+    adminViewAligned,
+    adminDashboard,
+    adminDepartmentFilter,
+    employeeRows,
+    scopedClientRows,
+  ]);
 
   const showToast = useCallback((next: ToastState) => {
     setToast(next);
@@ -570,6 +736,10 @@ function App() {
 
   const refreshOperationalData = useCallback(async () => {
     if (!session.isLoggedIn) return;
+    if (useMockOfflineCatalog) {
+      setDashboardUpdatedAt(Date.now());
+      return;
+    }
     try {
       const [repFresh, evtFresh] = await Promise.all([getReports(), getEvents()]);
       setResponses(repFresh);
@@ -578,14 +748,14 @@ function App() {
       /* retain cache */
     }
     try {
-      if (session.currentRole === 'supervisor') {
+      if (session.surface === 'member' && session.caps.canViewTeam) {
         const eid = supervisorDashEventIdRef.current.trim();
-        const sd = await getSupervisorDashboardApi(eid || undefined);
+        const sd = await getSupervisorDashboardApi(eid ? eid : undefined);
         setSupervisorDashboard(sd);
       }
-      if (session.currentRole === 'admin') {
+      if (session.surface === 'adminCenter') {
         const eid = adminDashEventIdRef.current.trim();
-        const ad = await getAdminDashboardApi(eid || undefined);
+        const ad = await getAdminDashboardApi(eid ? eid : undefined);
         setAdminDashboard(ad);
       }
     } catch {
@@ -598,25 +768,12 @@ function App() {
       /* optional */
     }
     setDashboardUpdatedAt(Date.now());
-  }, [session.isLoggedIn, session.currentRole]);
+  }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, useMockOfflineCatalog]);
 
   useEffect(() => {
-    if (!session.isLoggedIn || session.currentRole === null) return;
+    if (!session.isLoggedIn) return;
     void refreshOperationalData();
-  }, [session.isLoggedIn, session.currentRole, refreshOperationalData]);
-
-  useEffect(() => {
-    if (!session.isLoggedIn || session.currentRole === null) return undefined;
-    const watchNav =
-      navKey === 'supervisor-event-detail' ||
-      navKey === 'team-dashboard-home' ||
-      navKey === 'admin-event-detail' ||
-      navKey === 'notifications' ||
-      navKey === 'notifications-event-detail';
-    if (!watchNav) return undefined;
-    const tid = window.setInterval(() => void refreshOperationalData(), 28_000);
-    return () => window.clearInterval(tid);
-  }, [session.isLoggedIn, session.currentRole, navKey, refreshOperationalData]);
+  }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, refreshOperationalData]);
 
   useEffect(() => {
     if (!session.isLoggedIn) return undefined;
@@ -633,33 +790,92 @@ function App() {
   }, [session.isLoggedIn, refreshOperationalData]);
 
   useEffect(() => {
+    setAdminDepartmentFilter(null);
+  }, [selectedAdminEventId]);
+
+  useEffect(() => {
+    if (navKey !== 'admin-event-detail') setAdminDepartmentFilter(null);
+  }, [navKey]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn || useMockOfflineCatalog) return;
+    if (!supervisorUi || !selectedSupervisorEventId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const sd = await getSupervisorDashboardApi(selectedSupervisorEventId);
+        if (!cancelled) setSupervisorDashboard(sd);
+      } catch {
+        /* keep prior snapshot */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.isLoggedIn, supervisorUi, selectedSupervisorEventId, useMockOfflineCatalog]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn || useMockOfflineCatalog) return;
+    if (!adminUi || !selectedAdminEventId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ad = await getAdminDashboardApi(selectedAdminEventId);
+        if (!cancelled) setAdminDashboard(ad);
+      } catch {
+        /* keep prior snapshot */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.isLoggedIn, adminUi, selectedAdminEventId, useMockOfflineCatalog]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn) return undefined;
+    const supervisorPaths =
+      session.surface === 'member' &&
+      session.caps.canViewTeam &&
+      (navKey === 'supervisor-event-detail' || navKey === 'team-dashboard-home');
+    const adminPaths = session.surface === 'adminCenter' && navKey === 'admin-event-detail';
+    const watchNav = supervisorPaths || adminPaths || navKey === 'notifications';
+    if (!watchNav) return undefined;
+    const tid = window.setInterval(() => void refreshOperationalData(), 28_000);
+    return () => window.clearInterval(tid);
+  }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, navKey, refreshOperationalData]);
+
+  useEffect(() => {
     if (navKey !== 'employee-event-detail') {
       setReportSubmitError(null);
     }
   }, [navKey]);
 
   useEffect(() => {
-    if (!selectedSupervisorEventId || session.currentRole !== 'supervisor') return;
+    if (!selectedSupervisorEventId || !supervisorUi) return;
     setContactedByEvent((prev) => ({
       ...prev,
       [selectedSupervisorEventId]: loadContactedMap(selectedSupervisorEventId),
     }));
-  }, [selectedSupervisorEventId, session.currentRole]);
+  }, [selectedSupervisorEventId, supervisorUi]);
 
   const toggleNeedHelpContact = useCallback(
     (userId: string) => {
-      if (!selectedSupervisorEventId || session.currentRole !== 'supervisor') return;
+      if (!selectedSupervisorEventId || !supervisorUi) return;
       const eid = selectedSupervisorEventId;
       const base = contactedByEvent[eid] ?? loadContactedMap(eid);
       const nextMap = { ...base, [userId]: !(base[userId] ?? false) };
       saveContactedMap(eid, nextMap);
       setContactedByEvent((prev) => ({ ...prev, [eid]: nextMap }));
     },
-    [contactedByEvent, selectedSupervisorEventId, session.currentRole],
+    [contactedByEvent, selectedSupervisorEventId, supervisorUi],
   );
 
   const dispatchRemindersForEvent = useCallback(
     async (eventId: string) => {
+      if (useMockOfflineCatalog) {
+        showToast({ tone: 'info', message: 'Demo 模式：未呼叫後端發送提醒。' });
+        return;
+      }
       try {
         const out = await sendEventRemindersApi(eventId);
         const rid =
@@ -674,7 +890,6 @@ function App() {
           alreadySafe: out.already_safe,
           totalTeam: out.total_team,
         });
-        setAuditEpoch((n) => n + 1);
         showToast({
           tone: 'success',
           message: `${out.message}: dispatched ${out.sent} · skipped safe ${out.already_safe}`,
@@ -684,79 +899,76 @@ function App() {
         showToast({ tone: 'danger', message: e instanceof Error ? e.message : '無法發送提醒' });
       }
     },
-    [refreshOperationalData, showToast],
+    [refreshOperationalData, showToast, useMockOfflineCatalog],
   );
 
   const handleLogin = async (demoId: string) => {
     clearAccessToken();
-    const account = demoAccountsForLogin.find((item) => item.id === demoId);
+    setUseMockOfflineCatalog(true);
+    const account = demoRoleAccounts.find((item) => item.id === demoId);
     if (!account) return;
-    const cachedUser = users.find((u) => u.id === account.userId);
-    if (!cachedUser) {
-      showToast({
-        tone: 'danger',
-        message: '載入使用者清單後才能 Demo 登入。請確認 /api/users 可走通並重新整理頁面。',
-      });
+    const snapshot = cloneMockCatalog();
+    const mockUser = snapshot.users.find((u) => u.id === account.userId);
+    if (!mockUser) {
+      showToast({ tone: 'danger', message: 'Demo 帳號設定錯誤：找不到對應使用者。' });
       return;
     }
-    try {
-      const { user: tokenUser } = await loginDemoUserApi(cachedUser.id);
-      mergeUserIntoList(tokenUser);
-      const initialRole = account.roles[0];
-      setSession({
-        isLoggedIn: true,
-        user: tokenUser,
-        availableRoles: account.roles,
-        currentRole: account.roles.length === 1 ? initialRole : null,
-      });
-      setNavKey(roleDefaultNav[initialRole]);
-    } catch (e) {
-      showToast({
-        tone: 'danger',
-        message:
-          e instanceof Error
-            ? e.message
-            : 'Demo 登入未取得 JWT（後端請升級並啟動 /api/auth/demo-login）；暫請改用 Email 登入。',
-      });
-    }
-  };
-
-  const mergeUserIntoList = (user: User) => {
-    setUsers((prev) => {
-      const idx = prev.findIndex((u) => u.id === user.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = user;
-        return next;
-      }
-      return [...prev, user];
+    eventsSelectionInitialized.current = false;
+    setDepartments(snapshot.departments);
+    setUsers(snapshot.users);
+    setEvents(snapshot.events);
+    setResponses(snapshot.responses);
+    setCatalogError(null);
+    setMyNotifications([]);
+    setSupervisorDashboard(null);
+    setAdminDashboard(null);
+    const capsNext = deriveUserCapabilities(mockUser.roles);
+    const surfaceNext = initialSurfaceFromRoles(mockUser.roles);
+    setSession({
+      isLoggedIn: true,
+      user: { ...mockUser },
+      surface: surfaceNext,
+      caps: capsNext,
     });
+    setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
+    showToast({ tone: 'info', message: 'Demo 模式：資料來自 mockData（未連資料庫）。' });
   };
 
   const handleEmailLogin = async (email: string, password: string) => {
+    setUseMockOfflineCatalog(false);
     const { user } = await loginWithEmailApi({ email, password });
+    await loadCatalogFromApi();
     mergeUserIntoList(user);
-    const roles = user.roles;
-    const initialRole = roles[0];
+    const capsNext = deriveUserCapabilities(user.roles);
+    const surfaceNext = initialSurfaceFromRoles(user.roles);
     setSession({
       isLoggedIn: true,
       user,
-      availableRoles: roles,
-      currentRole: roles.length === 1 ? initialRole : null,
+      surface: surfaceNext,
+      caps: capsNext,
     });
-    setNavKey(roleDefaultNav[initialRole]);
+    setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
   };
 
-  const pickRole = (role: Role) => {
-    setSession((prev) => ({ ...prev, currentRole: role }));
-    setNavKey(roleDefaultNav[role]);
+  const enterAdminCenter = () => {
+    setSession((prev) => ({ ...prev, surface: 'adminCenter' }));
+    setNavKey('admin-dashboard');
+    setSupervisorOpenedDetailFrom('member-home');
+    setSupervisorTeamNudge(null);
+  };
+
+  const exitAdminCenter = () => {
+    setSession((prev) => ({ ...prev, surface: 'member' }));
+    setNavKey('member-home');
     setSupervisorOpenedDetailFrom('member-home');
     setSupervisorTeamNudge(null);
   };
 
   const logout = () => {
     clearAccessToken();
-    setSession({ isLoggedIn: false, user: null, availableRoles: [], currentRole: null });
+    setUseMockOfflineCatalog(false);
+    setSession({ isLoggedIn: false, user: null, surface: 'member', caps: emptyCaps });
+    void loadCatalogFromApi();
     showToast({ tone: 'info', message: 'Logged out.' });
   };
 
@@ -778,6 +990,61 @@ function App() {
       .filter((r) => r.eventId === eventId && r.userId === uid)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
     const keepPriorAttach = !(meta?.omitStoredAttachment ?? false);
+    if (useMockOfflineCatalog) {
+      try {
+        const rid =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `local-${Date.now()}`;
+        const nextResponse: SafetyResponse = {
+          id: rid,
+          eventId,
+          userId: uid,
+          status,
+          comment: fields.comment.trim() || undefined,
+          location: fields.location.trim() || undefined,
+          attachmentName:
+            fields.attachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined) ?? undefined,
+          attachmentSizeBytes:
+            fields.attachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined) ?? undefined,
+          updatedAt: new Date().toISOString(),
+        };
+        const mergedResponses: SafetyResponse[] = [
+          ...responses.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
+          nextResponse,
+        ];
+        if (supervisorUi && subordinateUserIds.length > 0) {
+          let pend = 0;
+          for (const sid of subordinateUserIds) {
+            const lr = mergedResponses
+              .filter((r) => r.eventId === eventId && r.userId === sid)
+              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+            if (!lr) pend += 1;
+          }
+          const teamTotal = subordinateUserIds.length;
+          if (pend > 0 && teamTotal > 0) {
+            setSupervisorTeamNudge({
+              pendingPct: Math.round((pend / teamTotal) * 100),
+              eventTitle: eventRow.title,
+            });
+          } else {
+            setSupervisorTeamNudge(null);
+          }
+        } else {
+          setSupervisorTeamNudge(null);
+        }
+        clearEmployeeReportDraft(uid, eventId);
+        setResponses(mergedResponses);
+        lastSubmitMetaRef.current = null;
+        showToast({
+          tone: 'success',
+          message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}（Demo 本地）`,
+        });
+      } finally {
+        setSubmittingReportEventId(null);
+      }
+      return;
+    }
     try {
       const out = await submitReportApi({
         eventId,
@@ -798,7 +1065,7 @@ function App() {
         ...responses.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
         nextResponse,
       ];
-      if (session.currentRole === 'supervisor' && subordinateUserIds.length > 0) {
+      if (supervisorUi && subordinateUserIds.length > 0) {
         let pend = 0;
         for (const sid of subordinateUserIds) {
           const lr = mergedResponses
@@ -836,20 +1103,43 @@ function App() {
     }
   };
 
-  const createEvent = async () => {
-    if (!session.user) return;
-    const custom = eventForm.type.trim().toLowerCase() === 'other' ? eventForm.customType.trim() : '';
+  const createEvent = async (): Promise<boolean> => {
+    if (!session.user) return false;
+    if (useMockOfflineCatalog) {
+      const eid =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `e-local-${Date.now()}`;
+      const newEvent: EventItem = {
+        id: eid,
+        title: eventForm.title || 'Untitled Event',
+        type: eventForm.type,
+        description: eventForm.description,
+        targetDepartmentIds: [],
+        status: 'active',
+        startAt: new Date(eventForm.startAt).toISOString(),
+        createdAt: new Date().toISOString(),
+        cardDepartment: undefined,
+        venue: undefined,
+      };
+      setEvents((prev) => [newEvent, ...prev]);
+      showToast({ tone: 'success', message: 'Demo：事件已加入本機清單（未寫入後端）。' });
+      return true;
+    }
     try {
       const out = await createEventApi(session.user.id, {
         title: eventForm.title || 'Untitled Event',
         type: eventForm.type,
         description: eventForm.description,
         startAt: new Date(eventForm.startAt).toISOString(),
-        targetDepartmentIds: departments.map((d) => d.id),
-        ...(custom ? { customTypeName: custom } : {}),
+        targetDepartmentIds: eventForm.targetDepartmentIds,
+        ...(eventForm.location.trim() ? { location: eventForm.location.trim() } : {}),
       });
       setEvents((prev) => [out.event, ...prev]);
-      showToast({ tone: 'success', message: 'Event template saved. You can activate it when an incident starts.' });
+      showToast({
+        tone: 'success',
+        message: 'Event is live. Activation notifications were sent to all employees.',
+      });
       try {
         const typeRows = await getEventTypesApi();
         setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
@@ -857,36 +1147,20 @@ function App() {
         /* ignore */
       }
       await refreshOperationalData();
+      return true;
     } catch (e) {
       showToast({ tone: 'danger', message: e instanceof Error ? e.message : '建立失敗' });
-    }
-  };
-
-  const requestActivateEvent = (eventId: string) => {
-    setEventToActivate(eventId);
-    setShowActivateModal(true);
-  };
-
-  const activateEvent = async () => {
-    if (!eventToActivate || !session.user) return;
-    try {
-      const out = await activateEventApi(session.user.id, eventToActivate);
-      await refreshOperationalData();
-      const activatedId = out.event.id;
-      setSelectedAdminEventId(activatedId);
-      setSelectedSupervisorEventId(activatedId);
-      setSelectedEmployeeEventId(activatedId);
-      setSelectedNotificationEventId(activatedId);
-      setShowActivateModal(false);
-      setEventToActivate(null);
-      showToast({ tone: 'warning', message: 'Event activated. Notifications will be sent to target users.' });
-    } catch (e) {
-      showToast({ tone: 'danger', message: e instanceof Error ? e.message : '啟用失敗' });
+      return false;
     }
   };
 
   const closeEvent = async (eventId: string) => {
     if (!session.user) return;
+    if (useMockOfflineCatalog) {
+      setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, status: 'closed' as const } : e)));
+      showToast({ tone: 'info', message: 'Demo：事件已標記為已結束（本機）。' });
+      return;
+    }
     try {
       await closeEventApi(session.user.id, eventId);
       await refreshOperationalData();
@@ -896,103 +1170,68 @@ function App() {
     }
   };
 
-  const notificationLiveSummary = useMemo(() => {
-    const eid = selectedNotificationEventId;
-    const evt = events.find((x) => x.id === eid);
-    const tids = evt?.targetDepartmentIds ?? [];
-    const targeted = users.filter(
-      (u) => u.roles.includes('employee') && (tids.length === 0 || tids.includes(u.departmentId)),
-    ).length;
-    const uniq = new Set(responses.filter((r) => r.eventId === eid).map((r) => r.userId));
-    const hist = reminderHistoryForEvent(eid);
-    const rowsMine = myNotifications.filter((n) => n.eventId === eid);
-    return buildNotificationPageSummary({
-      reminderHistory: hist,
-      apiRowsSameUser: rowsMine.map((r) => ({ channel: r.channel, status: r.status })),
-      targetedEmployeeCountForEvent: targeted,
-      responsesCountForEvent: uniq.size,
-    });
-  }, [events, users, responses, selectedNotificationEventId, myNotifications, auditEpoch]);
-
-  const reloadFailedNotificationRows = useCallback(async () => {
-    if (!session.isLoggedIn || session.currentRole !== 'admin' || !selectedNotificationEventId) {
-      setFailedNotificationRows([]);
-      return;
-    }
-    setLoadingFailedRows(true);
+  const closeEventFromList = async (eventId: string) => {
+    setClosingAdminEventId(eventId);
     try {
-      const out = await getFailedNotificationsForEventApi(selectedNotificationEventId);
-      setFailedNotificationRows(out.rows);
-    } catch {
-      setFailedNotificationRows([]);
+      await closeEvent(eventId);
     } finally {
-      setLoadingFailedRows(false);
+      setClosingAdminEventId(null);
     }
-  }, [session.isLoggedIn, session.currentRole, selectedNotificationEventId]);
-
-  useEffect(() => {
-    if (navKey !== 'notifications-event-detail') return;
-    void reloadFailedNotificationRows();
-  }, [navKey, reloadFailedNotificationRows]);
+  };
 
   const contactedForSupervisorRow = contactedByEvent[selectedSupervisorEventId] ?? {};
 
   const pendingRatioHigh =
-    session.currentRole === 'supervisor' && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
+    supervisorUi && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
   if (!session.isLoggedIn) {
-    if (authMode === 'register') {
-      return (
-        <RegisterPage
-          departments={departments}
-          loading={!catalogLoaded}
-          error={catalogError}
-          onRegisterSuccess={(user) => {
-            mergeUserIntoList(user);
-            const roles = user.roles;
-            const initialRole = roles[0];
-            setSession({
-              isLoggedIn: true,
-              user,
-              availableRoles: roles,
-              currentRole: roles.length === 1 ? initialRole : null,
-            });
-            setNavKey(roleDefaultNav[initialRole]);
-            setAuthMode('login');
-          }}
-          onBack={() => setAuthMode('login')}
-        />
-      );
-    }
     return (
       <LoginPage
-        accounts={demoAccountsForLogin}
+        accounts={demoRoleAccounts}
         loading={!catalogLoaded}
         error={catalogError}
         onLogin={handleLogin}
         onEmailLogin={handleEmailLogin}
-        onGoRegister={() => setAuthMode('register')}
       />
     );
   }
 
-  if (!session.currentRole) {
-    return <RoleSelectionPage roles={session.availableRoles} onPickRole={pickRole} />;
+
+
+  if (session.user?.needsProfileCompletion) {
+    return (
+      <>
+        <ProfileOnboardingPage
+          user={session.user}
+          showToast={showToast}
+          onCompleted={(nextUser) => {
+            mergeUserIntoList(nextUser);
+            setSession((prev) => ({
+              ...prev,
+              user: nextUser,
+              caps: deriveUserCapabilities(nextUser.roles),
+            }));
+          }}
+        />
+        <Toast toast={toast} />
+      </>
+    );
   }
 
   return (
     <>
       <Layout
-        currentRole={session.currentRole}
-        roleOptions={session.availableRoles}
+        surface={session.surface}
+        caps={session.caps}
         currentNav={layoutNavKey}
-        onSwitchRole={pickRole}
-        onSwitchNav={(key) => {
+        onNavigate={(key) => {
           if (key === 'member-home') setSupervisorOpenedDetailFrom('member-home');
           setNavKey(key);
         }}
+        onEnterAdminCenter={enterAdminCenter}
+        onExitAdminCenter={exitAdminCenter}
         onLogout={logout}
       >
-        {navKey === 'member-home' && session.currentRole !== 'admin' && (
+        {navKey === 'member-home' && session.surface === 'member' && (
           <MemberPriorityHomePage
             priorityView={memberPriorityView}
             draftUserId={session.user?.id ?? null}
@@ -1019,7 +1258,7 @@ function App() {
               setSelectedEmployeeEventId(eventId);
               setNavKey('employee-event-detail');
             }}
-            supervisorTeamNudge={session.currentRole === 'supervisor' ? supervisorTeamNudge : null}
+            supervisorTeamNudge={supervisorUi ? supervisorTeamNudge : null}
             onDismissSupervisorNudge={() => setSupervisorTeamNudge(null)}
             onGoTeamDashboardFromNudge={() => {
               setSupervisorTeamNudge(null);
@@ -1027,7 +1266,7 @@ function App() {
             }}
           />
         )}
-        {navKey === 'team-dashboard-home' && session.currentRole === 'supervisor' && (
+        {navKey === 'team-dashboard-home' && supervisorUi && (
           <TeamDashboardHomePage
             activeRows={supervisorTeamDashboardRows.active}
             closedRows={supervisorTeamDashboardRows.closed}
@@ -1039,7 +1278,7 @@ function App() {
             }}
           />
         )}
-        {navKey === 'employee-event-detail' && (
+        {navKey === 'employee-event-detail' && session.surface === 'member' && (
           <EmployeeHomePage
             draftUserId={session.user?.id ?? null}
             userName={session.user?.name ?? ''}
@@ -1068,7 +1307,7 @@ function App() {
             onBackToEvents={() => setNavKey('member-home')}
           />
         )}
-        {navKey === 'supervisor-event-detail' && (
+        {navKey === 'supervisor-event-detail' && supervisorUi && (
           <SupervisorDashboardPage
             event={selectedSupervisorEvent}
             stats={stats}
@@ -1093,76 +1332,56 @@ function App() {
             }
           />
         )}
-        {navKey === 'admin-dashboard' && (
-          <EventSelectionPage
-            variant="admin"
-            events={events}
-            selectedEventId={selectedAdminEventId}
+        {navKey === 'admin-dashboard' && adminUi && (
+          <AdminEventCenterPage
+            rows={adminEventListRows}
+            departments={departments}
             onSelectEvent={(eventId) => {
               setSelectedAdminEventId(eventId);
               setNavKey('admin-event-detail');
             }}
+            adminQuickCreate={{
+              eventForm,
+              setEventForm,
+              eventTypeCatalog,
+              departments,
+              onEventTypesChanged: refreshEventTypes,
+              showToast,
+              onSubmitCreate: async () => {
+                const ok = await createEvent();
+                if (ok) setNavKey('admin-dashboard');
+                return ok;
+              },
+            }}
           />
         )}
-        {navKey === 'admin-event-detail' && (
+        {navKey === 'admin-event-detail' && adminUi && (
           <AdminDashboardPage
             event={selectedAdminEvent}
             stats={stats}
-            rows={employeeRows}
+            rows={adminEventDetailRows}
             departments={departments}
             deptBreakdown={adminViewAligned && adminDashboard ? adminDashboard.departments : undefined}
+            deptRankingSourceRows={employeeRows}
             dashboardFreshAt={dashboardUpdatedAt}
             dashMismatchHint={adminDashMismatchHint}
             onBackToEvents={() => setNavKey('admin-dashboard')}
+            selectedDepartment={adminDepartmentFilter}
+            onSelectDepartment={setAdminDepartmentFilter}
+            onCloseEvent={closeEventFromList}
+            closingEventId={closingAdminEventId}
           />
         )}
-        {navKey === 'event-management' && (
-          <EventManagementPage
-            events={events}
-            eventTypeCatalog={eventTypeCatalog}
-            eventForm={eventForm}
-            setEventForm={setEventForm}
-            onCreateEvent={createEvent}
-            onActivate={requestActivateEvent}
-            onClose={closeEvent}
+        {navKey === 'user-management' && adminUi && (
+          <UserManagementPage
+            users={users}
+            departments={departments}
+            showToast={showToast}
+            offlineMockMode={useMockOfflineCatalog}
+            onUserCreated={(u) => mergeUserIntoList(u)}
           />
         )}
-        {navKey === 'user-management' && <UserManagementPage users={users} departments={departments} />}
-        {navKey === 'notifications' && (
-          <EventSelectionPage
-            variant="notification"
-            events={events}
-            selectedEventId={selectedNotificationEventId}
-            onSelectEvent={(eventId) => {
-              setSelectedNotificationEventId(eventId);
-              setNavKey('notifications-event-detail');
-            }}
-          />
-        )}
-        {navKey === 'notifications-event-detail' && (
-          <NotificationPage
-            summary={notificationLiveSummary}
-            failedRows={failedNotificationRows}
-            loadingFailed={loadingFailedRows}
-            canSendReminder={session.currentRole === 'supervisor'}
-            canManageFailed={session.currentRole === 'admin'}
-            onSendReminder={() => dispatchRemindersForEvent(selectedNotificationEventId)}
-            onRefreshFailed={() => void reloadFailedNotificationRows()}
-            onRetryFailed={(notificationId) => {
-              if (session.currentRole !== 'admin') return;
-              void (async () => {
-                try {
-                  await retryFailedNotificationApi(notificationId);
-                  await reloadFailedNotificationRows();
-                  showToast({ tone: 'success', message: '已重送該筆失敗通知。' });
-                } catch (e) {
-                  showToast({ tone: 'danger', message: e instanceof Error ? e.message : '重送失敗' });
-                }
-              })();
-            }}
-            onBackToEvents={() => setNavKey('notifications')}
-          />
-        )}
+        {navKey === 'notifications' && <GlobalNotificationInboxPage rows={myNotifications} />}
         {navKey === 'profile' && (
           <ProfileSettingsPage
             user={session.user!}
@@ -1171,11 +1390,19 @@ function App() {
             departments={departments}
             showToast={showToast}
             onLogout={logout}
+            onProfileUpdated={(nextUser) => {
+              mergeUserIntoList(nextUser);
+              const capsNext = deriveUserCapabilities(nextUser.roles);
+              setSession((prev) =>
+                prev.user ? { ...prev, user: nextUser, caps: capsNext } : prev,
+              );
+            }}
             onNavigateToDirectReportsList={() => setNavKey('profile-direct-reports-list')}
             onNavigateToSubordinateHistory={(userId) => {
               setProfileSubordinateUserId(userId);
               setNavKey('profile-direct-report-history');
             }}
+            offlineMockSession={useMockOfflineCatalog}
           />
         )}
         {navKey === 'profile-direct-reports-list' && (
@@ -1196,20 +1423,14 @@ function App() {
             responses={responses}
             onBack={() => {
               setProfileSubordinateUserId(null);
-              setNavKey('profile');
+              setNavKey(
+                profileDirectReports.length > 1 ? 'profile-direct-reports-list' : 'profile',
+              );
             }}
           />
         ) : null}
       </Layout>
 
-      <ConfirmModal
-        open={showActivateModal}
-        title="Activate Emergency Event?"
-        description="Activating this event will send push notifications immediately to targeted departments."
-        confirmText="Activate and Send"
-        onCancel={() => setShowActivateModal(false)}
-        onConfirm={activateEvent}
-      />
       <Toast toast={toast} />
     </>
   );

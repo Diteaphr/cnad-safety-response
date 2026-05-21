@@ -57,7 +57,10 @@ function employeeEventTypeIcon(type: EventItem['type']) {
   }
 }
 
-function formatEmployeeCardTime(iso: string, locale: AppLocale) {
+function formatEmployeeCardTime(iso: string | null, locale: AppLocale) {
+  if (iso == null || iso === '') {
+    return '—';
+  }
   const tag = locale === 'en' ? 'en-US' : 'zh-TW';
   return new Date(iso).toLocaleString(tag, {
     weekday: 'short',
@@ -1053,7 +1056,8 @@ function EmployeeQuickReportPanel({
   if (!selectedEvent) return null;
 
   const fieldId = selectedEvent.id.replace(/[^a-zA-Z0-9_-]/g, '');
-  const heroTime = new Date(selectedEvent.startAt).toLocaleTimeString(undefined, {
+  const heroTimeSource = selectedEvent.startAt ?? selectedEvent.createdAt;
+  const heroTime = new Date(heroTimeSource).toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -1833,7 +1837,7 @@ export function MemberPriorityHomePage({
             </div>
             <div className="supervisor-team-nudge-actions">
               <button type="button" className="btn primary" onClick={onGoTeamDashboardFromNudge}>
-                {layoutNav.teamDash}
+                {layoutNav.teamReports}
               </button>
               <button type="button" className="btn ghost" onClick={onDismissSupervisorNudge}>
                 {ec.close}

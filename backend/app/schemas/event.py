@@ -12,7 +12,10 @@ class EventCreate(BaseModel):
     event_type: str = Field(..., min_length=1)
     description: Optional[str] = None
     status: str = Field(default="active")
-    department_ids: list[uuid.UUID] = Field(..., min_length=1)
+    department_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="Deprecated; ignored. Events are company-wide.",
+    )
     start_time: Optional[datetime] = None
     custom_type_name: Optional[str] = Field(
         default=None,
@@ -28,14 +31,6 @@ class EventCreate(BaseModel):
         return self
 
 
-class EventDepartmentOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    event_department_id: uuid.UUID
-    event_id: uuid.UUID
-    department_id: uuid.UUID
-
-
 class EventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -48,4 +43,3 @@ class EventOut(BaseModel):
     created_by: uuid.UUID
     start_time: Optional[datetime]
     created_at: datetime
-    event_departments: list[EventDepartmentOut] = Field(default_factory=list)

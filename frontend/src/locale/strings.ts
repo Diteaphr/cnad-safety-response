@@ -45,6 +45,8 @@ export type DashboardStrings = {
   noRows: string;
   globalOverview: string;
   deptRanking: string;
+  deptRankingHint: string;
+  deptFilterAll: string;
   criticalAlerts: string;
   noResponseQueue: string;
   mapPlaceholder: string;
@@ -67,6 +69,8 @@ export type DashboardStrings = {
   employeeTableFootnote: (shown: number, total: number) => string;
   /** Explains the stacked bar under 回報分布 */
   distributionHint: string;
+  /** Shorter hint when verbose copy is hidden (admin detail compact strip). */
+  distributionCompactHint: string;
   /** a11y summary for the bar */
   distributionCaption: (
     safe: number,
@@ -76,6 +80,55 @@ export type DashboardStrings = {
     pctNeed: number,
     pctPending: number,
   ) => string;
+  /** Admin event detail — tabs */
+  tabOverview: string;
+  tabTracking: string;
+  tabDepartments: string;
+  tabOverviewShort: string;
+  tabTrackingShort: string;
+  tabDepartmentsShort: string;
+  /** Scope bar — admin event detail */
+  adminScopeCurrentRangeHeading: string;
+  adminScopeChipAllDepartments: string;
+  adminScopeChipAllDepartmentsShort: string;
+  adminScopeSelectDepartmentPlaceholder: string;
+  adminScopeEmployeesOnlyHint: (deptName: string) => string;
+  adminScopeEmployeesOnlyHintShort: string;
+  /** Stats overview hero — aligns with admin event list progress language */
+  adminDetailReportRateLine: (rate: number) => string;
+  adminDetailCompletedRatio: (done: number, total: number) => string;
+  /** Overview — department block title */
+  adminDeptReportStatusTitle: string;
+  adminDeptColDept: string;
+  adminDeptColRate: string;
+  adminDeptColSafe: string;
+  adminDeptColNeed: string;
+  adminDeptColPending: string;
+  adminDeptActionView: string;
+  /** Departments tab */
+  adminDeptSituationHeading: string;
+  adminDeptSituationSortHint: string;
+  adminDeptPersonnelHeading: string;
+  /** Tracking tab */
+  trackingNeedHelpSection: string;
+  trackingNeedHelpIntro: string;
+  trackingPendingSection: string;
+  trackingPendingIntro: string;
+  trackingPendingEmptyTitle: string;
+  trackingPendingEmptyBody: string;
+  adminViewDetail: string;
+  adminReportedAt: string;
+  /** Close event flow */
+  eventActionsTrigger: string;
+  eventActionsAria: string;
+  adminCloseEventOutlineLabel: string;
+  adminCloseEventTitle: string;
+  adminCloseEventOutstandingSummary: (needHelp: number, pending: number) => string;
+  adminCloseEventNote: string;
+  adminCloseEventAllDoneNote: string;
+  adminCloseEventCancel: string;
+  adminCloseEventConfirmAnyway: string;
+  adminCloseEventConfirmOk: string;
 };
 
 export type ProfileStrings = {
@@ -125,6 +178,23 @@ export type ProfilePageStrings = {
   roleAdmin: string;
   /** Toast after language applied */
   languageApplied: string;
+  onboardingTitle: string;
+  onboardingSubtitle: string;
+  onboardingNameLabel: string;
+  onboardingPhoneLabel: string;
+  onboardingPhonePlaceholder: string;
+  onboardingNoSkip: string;
+  onboardingContinue: string;
+  onboardingPhoneRequired: string;
+  onboardingSuccess: string;
+  onboardingError: string;
+  profileEditNameLabel: string;
+  profileEditPhoneLabel: string;
+  profileEditPhoneHint: string;
+  profileSave: string;
+  profileCancelEdit: string;
+  profileUpdatedToast: string;
+  profileSaveError: string;
 };
 
 export type EmployeeReportStrings = {
@@ -203,27 +273,33 @@ export type StatusBadgeStrings = {
 };
 
 export type LayoutNavStrings = {
-  empHome: string;
-  supervisorHome: string;
-  teamDash: string;
-  reminders: string;
-  profile: string;
+  memberHome: string;
+  teamReports: string;
+  notifications: string;
+  accountSettings: string;
   adminOverview: string;
   adminEvents: string;
   adminUsers: string;
   adminNotifications: string;
+  adminSystemSettings: string;
 };
 
 export type LayoutChromeStrings = {
   offlineBanner: string;
-  sidebarHeadline: string;
-  sidebarSub: string;
+  memberSidebarTitle: string;
+  memberSidebarSub: string;
+  adminSidebarTitle: string;
+  adminSidebarSub: string;
+  enterAdminCenter: string;
+  backToStaffMode: string;
   logout: string;
-  switchRole: string;
-  roleEmployee: string;
-  roleSupervisor: string;
-  roleAdmin: string;
   mobileAppTitle: string;
+  /** 窄屏右上角：進入管理中心（可見標籤） */
+  mobileEnterAdminCenter: string;
+  /** 窄屏右上角：返回主系統（可見標籤） */
+  mobileExitAdminCenter: string;
+  ariaMobileEnterAdmin: string;
+  ariaMobileExitAdmin: string;
 };
 
 /** Admin / supervisor portal pages (event pickers, management, notifications). */
@@ -261,6 +337,10 @@ export type PortalStrings = {
   activateButton: string;
   closeEventButton: string;
   formLabelEventType: string;
+  formLabelNotifyTarget: string;
+  notifyScopeAll: string;
+  notifyScopeDepartments: string;
+  notifyScopeDeptHint: string;
   formLabelCustomTypeDetail: string;
   eventTypeEarthquake: string;
   eventTypeTyphoon: string;
@@ -282,10 +362,64 @@ export type PortalStrings = {
   refreshFailedList: string;
   noFailedDeliveries: string;
   retryDelivery: string;
+  failedReminderRetryOkToast: string;
+  failedReminderRetryErrToast: string;
+  failedReminderLoadErrToast: string;
   adminOnlyManageFailed: string;
   loading: string;
   na: string;
   notSentYet: string;
+  notificationInboxTitle: string;
+  notificationInboxIntro: string;
+  notificationInboxEmpty: string;
+  notificationInboxEventLabel: string;
+  notificationInboxChannelLabel: string;
+  notificationInboxStatusLabel: string;
+  fabCreateEventAria: string;
+  userMgmtAddAccount: string;
+  userMgmtCreateSubmit: string;
+  userMgmtNamePlaceholder: string;
+  userMgmtEmailPlaceholder: string;
+  userMgmtDeptLabel: string;
+  userMgmtPhoneLabel: string;
+  userMgmtPhonePlaceholder: string;
+  userMgmtEmployeeNoLabel: string;
+  userMgmtEmployeeNoPlaceholder: string;
+  userMgmtDeptPickHint: string;
+  userMgmtPhoneRequired: string;
+  userMgmtEmployeeNoRequired: string;
+  userMgmtTempPassword: (pw: string) => string;
+  addEventTypeLink: string;
+  addEventTypePlaceholder: string;
+  addEventTypeSubmit: string;
+  addEventTypeCancel: string;
+  userMgmtEmployeesByDept: string;
+  userMgmtEmployeesByDeptDesc: string;
+  userMgmtEmployeeCount: (n: number) => string;
+  userMgmtDeptRosterTitle: (deptName: string) => string;
+  userMgmtBackToDepts: string;
+  userMgmtNoEmployeesInDept: string;
+  adminOverviewCreateTitle: string;
+  adminOverviewCreateBody: string;
+  adminOverviewCreateCta: string;
+  adminCreateModalCancel: string;
+  adminEventCenterSubtitle: string;
+  adminEventCenterSearchPlaceholder: string;
+  adminEventCenterReportProgress: string;
+  adminEventCenterReportedOfTotal: (reported: number, total: number) => string;
+  adminEventCenterStatusColumn: string;
+  adminEventCenterLastUpdate: string;
+  adminEventCenterTip: string;
+  adminEventCenterTipDismissAria: string;
+  adminEventCenterPageRange: (from: number, to: number, total: number) => string;
+  adminEventCenterPerPage: string;
+  adminScopeAllEmployees: string;
+  adminEventCenterEmpty: string;
+  adminEventCenterColEvent: string;
+  adminEventCenterColStatus: string;
+  adminEventCenterColProgress: string;
+  adminEventCenterColStats: string;
+  adminEventCenterColAction: string;
 };
 
 /** Copy for dashboards + profile confirmations (minimal i18n layer). */
@@ -371,6 +505,8 @@ const dashZh: DashboardStrings = {
   noRows: '尚無符合的資料',
   globalOverview: '整體狀態',
   deptRanking: '部門回報排名',
+  deptRankingHint: '點選部門可僅檢視該部門儀表與名單；再點「全部部門」恢復全公司視角。',
+  deptFilterAll: '全部部門',
   criticalAlerts: '緊急名單',
   noResponseQueue: '未回報佇列',
   mapPlaceholder: '地圖／位置總覽（原型占位）',
@@ -393,8 +529,56 @@ const dashZh: DashboardStrings = {
   employeeTableFootnote: (shown, total) => `顯示 ${shown} / ${total} 位`,
   distributionHint:
     '色塊長度＝各狀態人數占「總人數」的比例；下方列出人數與百分比（與上方圓餅右側數字一致）。',
+  distributionCompactHint: '下方為各狀態人數與占比。',
   distributionCaption: (sf, nh, pd, ps, pn, pp) =>
     `平安 ${sf} 人（${ps}%）、需協助 ${nh} 人（${pn}%）、未回報 ${pd} 人（${pp}%）。`,
+  tabOverview: '統計總覽',
+  tabTracking: '追蹤中心',
+  tabDepartments: '部門狀況',
+  tabOverviewShort: '統計',
+  tabTrackingShort: '追蹤',
+  tabDepartmentsShort: '部門',
+  adminScopeCurrentRangeHeading: '目前範圍',
+  adminScopeChipAllDepartments: '全部部門',
+  adminScopeChipAllDepartmentsShort: '全部',
+  adminScopeSelectDepartmentPlaceholder: '選擇部門',
+  adminScopeEmployeesOnlyHint: (deptName) => `僅顯示「${deptName}」員工資料`,
+  adminScopeEmployeesOnlyHintShort: '僅顯示此部門資料',
+  adminDetailReportRateLine: (rate) => `${rate}% 已回報`,
+  adminDetailCompletedRatio: (done, total) => `${done} / ${total} 人已完成安全回報`,
+  adminDeptReportStatusTitle: '部門狀況摘要',
+  adminDeptColDept: '部門',
+  adminDeptColRate: '回報率',
+  adminDeptColSafe: '平安',
+  adminDeptColNeed: '需協助',
+  adminDeptColPending: '未回報',
+  adminDeptActionView: '查看',
+  adminDeptSituationHeading: '部門狀況',
+  adminDeptSituationSortHint: '依未回報與需要協助人數排序',
+  adminDeptPersonnelHeading: '人員狀態',
+  trackingNeedHelpSection: '需要協助',
+  trackingNeedHelpIntro: '已明確回報需要協助的人員，請優先追蹤。',
+  trackingPendingSection: '未回報追蹤',
+  trackingPendingIntro:
+    '系統會依提醒規則自動通知未回報員工；以下為仍未完成回報的人員。',
+  trackingPendingEmptyTitle: '未回報追蹤',
+  trackingPendingEmptyBody:
+    '目前沒有未回報人員。系統會依提醒規則自動通知未回報員工；若有人仍未完成回報，將會顯示於此。',
+  adminViewDetail: '查看詳情',
+  adminReportedAt: '回報時間',
+  eventActionsTrigger: '事件操作',
+  eventActionsAria: '事件操作選單',
+  adminCloseEventOutlineLabel: '結束事件',
+  adminCloseEventTitle: '結束事件？',
+  adminCloseEventOutstandingSummary: (nh, pend) =>
+    `目前仍有 ${nh} 人需要協助、${pend} 人尚未回報。`,
+  adminCloseEventNote:
+    '結束後，員工將無法再提交或修改此事件的安全回報；事件會移至已結束列表，管理員仍可查看統計與名單。',
+  adminCloseEventAllDoneNote:
+    '所有人員皆已完成回報且目前無人需要協助。結束後，此事件將移至已結束列表；員工將無法再提交或修改安全回報，管理員仍可查看統計與名單。',
+  adminCloseEventCancel: '取消',
+  adminCloseEventConfirmAnyway: '仍要結束事件',
+  adminCloseEventConfirmOk: '確認結束',
 };
 
 const dashEn: DashboardStrings = {
@@ -446,6 +630,8 @@ const dashEn: DashboardStrings = {
   noRows: 'No matching rows',
   globalOverview: 'Global status overview',
   deptRanking: 'Department ranking',
+  deptRankingHint: 'Click a department to drill into that department’s dashboard and lists. Use “All departments” to reset.',
+  deptFilterAll: 'All departments',
   criticalAlerts: 'Critical alerts',
   noResponseQueue: 'No-response queue',
   mapPlaceholder: 'Map / location overview (prototype)',
@@ -468,8 +654,56 @@ const dashEn: DashboardStrings = {
   employeeTableFootnote: (shown, total) => `Showing ${shown} of ${total} employees`,
   distributionHint:
     'Bar length is each status count as a share of total people in scope; numbers below match the KPI column.',
+  distributionCompactHint: 'Counts and percentages by status are listed below.',
   distributionCaption: (sf, nh, pd, ps, pn, pp) =>
     `Safe ${sf} (${ps}%), need help ${nh} (${pn}%), no response ${pd} (${pp}%).`,
+  tabOverview: 'Stats overview',
+  tabTracking: 'Tracking center',
+  tabDepartments: 'Departments',
+  tabOverviewShort: 'Stats',
+  tabTrackingShort: 'Track',
+  tabDepartmentsShort: 'Depts',
+  adminScopeCurrentRangeHeading: 'Current scope',
+  adminScopeChipAllDepartments: 'All departments',
+  adminScopeChipAllDepartmentsShort: 'All',
+  adminScopeSelectDepartmentPlaceholder: 'Select department',
+  adminScopeEmployeesOnlyHint: (deptName) => `Showing employees in “${deptName}” only`,
+  adminScopeEmployeesOnlyHintShort: 'Showing this department only',
+  adminDetailReportRateLine: (rate) => `${rate}% reported`,
+  adminDetailCompletedRatio: (done, total) => `${done} / ${total} employees completed a safety report`,
+  adminDeptReportStatusTitle: 'Department summary',
+  adminDeptColDept: 'Department',
+  adminDeptColRate: 'Rate',
+  adminDeptColSafe: 'Safe',
+  adminDeptColNeed: 'Need help',
+  adminDeptColPending: 'Pending',
+  adminDeptActionView: 'View',
+  adminDeptSituationHeading: 'Department status',
+  adminDeptSituationSortHint: 'Sorted by need-help and pending counts',
+  adminDeptPersonnelHeading: 'Personnel status',
+  trackingNeedHelpSection: 'Need help',
+  trackingNeedHelpIntro: 'Employees who reported they need assistance — prioritize follow-up.',
+  trackingPendingSection: 'Pending responses',
+  trackingPendingIntro:
+    'Automated reminders follow your notification rules; listed below are employees who still have not reported.',
+  trackingPendingEmptyTitle: 'Pending responses',
+  trackingPendingEmptyBody:
+    'There are no pending responders right now. Reminders keep running automatically; anyone who still owes a report will appear here.',
+  adminViewDetail: 'View details',
+  adminReportedAt: 'Reported at',
+  eventActionsTrigger: 'Event actions',
+  eventActionsAria: 'Event actions menu',
+  adminCloseEventOutlineLabel: 'Close event',
+  adminCloseEventTitle: 'Close this event?',
+  adminCloseEventOutstandingSummary: (nh, pend) =>
+    `${nh} employee(s) still need assistance and ${pend} have not reported.`,
+  adminCloseEventNote:
+    'After closing, employees cannot submit or edit safety responses; the event moves to closed and admins can still view stats and rosters.',
+  adminCloseEventAllDoneNote:
+    'Everyone targeted has reported and no one currently needs assistance. Closing moves this event to the closed list; employees cannot submit or edit responses afterward, while admins can still review statistics.',
+  adminCloseEventCancel: 'Cancel',
+  adminCloseEventConfirmAnyway: 'Close anyway',
+  adminCloseEventConfirmOk: 'Confirm close',
 };
 
 const profileZh: ProfileStrings = {
@@ -531,6 +765,23 @@ const profilePageZh: ProfilePageStrings = {
   roleSupervisor: '主管',
   roleAdmin: '管理員',
   languageApplied: '介面語言已更新。',
+  onboardingTitle: '完成個人資料',
+  onboardingSubtitle: '為了在緊急時能聯絡到您，請補齊以下資料。此步驟無法略過。',
+  onboardingNameLabel: '姓名',
+  onboardingPhoneLabel: '手機／電話',
+  onboardingPhonePlaceholder: '例：+886912345678',
+  onboardingNoSkip: '請填寫並儲存後才能進入系統。',
+  onboardingContinue: '儲存並繼續',
+  onboardingPhoneRequired: '請填寫電話或手機號碼。',
+  onboardingSuccess: '已更新個人資料。',
+  onboardingError: '無法儲存，請稍後再試。',
+  profileEditNameLabel: '姓名',
+  profileEditPhoneLabel: '手機／電話',
+  profileEditPhoneHint: '用於緊急聯絡與簡訊備援；可留空。',
+  profileSave: '儲存',
+  profileCancelEdit: '取消',
+  profileUpdatedToast: '個人資料已更新。',
+  profileSaveError: '無法儲存，請稍後再試。',
 };
 
 const profilePageEn: ProfilePageStrings = {
@@ -572,54 +823,80 @@ const profilePageEn: ProfilePageStrings = {
   roleSupervisor: 'Supervisor',
   roleAdmin: 'Admin',
   languageApplied: 'Display language updated.',
+  onboardingTitle: 'Complete your profile',
+  onboardingSubtitle:
+    'We need a reliable phone number to reach you during emergencies. This step cannot be skipped.',
+  onboardingNameLabel: 'Name',
+  onboardingPhoneLabel: 'Phone',
+  onboardingPhonePlaceholder: 'e.g. +14155550100',
+  onboardingNoSkip: 'Save your details to continue into the app.',
+  onboardingContinue: 'Save and continue',
+  onboardingPhoneRequired: 'Please enter a phone number.',
+  onboardingSuccess: 'Profile updated.',
+  onboardingError: 'Could not save. Please try again.',
+  profileEditNameLabel: 'Name',
+  profileEditPhoneLabel: 'Phone',
+  profileEditPhoneHint: 'Used for emergencies and SMS fallback. You may leave this blank.',
+  profileSave: 'Save',
+  profileCancelEdit: 'Cancel',
+  profileUpdatedToast: 'Profile saved.',
+  profileSaveError: 'Could not save. Please try again.',
 };
 
 const layoutNavZh: LayoutNavStrings = {
-  empHome: '首頁',
-  supervisorHome: '我的狀態',
-  teamDash: '團隊報表',
-  reminders: '提醒',
-  profile: '帳號與設定',
+  memberHome: '我的狀態',
+  teamReports: '團隊回報',
+  notifications: '通知',
+  accountSettings: '帳號與設定',
   adminOverview: '總覽',
-  adminEvents: '事件',
+  adminEvents: '事件管理',
   adminUsers: '使用者',
   adminNotifications: '通知',
+  adminSystemSettings: '系統設定',
 };
 
 const layoutNavEn: LayoutNavStrings = {
-  empHome: 'Home',
-  supervisorHome: 'My status',
-  teamDash: 'Team dashboards',
-  reminders: 'Reminders',
-  profile: 'Profile',
+  memberHome: 'My status',
+  teamReports: 'Team reports',
+  notifications: 'Notifications',
+  accountSettings: 'Account & settings',
   adminOverview: 'Overview',
   adminEvents: 'Events',
   adminUsers: 'Users',
   adminNotifications: 'Notifications',
+  adminSystemSettings: 'System settings',
 };
 
 const layoutChromeZh: LayoutChromeStrings = {
   offlineBanner: '目前離線：已快取的資料仍可操作；請恢復連線後再試送出。',
-  sidebarHeadline: '員工安全與回報',
-  sidebarSub: '緊急應變管理中心',
+  memberSidebarTitle: 'Safety Connect',
+  memberSidebarSub: '緊急應變與個人回報',
+  adminSidebarTitle: '管理中心',
+  adminSidebarSub: '事件、派送與權限',
+  enterAdminCenter: '管理中心',
+  backToStaffMode: '返回主系統',
   logout: '登出',
-  switchRole: '切換身分',
-  roleEmployee: '員工',
-  roleSupervisor: '主管',
-  roleAdmin: '管理員',
   mobileAppTitle: 'Safety Connect',
+  mobileEnterAdminCenter: '切換至管理中心',
+  mobileExitAdminCenter: '返回主系統',
+  ariaMobileEnterAdmin: '切換至管理中心視圖',
+  ariaMobileExitAdmin: '離開管理中心，返回主系統／員工介面',
 };
 
 const layoutChromeEn: LayoutChromeStrings = {
   offlineBanner: "You're offline. Cached views still work — reconnect before submitting.",
-  sidebarHeadline: 'Employee Safety & Response',
-  sidebarSub: 'Emergency response operations center',
+  memberSidebarTitle: 'Safety Connect',
+  memberSidebarSub: 'Emergency response',
+  adminSidebarTitle: 'Admin Console',
+  adminSidebarSub: 'Events, broadcasts & directory',
+  enterAdminCenter: 'Admin Console',
+  backToStaffMode: 'Back to main app',
   logout: 'Logout',
-  switchRole: 'Switch role',
-  roleEmployee: 'Employee',
-  roleSupervisor: 'Supervisor',
-  roleAdmin: 'Admin',
   mobileAppTitle: 'Safety Connect',
+  mobileEnterAdminCenter: 'Admin center',
+  mobileExitAdminCenter: 'Main app',
+  ariaMobileEnterAdmin: 'Switch to admin console workspace',
+  ariaMobileExitAdmin: 'Leave admin console and return to staff app',
 };
 
 const portalZh: PortalStrings = {
@@ -627,7 +904,7 @@ const portalZh: PortalStrings = {
   notificationEventCenter: '通知／提醒事件中心',
   eventManagement: '事件管理',
   eventManagementIntro:
-    '此處為可重複使用的事件模板與排程紀錄。管理員每次都會手動建立完整內容，僅在實際事件發生時啟用。',
+    '此頁僅列出事件；請於「總覽」按右下角 + 在彈出視窗建立新事件（建立後會帶您回到此列表）。',
   userDeptManagement: '使用者與部門管理',
   employees: '員工',
   departmentHierarchy: '部門階層',
@@ -657,6 +934,10 @@ const portalZh: PortalStrings = {
   activateButton: '啟用',
   closeEventButton: '結束',
   formLabelEventType: '事件類型',
+  formLabelNotifyTarget: '通知對象',
+  notifyScopeAll: '全體員工',
+  notifyScopeDepartments: '限定部門',
+  notifyScopeDeptHint: '已選部門之子部門員工亦會收到通知。',
   formLabelCustomTypeDetail: '自訂類型說明',
   eventTypeEarthquake: '地震',
   eventTypeTyphoon: '颱風',
@@ -678,10 +959,65 @@ const portalZh: PortalStrings = {
   refreshFailedList: '重新整理失敗清單',
   noFailedDeliveries: '目前沒有推播失敗紀錄。',
   retryDelivery: '重送',
+  failedReminderRetryOkToast: '已送出重試，狀態稍後會更新。',
+  failedReminderRetryErrToast: '重試失敗，請稍後再試。',
+  failedReminderLoadErrToast: '無法載入推播失敗清單。',
   adminOnlyManageFailed: '僅管理員可處理',
   loading: '載入中…',
   na: '未填',
   notSentYet: '尚未成功送達',
+  notificationInboxTitle: '通知收件匣',
+  notificationInboxIntro: '您收到的推播／簡訊紀錄（唯讀）。',
+  notificationInboxEmpty: '尚無通知紀錄。',
+  notificationInboxEventLabel: '事件',
+  notificationInboxChannelLabel: '管道',
+  notificationInboxStatusLabel: '狀態',
+  fabCreateEventAria: '建立事件',
+  userMgmtAddAccount: '新增帳號',
+  userMgmtCreateSubmit: '建立帳號',
+  userMgmtNamePlaceholder: '姓名',
+  userMgmtEmailPlaceholder: 'Email',
+  userMgmtDeptLabel: '部門',
+  userMgmtPhoneLabel: '手機／電話',
+  userMgmtPhonePlaceholder: '例：+886912345678',
+  userMgmtEmployeeNoLabel: '員工編號',
+  userMgmtEmployeeNoPlaceholder: '例：EMP2024001',
+  userMgmtDeptPickHint: '點選一個部門（可依階層瀏覽）。',
+  userMgmtPhoneRequired: '請填寫電話或手機號碼。',
+  userMgmtEmployeeNoRequired: '請填寫員工編號。',
+  userMgmtTempPassword: (pw) => `系統已產生暫時密碼（請轉交使用者並請其登入後變更）：${pw}`,
+  addEventTypeLink: '＋ 新增事件類型',
+  addEventTypePlaceholder: '新類型名稱（例：化學品外洩）',
+  addEventTypeSubmit: '新增並選用',
+  addEventTypeCancel: '取消',
+  userMgmtEmployeesByDept: '員工（依部門）',
+  userMgmtEmployeesByDeptDesc: '點選部門查看該部門員工名單。',
+  userMgmtEmployeeCount: (n) => `${n} 人`,
+  userMgmtDeptRosterTitle: (deptName) => `${deptName} · 員工名單`,
+  userMgmtBackToDepts: '返回部門列表',
+  userMgmtNoEmployeesInDept: '此部門尚無員工帳號。',
+  adminOverviewCreateTitle: '建立新事件',
+  adminOverviewCreateBody: '事件建立後立即生效，並向目標部門員工送出通知。',
+  adminOverviewCreateCta: '前往建立事件',
+  adminCreateModalCancel: '關閉',
+  adminEventCenterSubtitle: '全域事件清單與狀態總覽',
+  adminEventCenterSearchPlaceholder: '搜尋事件名稱',
+  adminEventCenterReportProgress: '回報進度',
+  adminEventCenterReportedOfTotal: (reported, total) => `${reported} / ${total} 已回報`,
+  adminEventCenterStatusColumn: '狀態統計',
+  adminEventCenterLastUpdate: '最後更新',
+  adminEventCenterTip:
+    '小提醒：點擊事件可查看詳細資訊與人員名單，並進行後續處置與通知。',
+  adminEventCenterTipDismissAria: '關閉提示',
+  adminEventCenterPageRange: (from, to, total) => `顯示 ${from} - ${to} / ${total} 筆`,
+  adminEventCenterPerPage: '每頁顯示',
+  adminScopeAllEmployees: '全公司',
+  adminEventCenterEmpty: '目前沒有符合條件的事件。',
+  adminEventCenterColEvent: '事件',
+  adminEventCenterColStatus: '狀態',
+  adminEventCenterColProgress: '回報進度',
+  adminEventCenterColStats: '狀態統計',
+  adminEventCenterColAction: '操作',
 };
 
 const portalEn: PortalStrings = {
@@ -689,7 +1025,7 @@ const portalEn: PortalStrings = {
   notificationEventCenter: 'Notification Event Center',
   eventManagement: 'Event Management',
   eventManagementIntro:
-    'These are reusable event templates and scheduled incidents. Admins fill in details manually each time and activate only when a real incident occurs.',
+    'This page lists events only. On Overview, tap + and complete the popup to create an event (you return here after a successful save).',
   userDeptManagement: 'User & department management',
   employees: 'Employees',
   departmentHierarchy: 'Department hierarchy',
@@ -720,6 +1056,10 @@ const portalEn: PortalStrings = {
   activateButton: 'Activate',
   closeEventButton: 'Close',
   formLabelEventType: 'Event type',
+  formLabelNotifyTarget: 'Notify',
+  notifyScopeAll: 'All employees',
+  notifyScopeDepartments: 'Selected departments',
+  notifyScopeDeptHint: 'Employees in sub-departments of your selection are included.',
   formLabelCustomTypeDetail: 'Custom type detail',
   eventTypeEarthquake: 'Earthquake',
   eventTypeTyphoon: 'Typhoon',
@@ -741,10 +1081,65 @@ const portalEn: PortalStrings = {
   refreshFailedList: 'Refresh failed list',
   noFailedDeliveries: 'No failed deliveries for this event.',
   retryDelivery: 'Retry',
+  failedReminderRetryOkToast: 'Retry queued; status will update shortly.',
+  failedReminderRetryErrToast: 'Retry failed. Please try again.',
+  failedReminderLoadErrToast: 'Could not load failed delivery list.',
   adminOnlyManageFailed: 'Admin only',
   loading: 'Loading…',
   na: 'N/A',
   notSentYet: 'Not delivered yet',
+  notificationInboxTitle: 'Notification inbox',
+  notificationInboxIntro: 'Push and SMS records for your account (read-only).',
+  notificationInboxEmpty: 'No notifications yet.',
+  notificationInboxEventLabel: 'Event',
+  notificationInboxChannelLabel: 'Channel',
+  notificationInboxStatusLabel: 'Status',
+  fabCreateEventAria: 'Create event',
+  userMgmtAddAccount: 'Add account',
+  userMgmtCreateSubmit: 'Create account',
+  userMgmtNamePlaceholder: 'Name',
+  userMgmtEmailPlaceholder: 'Email',
+  userMgmtDeptLabel: 'Department',
+  userMgmtPhoneLabel: 'Phone',
+  userMgmtPhonePlaceholder: 'e.g. +14155550100',
+  userMgmtEmployeeNoLabel: 'Employee number',
+  userMgmtEmployeeNoPlaceholder: 'e.g. EMP2024001',
+  userMgmtDeptPickHint: 'Select one department (hierarchy shown below).',
+  userMgmtPhoneRequired: 'Phone number is required.',
+  userMgmtEmployeeNoRequired: 'Employee number is required.',
+  userMgmtTempPassword: (pw) => `Temporary password generated (share securely; user should change after login): ${pw}`,
+  addEventTypeLink: '+ Add event type',
+  addEventTypePlaceholder: 'New type name (e.g. Chemical spill)',
+  addEventTypeSubmit: 'Add and select',
+  addEventTypeCancel: 'Cancel',
+  userMgmtEmployeesByDept: 'Employees by department',
+  userMgmtEmployeesByDeptDesc: 'Tap a department to view its employee roster.',
+  userMgmtEmployeeCount: (n) => `${n}`,
+  userMgmtDeptRosterTitle: (deptName) => `${deptName} · Employees`,
+  userMgmtBackToDepts: 'Back to departments',
+  userMgmtNoEmployeesInDept: 'No employee accounts in this department.',
+  adminOverviewCreateTitle: 'Create a new event',
+  adminOverviewCreateBody: 'New events go live immediately and send activation notices to targeted employees.',
+  adminOverviewCreateCta: 'Go to create event',
+  adminCreateModalCancel: 'Close',
+  adminEventCenterSubtitle: 'Global event list and status overview',
+  adminEventCenterSearchPlaceholder: 'Search event title',
+  adminEventCenterReportProgress: 'Reporting progress',
+  adminEventCenterReportedOfTotal: (reported, total) => `${reported} / ${total} reported`,
+  adminEventCenterStatusColumn: 'Status breakdown',
+  adminEventCenterLastUpdate: 'Last updated',
+  adminEventCenterTip:
+    'Tip: open an event to see details, roster, follow-up actions, and notifications.',
+  adminEventCenterTipDismissAria: 'Dismiss tip',
+  adminEventCenterPageRange: (from, to, total) => `Showing ${from}–${to} of ${total}`,
+  adminEventCenterPerPage: 'Rows per page',
+  adminScopeAllEmployees: 'All employees',
+  adminEventCenterEmpty: 'No events match the current filters.',
+  adminEventCenterColEvent: 'Event',
+  adminEventCenterColStatus: 'Status',
+  adminEventCenterColProgress: 'Reporting progress',
+  adminEventCenterColStats: 'Status breakdown',
+  adminEventCenterColAction: 'Actions',
 };
 
 const statusBadgeZh: StatusBadgeStrings = {

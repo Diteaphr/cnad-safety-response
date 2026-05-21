@@ -1,4 +1,5 @@
 import { fetchWithTimeout, isProbablyTransientNetworkError, withRetries } from './lib/httpClient';
+import { sanitizedRolesFromApi } from './lib/portalSessionRoles';
 import type { Department, EventItem, EventTypeCatalogItem, Role, SafetyResponse, User } from './types';
 
 /** `/api/dashboard/supervisor` 回傳之 team 項目 */
@@ -6,15 +7,24 @@ export type SupervisorTeamMemberApi = {
   user_id: string;
   name: string;
   department: string;
-  status: string;
+  status: string | null;
   reported_at: string | null;
   needs_follow_up: boolean;
   phone?: string | null;
+  is_supervisor?: boolean;
+  sub_team_summary?: {
+    safe: number;
+    need_help: number;
+    pending: number;
+    responded?: number;
+    total?: number;
+  } | null;
 };
 
 export type SupervisorDashboardApi = {
   event: EventItem | null;
-  kpis: { safe: number; need_help: number; responded: number; pending: number };
+  /** 後端匯總（整棵部門樹）；主管儀表板 KPI 數字請改由 `employeeRows`（`team` 直屬列）計算以與清單一致 */
+  kpis: { safe: number; need_help: number; responded: number; pending: number; total?: number };
   team: SupervisorTeamMemberApi[];
 };
 
@@ -37,6 +47,7 @@ export type PortalNotificationRow = {
   channel: string;
   status: string;
   sentAt: string | null;
+  eventTitle?: string;
 };
 
 export type FailedNotificationRow = {
@@ -73,39 +84,68 @@ export type DemoAccount = { id: string; label: string; roles: Role[]; userId: st
 export const demoAccountsFallbackSeeded: DemoAccount[] = [
   {
     id: 'employee',
-    label: 'Employee Demo',
+    label: 'Employee — employee_1',
     roles: ['employee'],
-    userId: 'b0000001-0000-4000-8000-000000000001',
+    userId: '02000000-0000-4000-8000-000000000002',
   },
   {
     id: 'supervisor',
-    label: 'Supervisor Demo',
+    label: 'Supervisor — employee_2',
     roles: ['supervisor'],
-    userId: 'b0000001-0000-4000-8000-000000000002',
+    userId: '02000000-0000-4000-8000-000000000003',
   },
   {
     id: 'admin',
-    label: 'Admin Demo',
+    label: 'Admin — admin@test.com',
     roles: ['admin'],
-    userId: 'b0000001-0000-4000-8000-000000000004',
+    userId: '02000000-0000-4000-8000-000000000001',
   },
   {
     id: 'multi',
-    label: 'Multi-role Demo',
+    label: 'Multi-role — employee_3',
     roles: ['employee', 'supervisor', 'admin'],
-    userId: 'b0000001-0000-4000-8000-000000000002',
+    userId: '02000000-0000-4000-8000-000000000004',
   },
 ];
 
-/** JWT（記憶體）；POST /api/reports、/api/events 等須 Bearer，見後端 `get_current_user`。 */
+/** localStorage：Email 登入後跨重新整理保留 JWT（Demo 模式不寫入）。 */
+export const PORTAL_ACCESS_TOKEN_STORAGE_KEY = 'cnad_portal_access_token';
+export const PORTAL_SURFACE_STORAGE_KEY = 'cnad_portal_surface';
+
+/** JWT；與 `localStorage` 同步（`setAccessToken` / `clearAccessToken`）。 */
 let accessToken: string | null = null;
+
+function readAccessTokenFromStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const t = window.localStorage.getItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY)?.trim();
+    accessToken = t || null;
+  } catch {
+    accessToken = null;
+  }
+}
+readAccessTokenFromStorage();
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+  try {
+    if (typeof window === 'undefined') return;
+    if (token) window.localStorage.setItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY, token);
+    else window.localStorage.removeItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY);
+  } catch {
+    /* private / quota */
+  }
 }
 
 export function clearAccessToken(): void {
   accessToken = null;
+  try {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem(PORTAL_SURFACE_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** 空字串 = 與目前網頁同源（Vite `server.proxy` 或 nginx 的 `/api` 轉發）。有值 = 直連後端，例如 `http://localhost:8000`。 */
@@ -172,9 +212,21 @@ export async function getEventTypesApi(): Promise<EventTypeCatalogItem[]> {
   return data.eventTypes;
 }
 
+export async function adminCreateEventTypeApi(name: string): Promise<EventTypeCatalogItem> {
+  return apiFetch<EventTypeCatalogItem>('/api/admin/event-types', {
+    method: 'POST',
+    body: JSON.stringify({ name: name.trim() }),
+  });
+}
+
 export async function getUsers(): Promise<User[]> {
-  const data = await apiFetch<{ users: User[] }>('/api/users');
-  return data.users;
+  const data = await apiFetch<{ users: Parameters<typeof mapProfileToUser>[0][] }>('/api/users');
+  return data.users.map((u) => mapProfileToUser(u));
+}
+
+export async function getMyProfileApi(): Promise<User> {
+  const data = await apiFetch<Parameters<typeof mapProfileToUser>[0]>('/api/users/me');
+  return mapProfileToUser(data);
 }
 
 export async function getEvents(): Promise<EventItem[]> {
@@ -188,26 +240,27 @@ export async function getReports(): Promise<SafetyResponse[]> {
 }
 
 export async function createEventApi(
-  actorUserId: string,
+  _actorUserId: string,
   body: {
     title: string;
     type: EventItem['type'];
     description: string;
     startAt: string;
     targetDepartmentIds: string[];
+    location?: string;
     /** 與 type=Other 併用：後端會先寫入 event_types 再建立事件 */
     customTypeName?: string;
   },
 ): Promise<{ message: string; event: EventItem }> {
   return apiFetch('/api/events', {
     method: 'POST',
-    headers: { 'X-User-Id': actorUserId },
     body: JSON.stringify({
       title: body.title,
       type: body.type,
       description: body.description,
       startAt: body.startAt,
       targetDepartmentIds: body.targetDepartmentIds,
+      ...(body.location ? { location: body.location } : {}),
       ...(body.customTypeName != null && body.customTypeName !== ''
         ? { customTypeName: body.customTypeName }
         : {}),
@@ -215,33 +268,112 @@ export async function createEventApi(
   });
 }
 
-export async function activateEventApi(actorUserId: string, eventId: string): Promise<{ message: string; event: EventItem }> {
-  return apiFetch(`/api/events/${encodeURIComponent(eventId)}/activate`, {
-    method: 'POST',
-    headers: { 'X-User-Id': actorUserId },
-    body: JSON.stringify({}),
-  });
-}
-
-export async function closeEventApi(actorUserId: string, eventId: string): Promise<{ message: string; event: EventItem }> {
+export async function closeEventApi(_actorUserId: string, eventId: string): Promise<{ message: string; event: EventItem }> {
   return apiFetch(`/api/events/${encodeURIComponent(eventId)}/close`, {
     method: 'POST',
-    headers: { 'X-User-Id': actorUserId },
   });
 }
 
-export async function registerApi(body: {
+function mapProfileToUser(data: {
+  id: string;
   name: string;
   email: string;
-  password: string;
-  departmentId?: string;
-  phone?: string;
-  employeeNo?: string;
-}): Promise<{ message: string; user: User }> {
-  return apiFetch('/api/auth/register', {
-    method: 'POST',
+  phone?: string | null;
+  departmentId?: string | null;
+  managerId?: string | null;
+  roles: Role[];
+  /** GET/PUT /api/users/me 使用 employeeNo；GET /api/users 使用 employeeCode */
+  employeeNo?: string | null;
+  employeeCode?: string | null;
+  needsProfileCompletion?: boolean;
+  pushEnabled?: boolean;
+  pushEmergencyEnabled?: boolean;
+  pushReminderEnabled?: boolean;
+  pushEscalationEnabled?: boolean;
+}): User {
+  const code = data.employeeNo ?? data.employeeCode;
+  return {
+    id: data.id,
+    name: data.name,
+    email: data.email,
+    departmentId: data.departmentId ?? '',
+    roles: sanitizedRolesFromApi(data.roles),
+    pushEnabled: data.pushEnabled ?? true,
+    pushEmergencyEnabled: data.pushEmergencyEnabled ?? true,
+    pushReminderEnabled: data.pushReminderEnabled ?? true,
+    pushEscalationEnabled: data.pushEscalationEnabled ?? true,
+    managerId: data.managerId,
+    employeeCode: code ?? undefined,
+    phone: data.phone ?? undefined,
+    needsProfileCompletion: data.needsProfileCompletion,
+  };
+}
+
+export async function updateMyProfileApi(body: {
+  name: string;
+  phone?: string | null;
+  pushEnabled?: boolean;
+  pushEmergencyEnabled?: boolean;
+  pushReminderEnabled?: boolean;
+  pushEscalationEnabled?: boolean;
+}): Promise<User> {
+  const data = await apiFetch<{
+    id: string;
+    name: string;
+    email: string;
+    phone?: string | null;
+    departmentId?: string | null;
+    managerId?: string | null;
+    roles: Role[];
+    employeeNo?: string;
+    needsProfileCompletion?: boolean;
+    pushEnabled?: boolean;
+    pushEmergencyEnabled?: boolean;
+    pushReminderEnabled?: boolean;
+    pushEscalationEnabled?: boolean;
+  }>('/api/users/me', {
+    method: 'PUT',
     body: JSON.stringify(body),
   });
+  return mapProfileToUser(data);
+}
+
+export async function adminCreateUserApi(body: {
+  name: string;
+  email: string;
+  phone: string;
+  employeeNo: string;
+  password?: string;
+  departmentId: string;
+  roles?: Role[];
+}): Promise<{ message: string; user: User; temporaryPassword?: string }> {
+  const data = await apiFetch<{
+    message: string;
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      phone?: string | null;
+      departmentId?: string | null;
+      managerId?: string | null;
+      roles: Role[];
+      employeeNo?: string;
+      needsProfileCompletion?: boolean;
+    };
+    temporaryPassword?: string;
+  }>('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: body.name,
+      email: body.email,
+      phone: body.phone,
+      employeeNo: body.employeeNo,
+      departmentId: body.departmentId,
+      roles: body.roles ?? ['employee'],
+      ...(body.password ? { password: body.password } : {}),
+    }),
+  });
+  return { message: data.message, user: mapProfileToUser(data.user), temporaryPassword: data.temporaryPassword };
 }
 
 export async function loginWithEmailApi(body: {
@@ -249,23 +381,39 @@ export async function loginWithEmailApi(body: {
   password: string;
 }): Promise<{ user: User; access_token: string; token_type: string }> {
   clearAccessToken();
-  const data = await apiFetch<{ user: User; access_token: string; token_type: string }>('/api/auth/login', {
+  const data = await apiFetch<{
+    user: Parameters<typeof mapProfileToUser>[0];
+    access_token: string;
+    token_type: string;
+  }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(body),
   });
   setAccessToken(data.access_token);
-  return data;
+  return {
+    access_token: data.access_token,
+    token_type: data.token_type,
+    user: mapProfileToUser(data.user),
+  };
 }
 
 /** Demo 下拉登入後取得 JWT，否則受保護的 POST（如 /api/reports）會 401/403 Not authenticated */
 export async function loginDemoUserApi(userId: string): Promise<{ user: User; access_token: string; token_type: string }> {
   clearAccessToken();
-  const data = await apiFetch<{ user: User; access_token: string; token_type: string }>('/api/auth/demo-login', {
+  const data = await apiFetch<{
+    user: Parameters<typeof mapProfileToUser>[0];
+    access_token: string;
+    token_type: string;
+  }>('/api/auth/demo-login', {
     method: 'POST',
     body: JSON.stringify({ userId }),
   });
   setAccessToken(data.access_token);
-  return data;
+  return {
+    access_token: data.access_token,
+    token_type: data.token_type,
+    user: mapProfileToUser(data.user),
+  };
 }
 export async function submitReportApi(payload: {
   eventId: string;

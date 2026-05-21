@@ -46,7 +46,6 @@ class EventService:
                 created_by=actor_user_id,
                 start_time=payload.start_time,
             )
-            self._events.add_departments(db, event.event_id, payload.department_ids)
             db.commit()
         except Exception:
             db.rollback()

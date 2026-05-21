@@ -184,7 +184,7 @@ async def create_event(payload: EventCreatePayload):
         "title": payload.title,
         "event_type": payload.event_type,
         "description": payload.description,
-        "status": "draft",
+        "status": "active",
         "target_departments": payload.target_departments,
         "created_at": datetime.now(timezone.utc),
         "activated_at": None,

@@ -1,0 +1,104 @@
+/**
+ * Global design tokens.
+ * Purple palette (CASA CHROMATICA): admin UI only.
+ * Blue-gray palette: member / general UI only.
+ */
+
+:root {
+  /* --- Purple palette (admin) --- */
+  --palette-purple-midnight-orchid: #312a44;
+  --palette-purple-midnight-orchid-rgb: 49, 42, 68;
+  --palette-purple-dusky-lilac: #88708e;
+  --palette-purple-dusky-lilac-rgb: 136, 112, 142;
+  --palette-purple-iris-mist: #bab0c8;
+  --palette-purple-iris-mist-rgb: 186, 176, 200;
+  --palette-purple-plum-blossom: #d7c5d8;
+  --palette-purple-plum-blossom-rgb: 215, 197, 216;
+  --palette-purple-silver-wisteria: #dad4df;
+  --palette-purple-silver-wisteria-rgb: 218, 212, 223;
+
+  /* --- Blue-gray palette (member) --- */
+  --palette-blue-cool-cerulean: #8eb1d1;
+  --palette-blue-cool-cerulean-rgb: 142, 177, 209;
+  --palette-blue-baby-blue: #a7c7e7;
+  --palette-blue-baby-blue-rgb: 167, 199, 231;
+  --palette-blue-midnight: #1c2b48;
+  --palette-blue-midnight-rgb: 28, 43, 72;
+  --palette-blue-platinum: #e8ecef;
+  --palette-blue-platinum-rgb: 232, 236, 239;
+  --palette-blue-light-grey: #c4d8e5;
+  --palette-blue-light-grey-rgb: 196, 216, 229;
+
+  /* --- Admin semantics (neutral surfaces + purple accents) --- */
+  --admin-surface-app: #eceef0;
+  --admin-surface-content: #ffffff;
+  --admin-surface-sidebar: #f3f2f5;
+  --admin-surface-sidebar-end: #faf9fb;
+  --admin-border-subtle: rgba(var(--palette-purple-midnight-orchid-rgb), 0.12);
+  --admin-border-default: rgba(var(--palette-purple-midnight-orchid-rgb), 0.2);
+  --admin-sidebar-text: var(--palette-purple-midnight-orchid);
+  --admin-sidebar-muted: rgba(var(--palette-purple-midnight-orchid-rgb), 0.58);
+  --admin-nav-active-bg: rgba(var(--palette-purple-midnight-orchid-rgb), 0.1);
+  --admin-nav-active-bg-strong: rgba(var(--palette-purple-midnight-orchid-rgb), 0.16);
+  --admin-accent: var(--palette-purple-midnight-orchid);
+  --admin-accent-soft: var(--palette-purple-dusky-lilac);
+  --admin-link-btn-bg: rgba(var(--palette-purple-midnight-orchid-rgb), 0.06);
+  --admin-link-btn-bg-hover: rgba(var(--palette-purple-midnight-orchid-rgb), 0.11);
+  --admin-link-btn-border: rgba(var(--palette-purple-midnight-orchid-rgb), 0.22);
+  --admin-chip-border: rgba(var(--palette-purple-midnight-orchid-rgb), 0.26);
+  --admin-chip-border-active: rgba(var(--palette-purple-midnight-orchid-rgb), 0.38);
+  --admin-neutral-ink: #2f2c35;
+  /* Solid CTAs — no gradients on admin UI */
+  --admin-cta-bg: var(--palette-purple-midnight-orchid);
+  --admin-cta-bg-hover: var(--palette-purple-dusky-lilac);
+  /*
+   * 浮動 + 按鈕：Midnight Orchid 在部分螢幕易讀成藍灰；此色為色票兩色之間的加深紫調（純色、無漸層）。
+   */
+  --admin-fab-bg: #4a3d5a;
+  --admin-fab-bg-hover: #5e4d72;
+  --admin-surface-muted: rgba(var(--palette-purple-silver-wisteria-rgb), 0.55);
+  --admin-chip-inactive-bg: rgba(var(--palette-purple-iris-mist-rgb), 0.25);
+  /* 可點字卡 hover／聚焦層（事件小卡、列表等） */
+  --admin-card-hover-bg: rgba(var(--palette-purple-iris-mist-rgb), 0.38);
+  --admin-card-hover-border: rgba(var(--palette-purple-dusky-lilac-rgb), 0.75);
+  --admin-nav-idle-border: rgba(var(--palette-purple-iris-mist-rgb), 0.55);
+  /* Plum Blossom — 次要／ghost hover 淺底（純色半透明，無漸層） */
+  --admin-ghost-hover-bg: rgba(var(--palette-purple-plum-blossom-rgb), 0.42);
+  --admin-fab-shadow: rgba(var(--palette-purple-midnight-orchid-rgb), 0.32);
+  --admin-fab-shadow-hover: rgba(var(--palette-purple-midnight-orchid-rgb), 0.4);
+  --admin-modal-backdrop: rgba(var(--palette-purple-midnight-orchid-rgb), 0.42);
+  --admin-modal-shadow: rgba(var(--palette-purple-midnight-orchid-rgb), 0.12);
+  --admin-focus-ring: rgba(var(--palette-purple-midnight-orchid-rgb), 0.22);
+  --admin-note-info-bg: rgba(var(--palette-purple-iris-mist-rgb), 0.35);
+  --admin-note-info-text: var(--palette-purple-midnight-orchid);
+  --admin-mobile-header-bg: var(--admin-surface-content);
+
+  /* Legacy names mapped for gradual migration inside styles.css */
+  --shell-admin-bg: var(--admin-surface-app);
+  --admin-content-bg: var(--admin-surface-content);
+  --admin-sidebar-bg: var(--admin-surface-sidebar);
+  --admin-panel-border: var(--admin-border-subtle);
+
+  /* --- Member semantics (blue-gray family) --- */
+  --member-surface-app: var(--palette-blue-platinum);
+  --member-surface-elevated: #ffffff;
+  --member-surface-header: #f6f9fc;
+  --member-border-subtle: var(--palette-blue-light-grey);
+  --member-border-soft: rgba(var(--palette-blue-light-grey-rgb), 0.75);
+  --member-text: var(--palette-blue-midnight);
+  --member-text-soft: rgba(var(--palette-blue-midnight-rgb), 0.72);
+  --member-nav-bg: var(--palette-blue-midnight);
+  --member-nav-item-color: rgba(var(--palette-blue-baby-blue-rgb), 0.92);
+  --member-nav-active-bg: #243a5c;
+  --member-accent: var(--palette-blue-cool-cerulean);
+  --member-accent-bright: var(--palette-blue-baby-blue);
+  --member-shadow-soft: rgba(var(--palette-blue-midnight-rgb), 0.06);
+  --member-surface-band: #e7edf6;
+  --shell-member-bg: var(--member-surface-app);
+  --member-hero-gradient: linear-gradient(
+    155deg,
+    #121a2e 0%,
+    var(--palette-blue-midnight) 42%,
+    #2a5082 100%
+  );
+}

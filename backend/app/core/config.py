@@ -33,6 +33,9 @@ class Settings(BaseSettings):
 
     jwt_secret: str = "change-me-in-production-use-strong-secret"
 
+    # Email／demo 登入核發之 access token 有效小時數（預設 720 ≈ 30 天，可用 JWT_ACCESS_TOKEN_EXPIRE_HOURS 覆寫）。
+    jwt_access_token_expire_hours: int = 720
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

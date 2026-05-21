@@ -21,7 +21,11 @@ class UserOut(BaseModel):
     departmentId: str
     roles: List[Literal["employee", "supervisor", "admin"]]
     pushEnabled: bool = True
+    pushEmergencyEnabled: bool = True
+    pushReminderEnabled: bool = True
+    pushEscalationEnabled: bool = True
     managerId: Optional[str] = None
+    needsProfileCompletion: bool = False
 
 
 class EventItemOut(BaseModel):
@@ -29,9 +33,16 @@ class EventItemOut(BaseModel):
     title: str
     type: str
     description: str
-    targetDepartmentIds: List[str]
-    status: Literal["draft", "active", "closed"]
-    startAt: str
+    targetDepartmentIds: List[str] = Field(
+        default_factory=list,
+        description="Deprecated: always empty in API responses; events are company-wide.",
+    )
+    status: Literal["active", "closed"]
+    startAt: Optional[str] = Field(
+        default=None,
+        description="events.start_time ISO; null if unset.",
+    )
+    createdAt: str = Field(description="events.created_at ISO")
     cardDepartment: Optional[str] = None
     venue: Optional[str] = None
 
@@ -58,8 +69,12 @@ class CreateEventIn(BaseModel):
         description="event_types.name 或 code（與 GET /api/event-types 目錄一致）；選「其他」並填自訂名時請傳 Other。",
     )
     description: Optional[str] = Field(default="", max_length=2000)
+    location: Optional[str] = Field(default=None, max_length=200)
     startAt: str
-    targetDepartmentIds: List[str] = Field(min_length=1)
+    targetDepartmentIds: List[str] = Field(
+        default_factory=list,
+        description="Department UUIDs to target; backend expands to include all sub-departments. Empty = company-wide.",
+    )
     custom_type_name: Optional[str] = Field(
         default=None,
         max_length=128,
@@ -107,3 +122,72 @@ class DemoLoginIn(BaseModel):
     """與前端 Demo 下拉一致的 userId（種子使用者 UUID）；見 GET /api/demo-accounts。"""
 
     userId: str = Field(min_length=1, max_length=64)
+
+
+class ProfileUpdateIn(BaseModel):
+    """Fields an authenticated user may update on their own profile."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str = Field(min_length=1, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    push_enabled: Optional[bool] = Field(default=None, alias="pushEnabled")
+    push_emergency_enabled: Optional[bool] = Field(default=None, alias="pushEmergencyEnabled")
+    push_reminder_enabled: Optional[bool] = Field(default=None, alias="pushReminderEnabled")
+    push_escalation_enabled: Optional[bool] = Field(default=None, alias="pushEscalationEnabled")
+
+
+class AdminUserCreateIn(BaseModel):
+    """Admin creates a new user account."""
+
+    name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    password: Optional[str] = Field(default=None, min_length=8, max_length=128)
+    phone: str = Field(max_length=50)
+    employeeNo: str = Field(max_length=50)
+    departmentId: Optional[str] = None
+    managerId: Optional[str] = Field(
+        default=None,
+        description="Ignored. Assign department heads via departments API; line manager is derived.",
+    )
+    roles: List[Literal["employee", "supervisor", "admin"]] = Field(default=["employee"])
+
+
+class AdminUserUpdateIn(BaseModel):
+    """Admin edits an existing user's details."""
+
+    name: str = Field(min_length=1, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    departmentId: Optional[str] = None
+    managerId: Optional[str] = Field(
+        default=None,
+        description="Ignored. Line manager is derived from department.manager_id chain.",
+    )
+    roles: List[Literal["employee", "supervisor", "admin"]] = Field(min_length=1)
+
+
+class ChangePasswordIn(BaseModel):
+    """User changes their own password."""
+
+    currentPassword: str = Field(min_length=1, max_length=128)
+    newPassword: str = Field(min_length=8, max_length=128)
+
+
+class EventTypeCreateIn(BaseModel):
+    """Admin creates a new event type."""
+
+    name: str = Field(min_length=1, max_length=128)
+
+
+class DepartmentCreateIn(BaseModel):
+    """Admin creates a new department."""
+
+    name: str = Field(min_length=1, max_length=100)
+    parentId: Optional[str] = None
+
+
+class DepartmentUpdateIn(BaseModel):
+    """Admin updates an existing department."""
+
+    name: str = Field(min_length=1, max_length=100)
+    parentId: Optional[str] = None

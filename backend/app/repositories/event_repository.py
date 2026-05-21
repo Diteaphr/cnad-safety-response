@@ -3,11 +3,10 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.event import Event
-from app.models.event_department import EventDepartment
 
 
 class EventRepository:
@@ -18,39 +17,75 @@ class EventRepository:
         title: str,
         event_type_id: uuid.UUID,
         description: Optional[str],
+        location: Optional[str],
         status: str,
         created_by: uuid.UUID,
         start_time,
+        target_department_ids: Optional[list[uuid.UUID]] = None,
     ) -> Event:
         event = Event(
             title=title,
             event_type_id=event_type_id,
             description=description,
+            location=location,
             status=status,
             created_by=created_by,
             start_time=start_time,
         )
         db.add(event)
         db.flush()
+        if target_department_ids:
+            db.execute(
+                text(
+                    "INSERT INTO event_target_departments (event_id, department_id)"
+                    " VALUES (:eid, :did)"
+                ),
+                [{"eid": event.event_id, "did": did} for did in target_department_ids],
+            )
+            db.flush()
         return event
 
-    def add_departments(
-        self, db: Session, event_id: uuid.UUID, department_ids: list[uuid.UUID]
-    ) -> list[EventDepartment]:
-        rows: list[EventDepartment] = []
-        for did in department_ids:
-            row = EventDepartment(event_id=event_id, department_id=did)
-            db.add(row)
-            rows.append(row)
+    def update(
+        self,
+        db: Session,
+        event_id: uuid.UUID,
+        *,
+        title: str,
+        event_type_id: uuid.UUID,
+        description: Optional[str],
+        location: Optional[str],
+        start_time,
+        target_department_ids: Optional[list[uuid.UUID]] = None,
+    ) -> None:
+        ev = db.get(Event, event_id)
+        if ev is None:
+            raise ValueError(f"Event {event_id} not found")
+        ev.title = title
+        ev.event_type_id = event_type_id
+        ev.description = description
+        ev.location = location
+        ev.start_time = start_time
+        if target_department_ids is not None:
+            db.execute(
+                text("DELETE FROM event_target_departments WHERE event_id = :eid"),
+                {"eid": event_id},
+            )
+            if target_department_ids:
+                db.execute(
+                    text(
+                        "INSERT INTO event_target_departments (event_id, department_id)"
+                        " VALUES (:eid, :did)"
+                    ),
+                    [{"eid": event_id, "did": did} for did in target_department_ids],
+                )
         db.flush()
-        return rows
 
     def get_by_id(self, db: Session, event_id: uuid.UUID) -> Optional[Event]:
         stmt = (
             select(Event)
             .options(
-                selectinload(Event.event_departments),
                 selectinload(Event.event_type_row),
+                selectinload(Event.target_departments),
             )
             .where(Event.event_id == event_id)
         )
@@ -60,12 +95,25 @@ class EventRepository:
         stmt = (
             select(Event)
             .options(
-                selectinload(Event.event_departments),
                 selectinload(Event.event_type_row),
+                selectinload(Event.target_departments),
             )
             .order_by(Event.created_at.desc())
         )
         return list(db.scalars(stmt).all())
+
+    def latest_active(self, db: Session) -> Optional[Event]:
+        stmt = (
+            select(Event)
+            .options(
+                selectinload(Event.event_type_row),
+                selectinload(Event.target_departments),
+            )
+            .where(Event.status == "active")
+            .order_by(Event.created_at.desc())
+            .limit(1)
+        )
+        return db.execute(stmt).scalar_one_or_none()
 
     def list_active_ids(self, db: Session) -> list[uuid.UUID]:
         stmt = select(Event.event_id).where(Event.status == "active")

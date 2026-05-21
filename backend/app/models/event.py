@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, String, Table, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -12,9 +12,27 @@ from sqlalchemy.sql import func
 from app.core.base import Base
 
 if TYPE_CHECKING:
-    from app.models.event_department import EventDepartment
+    from app.models.department import Department
     from app.models.event_type import EventType
     from app.models.user import User
+
+# Association table — no ORM class needed (no extra columns).
+event_target_departments_table = Table(
+    "event_target_departments",
+    Base.metadata,
+    Column(
+        "event_id",
+        UUID(as_uuid=True),
+        ForeignKey("events.event_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "department_id",
+        UUID(as_uuid=True),
+        ForeignKey("departments.department_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 class Event(Base):
@@ -30,6 +48,7 @@ class Event(Base):
         nullable=False,
     )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    location: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False)
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -48,10 +67,10 @@ class Event(Base):
         back_populates="events",
     )
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
-    event_departments: Mapped[list["EventDepartment"]] = relationship(
-        "EventDepartment",
-        back_populates="event",
-        cascade="all, delete-orphan",
+    target_departments: Mapped[list["Department"]] = relationship(
+        "Department",
+        secondary=event_target_departments_table,
+        lazy="select",
     )
 
     @property

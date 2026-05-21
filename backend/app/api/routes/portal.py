@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
-from typing import Annotated
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.core.database import get_db
-from app.schemas.portal import CreateEventIn, DemoLoginIn, EventActionIn, LoginIn, RegisterIn, ReportIn
+from app.core.config import settings
+from app.core.database import SessionLocal, get_db
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, DepartmentCreateIn, DepartmentUpdateIn, EventActionIn, EventTypeCreateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.services.portal_service import PortalService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["portal"])
 
@@ -63,7 +67,7 @@ def demo_accounts():
 
 @router.post("/auth/register")
 def register_account(payload: RegisterIn, db: Session = Depends(get_db)):
-    return _portal.register(db, payload)
+    raise HTTPException(status_code=403, detail="Registration is disabled.")
 
 
 @router.post("/auth/login")
@@ -85,24 +89,64 @@ def bootstrap(actor: CurrentUser, db: Session = Depends(get_db)):
     return _portal.bootstrap(db, actor)
 
 
+def _dispatch_activation_background(event_id: uuid.UUID) -> None:
+    """Run notification fan-out in a background task (dev mode without Pub/Sub)."""
+    from app.services.notification_dispatch import dispatch_activation_notifications
+    db = SessionLocal()
+    try:
+        dispatch_activation_notifications(db, event_id)
+    except Exception:
+        logger.exception("Background activation dispatch failed for event %s", event_id)
+    finally:
+        db.close()
+
+
+def _schedule_activation_dispatch(event_id: uuid.UUID, background_tasks: BackgroundTasks) -> None:
+    if settings.use_gcp:
+        from app.services.integrations.pubsub_placeholder import publish_notification_event
+
+        publish_notification_event({"kind": "activation", "event_id": str(event_id)})
+    else:
+        background_tasks.add_task(_dispatch_activation_background, event_id)
+
+
 @router.post("/events")
 def create_event(
     payload: CreateEventIn,
     actor: CurrentUser,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    return _portal.create_event(db, actor_id=actor, payload=payload)
+    result = _portal.create_event(db, actor_id=actor, payload=payload)
+    eid = _parse_uuid(result["event"]["id"], name="event_id")
+    _schedule_activation_dispatch(eid, background_tasks)
+    return result
+
+
+@router.put("/events/{event_id}")
+def update_event(
+    event_id: str,
+    payload: CreateEventIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    eid = _parse_uuid(event_id, name="event_id")
+    return _portal.update_event(db, actor_id=actor, event_id=eid, payload=payload)
 
 
 @router.post("/events/{event_id}/activate")
 def activate_event(
     event_id: str,
     actor: CurrentUser,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    body: EventActionIn | None = None,
+    body: Optional[EventActionIn] = None,
 ):
     eid = _parse_uuid(event_id, name="event_id")
-    return _portal.activate_event(db, actor_id=actor, event_id=eid)
+    result = _portal.activate_event(db, actor_id=actor, event_id=eid)
+    if result.get("dispatched"):
+        _schedule_activation_dispatch(eid, background_tasks)
+    return result
 
 
 @router.post("/events/{event_id}/close")
@@ -143,20 +187,146 @@ def my_reports(actor: CurrentUser, db: Session = Depends(get_db)):
 def supervisor_dashboard(
     actor: CurrentUser,
     db: Session = Depends(get_db),
-    event_id: str | None = Query(default=None),
+    event_id: Optional[str] = Query(default=None),
+    view_as: Optional[str] = Query(default=None),
 ):
     eid = _parse_uuid(event_id, name="event_id") if event_id else None
-    return _portal.supervisor_dashboard(db, actor, event_id=eid)
+    vid = _parse_uuid(view_as, name="view_as") if view_as else None
+    return _portal.supervisor_dashboard(db, actor, event_id=eid, view_as=vid)
 
 
 @router.get("/dashboard/admin")
 def admin_dashboard(
     actor: CurrentUser,
     db: Session = Depends(get_db),
-    event_id: str | None = Query(default=None),
+    event_id: Optional[str] = Query(default=None),
 ):
     eid = _parse_uuid(event_id, name="event_id") if event_id else None
     return _portal.admin_dashboard(db, actor, event_id=eid)
+
+
+@router.post("/admin/event-types")
+def admin_create_event_type(
+    payload: EventTypeCreateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.admin_create_event_type(db, actor, payload)
+
+
+@router.post("/admin/departments")
+def admin_create_department(
+    payload: DepartmentCreateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.admin_create_department(db, actor, payload)
+
+
+@router.put("/admin/departments/{dept_id}")
+def admin_update_department(
+    dept_id: str,
+    payload: DepartmentUpdateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    did = _parse_uuid(dept_id, name="dept_id")
+    return _portal.admin_update_department(db, actor, did, payload)
+
+
+@router.delete("/admin/departments/{dept_id}")
+def admin_delete_department(
+    dept_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    did = _parse_uuid(dept_id, name="dept_id")
+    return _portal.admin_delete_department(db, actor, did)
+
+
+@router.get("/admin/users")
+def admin_list_users(
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+    dept_id: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+):
+    did = _parse_uuid(dept_id, name="dept_id") if dept_id else None
+    return _portal.admin_list_users(db, actor, dept_id=did, page=page, page_size=page_size)
+
+
+@router.post("/admin/users")
+def admin_create_user(
+    payload: AdminUserCreateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.admin_create_user(db, actor, payload)
+
+
+@router.put("/admin/users/{user_id}")
+def admin_update_user(
+    user_id: str,
+    payload: AdminUserUpdateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    uid = _parse_uuid(user_id, name="user_id")
+    return _portal.admin_update_user(db, actor, uid, payload)
+
+
+@router.get("/users/me")
+def get_my_profile(actor: CurrentUser, db: Session = Depends(get_db)):
+    return _portal.get_profile(db, actor)
+
+
+@router.put("/users/me")
+def update_my_profile(
+    payload: ProfileUpdateIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.update_profile(db, actor, payload)
+
+
+@router.put("/users/me/password")
+def change_my_password(
+    payload: ChangePasswordIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.change_password(db, actor, payload)
+
+
+@router.post("/admin/users/{user_id}/reset-password")
+def admin_reset_password(
+    user_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    uid = _parse_uuid(user_id, name="user_id")
+    return _portal.admin_reset_password(db, actor, uid)
+
+
+@router.put("/admin/users/{user_id}/deactivate")
+def admin_deactivate_user(
+    user_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    uid = _parse_uuid(user_id, name="user_id")
+    return _portal.admin_deactivate_user(db, actor, uid)
+
+
+@router.put("/admin/users/{user_id}/activate")
+def admin_activate_user(
+    user_id: str,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    uid = _parse_uuid(user_id, name="user_id")
+    return _portal.admin_activate_user(db, actor, uid)
 
 
 @router.get("/notifications/me")

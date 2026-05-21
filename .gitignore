@@ -21,3 +21,8 @@ coverage/
 
 # Docker volumes
 postgres_data/
+
+*.txt
+*.tex
+
+.cursor/

@@ -31,10 +31,12 @@ def test_token_contains_expiry():
     token = create_access_token(uuid.uuid4(), ["employee"])
     payload = decode_token(token)
     assert "exp" in payload
-    # expiry should be roughly 8 hours from now
+    configured = timedelta(hours=max(1, int(settings.jwt_access_token_expire_hours)))
     exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
     diff = exp - datetime.now(timezone.utc)
-    assert timedelta(hours=7) < diff < timedelta(hours=9)
+    low = configured * 0.9
+    high = configured * 1.1
+    assert low < diff < high, (diff, configured)
 
 
 def test_expired_token_raises_401():

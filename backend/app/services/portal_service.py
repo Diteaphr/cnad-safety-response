@@ -26,12 +26,18 @@ from app.repositories.event_repository import EventRepository
 from app.repositories.event_type_repository import EventTypeRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.safety_response_repository import SafetyResponseRepository
+from app.repositories.user_notification_preference_repository import (
+    UserNotificationPreferenceRepository,
+)
 from app.repositories.user_repository import UserRepository
-from app.schemas.portal import CreateEventIn, LoginIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DepartmentCreateIn, DepartmentUpdateIn, EventTypeCreateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
-from app.services.integrations.mock_notification_channels import send_fcm_mock
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
+
+
+def _needs_profile_completion(user: User) -> bool:
+    return not (user.phone and str(user.phone).strip())
 
 
 def _parse_iso(dt: str) -> datetime:
@@ -47,6 +53,7 @@ def _role_names(user: User) -> List[str]:
 class PortalService:
     def __init__(self) -> None:
         self._users = UserRepository()
+        self._notif_prefs = UserNotificationPreferenceRepository()
         self._depts = DepartmentRepository()
         self._events = EventRepository()
         self._event_types = EventTypeRepository()
@@ -55,47 +62,61 @@ class PortalService:
         self._response_svc = SafetyResponseService()
         self._notif_svc = NotificationService()
 
-    def _user_out(self, user: User) -> dict[str, Any]:
+    def _attach_push_prefs(self, db: Session, user: User, out: dict[str, Any]) -> dict[str, Any]:
+        pref = user.notification_preference
+        if pref is None:
+            pref = self._notif_prefs.ensure_for_user(db, user.user_id)
+        out.update(self._notif_prefs.row_to_api_dict(pref))
+        return out
+
+    def _user_out(self, db: Session, user: User) -> dict[str, Any]:
         roles = _role_names(user)
         rcast: list[Any] = [
             x for x in roles if x in ("employee", "supervisor", "admin")
         ]
-        return {
+        pd = self._users.get_primary_department_id(db, user.user_id)
+        dm = self._users.derived_manager_id(db, user.user_id)
+        out = {
             "id": str(user.user_id),
             "name": user.name,
             "email": user.email,
-            "departmentId": str(user.department_id) if user.department_id else "",
+            "departmentId": str(pd) if pd else "",
             "roles": rcast,
-            "pushEnabled": True,
-            "managerId": str(user.manager_id) if user.manager_id else None,
+            "managerId": str(dm) if dm else None,
             "employeeCode": user.employee_no,
             "phone": user.phone or None,
+            "needsProfileCompletion": _needs_profile_completion(user),
         }
+        return self._attach_push_prefs(db, user, out)
 
     def _dept_out(self, d) -> dict[str, Any]:
         return {
             "id": str(d.department_id),
             "name": d.department_name,
             "parentId": str(d.parent_department_id) if d.parent_department_id else None,
+            "managerId": str(d.manager_id) if d.manager_id else None,
         }
 
     def _event_out(self, event: Event, name_map: dict[uuid.UUID, str]) -> dict[str, Any]:
-        tids = [str(ed.department_id) for ed in event.event_departments]
-        first = None
-        if event.event_departments:
-            first = name_map.get(event.event_departments[0].department_id)
-        st = event.start_time or event.created_at
+        def _iso(dt: datetime | None) -> str | None:
+            if dt is None:
+                return None
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc).isoformat()
+            return dt.isoformat()
+
         et = event.event_type
         return {
             "id": str(event.event_id),
             "title": event.title,
             "type": et,
             "description": event.description or "",
-            "targetDepartmentIds": tids,
+            "targetDepartmentIds": [str(d.department_id) for d in event.target_departments],
             "status": event.status,
-            "startAt": st.replace(tzinfo=timezone.utc).isoformat() if st.tzinfo is None else st.isoformat(),
-            "cardDepartment": first,
-            "venue": None,
+            "startAt": _iso(event.start_time),
+            "createdAt": _iso(event.created_at),
+            "cardDepartment": None,
+            "venue": event.location or None,
         }
 
     def _response_out(self, r: SafetyResponse) -> dict[str, Any]:
@@ -131,7 +152,7 @@ class PortalService:
         return [self._dept_out(d) for d in self._depts.list_all(db)]
 
     def list_users(self, db: Session) -> list[dict[str, Any]]:
-        return [self._user_out(u) for u in self._users.list_all(db)]
+        return [self._user_out(db, u) for u in self._users.list_all(db)]
 
     def list_events(self, db: Session) -> list[dict[str, Any]]:
         nm = self._depts.name_map(db)
@@ -146,27 +167,27 @@ class PortalService:
         return [
             {
                 "id": "employee",
-                "label": "Employee Demo",
+                "label": "Employee — employee_1",
                 "roles": ["employee"],
-                "userId": str(ids.U_01),
+                "userId": str(ids.user_key(2)),
             },
             {
                 "id": "supervisor",
-                "label": "Supervisor Demo",
+                "label": "Supervisor — employee_2",
                 "roles": ["supervisor"],
-                "userId": str(ids.U_02),
+                "userId": str(ids.user_key(3)),
             },
             {
                 "id": "admin",
-                "label": "Admin Demo",
+                "label": "Admin — admin@test.com",
                 "roles": ["admin"],
-                "userId": str(ids.U_04),
+                "userId": str(ids.user_key(1)),
             },
             {
                 "id": "multi",
-                "label": "Multi-role Demo",
+                "label": "Multi-role — employee_3",
                 "roles": ["employee", "supervisor", "admin"],
-                "userId": str(ids.U_02),
+                "userId": str(ids.user_key(4)),
             },
         ]
 
@@ -185,7 +206,7 @@ class PortalService:
                 my_report = self._response_out(r)
         roles = _role_names(user)
         return {
-            "current_user": self._user_out(user),
+            "current_user": self._user_out(db, user),
             "active_event": self._event_out(active, nm) if active else None,
             "my_active_report": my_report,
             "capabilities": {
@@ -194,6 +215,22 @@ class PortalService:
                 "can_manage_events": "admin" in roles,
             },
         }
+
+    def _resolve_target_dept_ids(
+        self, db: Session, raw_ids: list[str]
+    ) -> list[uuid.UUID]:
+        """Parse UUIDs, validate existence, then expand to include all sub-departments."""
+        if not raw_ids:
+            return []
+        try:
+            uids = [uuid.UUID(did) for did in raw_ids]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid department ID format")
+        for uid in uids:
+            if self._depts.get_by_id(db, uid) is None:
+                raise HTTPException(status_code=400, detail=f"Department {uid} not found")
+        expanded = self._depts.expand_subtree(db, uids)
+        return list(dict.fromkeys(expanded))
 
     def create_event(
         self, db: Session, *, actor_id: uuid.UUID, payload: CreateEventIn
@@ -204,14 +241,6 @@ class PortalService:
             st = _parse_iso(payload.startAt)
         except ValueError as e:
             raise HTTPException(status_code=400, detail="Invalid startAt") from e
-        dids: list[uuid.UUID] = []
-        for s in payload.targetDepartmentIds:
-            try:
-                dids.append(uuid.UUID(s))
-            except ValueError as e:
-                raise HTTPException(
-                    status_code=400, detail="Invalid department id"
-                ) from e
         custom = (payload.custom_type_name or "").strip()
         if payload.type.strip().lower() == "other" and custom:
             et = self._event_types.get_or_create_by_display_name(db, custom)
@@ -219,21 +248,64 @@ class PortalService:
             et = self._event_types.get_by_label(db, payload.type)
             if et is None:
                 raise HTTPException(status_code=400, detail="Unknown event type")
+        target_dept_ids = self._resolve_target_dept_ids(db, payload.targetDepartmentIds)
         ev = self._events.create(
             db,
             title=payload.title,
             event_type_id=et.event_type_id,
             description=payload.description,
-            status="draft",
+            location=payload.location,
+            status="active",
             created_by=actor_id,
             start_time=st,
+            target_department_ids=target_dept_ids,
         )
-        self._events.add_departments(db, ev.event_id, dids)
         db.commit()
         nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, ev.event_id)
         assert full is not None
         return {"message": "Event created", "event": self._event_out(full, nm)}
+
+    def update_event(
+        self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID, payload: CreateEventIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        ev = self._events.get_by_id(db, event_id)
+        if ev is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        if ev.status != "active":
+            raise HTTPException(
+                status_code=409, detail="Only active events can be edited"
+            )
+        try:
+            st = _parse_iso(payload.startAt)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid startAt") from e
+        custom = (payload.custom_type_name or "").strip()
+        if payload.type.strip().lower() == "other" and custom:
+            et = self._event_types.get_or_create_by_display_name(db, custom)
+        else:
+            et = self._event_types.get_by_label(db, payload.type)
+            if et is None:
+                raise HTTPException(status_code=400, detail="Unknown event type")
+        target_dept_ids = self._resolve_target_dept_ids(db, payload.targetDepartmentIds)
+        self._events.update(
+            db,
+            event_id,
+            title=payload.title,
+            event_type_id=et.event_type_id,
+            description=payload.description,
+            location=payload.location,
+            start_time=st,
+            target_department_ids=target_dept_ids,
+        )
+        db.commit()
+        db.expire_all()
+        nm = self._depts.name_map(db)
+        full = self._events.get_by_id(db, event_id)
+        assert full is not None
+        return {"message": "Event updated", "event": self._event_out(full, nm)}
 
     def activate_event(self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID):
         if not self._users.user_has_role(db, actor_id, "admin"):
@@ -241,13 +313,26 @@ class PortalService:
         ev = self._events.get_by_id(db, event_id)
         if ev is None:
             raise HTTPException(status_code=404, detail="Event not found")
-        self._events.close_all_active_except(db, event_id)
-        self._events.set_status(db, event_id, "active")
+        if ev.status == "closed":
+            raise HTTPException(status_code=400, detail="Cannot activate a closed event")
+        dispatched = False
+        if ev.status != "active":
+            self._events.set_status(db, event_id, "active")
+            dispatched = True
         db.commit()
         nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, event_id)
         assert full is not None
-        return {"message": "Event activated", "event": self._event_out(full, nm)}
+
+        # Notification dispatch is intentionally NOT done here.
+        # The route handler (portal.py) triggers it via BackgroundTask (dev) or
+        # Pub/Sub publish (prod) after this method returns, keeping the service
+        # layer free of transport concerns.
+        return {
+            "message": "Event activated" if dispatched else "Already active",
+            "event": self._event_out(full, nm),
+            "dispatched": dispatched,
+        }
 
     def close_event(self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID):
         if not self._users.user_has_role(db, actor_id, "admin"):
@@ -292,13 +377,29 @@ class PortalService:
         return [self._response_out(r) for r in rows]
 
     def supervisor_dashboard(
-        self, db: Session, user_id: uuid.UUID, event_id: uuid.UUID | None = None
+        self,
+        db: Session,
+        user_id: uuid.UUID,
+        event_id: uuid.UUID | None = None,
+        view_as: uuid.UUID | None = None,
     ) -> dict[str, Any]:
-        user = self._users.get_by_id(db, user_id)
-        if user is None:
+        actor = self._users.get_by_id(db, user_id)
+        if actor is None:
             raise HTTPException(status_code=404, detail="User not found")
-        if "supervisor" not in _role_names(user):
+        if "supervisor" not in _role_names(actor):
             raise HTTPException(status_code=403, detail="Supervisor only")
+
+        # view_as: allow drilling into a subordinate manager's team
+        if view_as is not None:
+            target = self._users.get_by_id(db, view_as)
+            if target is None:
+                raise HTTPException(status_code=404, detail="Target user not found")
+            if not self._users.is_subordinate_of(db, actor_id=user_id, target_id=view_as):
+                raise HTTPException(status_code=403, detail="Cannot view this team")
+            target_manager_id = view_as
+        else:
+            target_manager_id = user_id
+
         nm = self._depts.name_map(db)
         if event_id is not None:
             active_event = self._events.get_by_id(db, event_id)
@@ -308,62 +409,72 @@ class PortalService:
             events = [e for e in self._events.list_all(db) if e.status == "active"]
             events.sort(key=lambda e: e.created_at, reverse=True)
             active_event = events[0] if events else None
+
         if active_event is None:
             return {
                 "event": None,
-                "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0},
+                "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0, "total": 0},
                 "team": [],
+                "view_as": str(view_as) if view_as else None,
             }
-        team_users = [
-            u
-            for u in self._users.list_subordinates(db, user_id)
-            if "employee" in _role_names(u)
-        ]
-        team_ids = {u.user_id for u in team_users}
-        reports = self._responses.list_for_event(db, active_event.event_id)
-        latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
-        for r in reports:
-            if r.user_id not in team_ids:
-                continue
-            prev = latest_by_user.get(r.user_id)
-            if prev is None or r.responded_at > prev.responded_at:
-                latest_by_user[r.user_id] = r
 
-        def stats_for_users(ids_set: set[uuid.UUID]) -> dict[str, int]:
-            safe_c = need_c = 0
-            responded = 0
-            for uid in ids_set:
-                lr = latest_by_user.get(uid)
-                if lr is None:
-                    continue
-                responded += 1
-                if lr.status == "safe":
-                    safe_c += 1
-                elif lr.status == "need_help":
-                    need_c += 1
-            return {"safe": safe_c, "need_help": need_c, "responded": responded}
+        # KPI: SQL aggregate over ALL recursive subordinates — no User objects loaded
+        kpis = self._responses.kpi_for_manager_subordinates(
+            db, event_id=active_event.event_id, manager_id=target_manager_id
+        )
 
-        st = stats_for_users(team_ids)
+        # Team: line reports (same rule as API managerId / derived_manager_id), not raw dept.manager_id membership
+        direct_reports = self._users.list_line_reports(db, target_manager_id)
+        # 僅「純主管列」走轉下屬匯總；具 employee 身分之副主管／組長仍應顯示本人回報狀態
+        def _rollup_supervisor_only(u: User) -> bool:
+            r = _role_names(u)
+            return "supervisor" in r and "employee" not in r
+
+        employee_ids = [u.user_id for u in direct_reports if not _rollup_supervisor_only(u)]
+        latest_responses = self._responses.latest_for_users(
+            db, active_event.event_id, employee_ids
+        )
+
+        prim = self._users.primary_department_map(db, [u.user_id for u in direct_reports])
         team = []
-        for u in team_users:
-            lr = latest_by_user.get(u.user_id)
-            dname = nm.get(u.department_id, "-") if u.department_id else "-"
-            team.append(
-                {
+        for u in direct_reports:
+            u_roles = _role_names(u)
+            did = prim.get(u.user_id)
+            dname = nm.get(did, "-") if did else "-"
+            if _rollup_supervisor_only(u):
+                sub_kpis = self._responses.kpi_for_manager_subordinates(
+                    db, event_id=active_event.event_id, manager_id=u.user_id
+                )
+                team.append({
                     "user_id": str(u.user_id),
                     "name": u.name,
                     "department": dname,
+                    "is_supervisor": True,
+                    "status": None,
+                    "reported_at": None,
+                    "needs_follow_up": sub_kpis["pending"] > 0 or sub_kpis["need_help"] > 0,
+                    "phone": u.phone,
+                    "sub_team_summary": sub_kpis,
+                })
+            else:
+                lr = latest_responses.get(u.user_id)
+                team.append({
+                    "user_id": str(u.user_id),
+                    "name": u.name,
+                    "department": dname,
+                    "is_supervisor": False,
                     "status": lr.status if lr else "pending",
                     "reported_at": lr.responded_at.isoformat() if lr else None,
                     "needs_follow_up": lr is None or lr.status == "need_help",
-                    "phone": u.phone or None,
-                }
-            )
-        pending = len(team_users) - st["responded"]
+                    "phone": u.phone,
+                    "sub_team_summary": None,
+                })
+
         return {
             "event": self._event_out(active_event, nm),
-            "kpis": {**st, "pending": max(0, pending)},
-            "team": sorted(team, key=lambda x: (x["status"] == "safe", x["name"])),
+            "kpis": kpis,
+            "team": sorted(team, key=lambda x: (not x["needs_follow_up"], x["name"])),
+            "view_as": str(view_as) if view_as else None,
         }
 
     def admin_dashboard(
@@ -380,60 +491,316 @@ class PortalService:
             if active_event is None:
                 raise HTTPException(status_code=404, detail="Event not found")
         else:
-            events = [e for e in self._events.list_all(db) if e.status == "active"]
-            events.sort(key=lambda e: e.created_at, reverse=True)
-            active_event = events[0] if events else None
+            active_event = self._events.latest_active(db)
         if active_event is None:
             return {
                 "event": None,
-                "kpis": {
-                    "safe": 0,
-                    "need_help": 0,
-                    "responded": 0,
-                    "pending": 0,
-                    "targeted": 0,
-                },
+                "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0, "targeted": 0},
                 "departments": [],
             }
-        targeted = [u for u in self._users.list_all(db) if "employee" in _role_names(u)]
-        targeted_count = len(targeted)
-        reports = self._responses.list_for_event(db, active_event.event_id)
-        latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
-        for r in reports:
-            prev = latest_by_user.get(r.user_id)
-            if prev is None or r.responded_at > prev.responded_at:
-                latest_by_user[r.user_id] = r
-        responded = len(latest_by_user)
-        safe_c = sum(1 for r in latest_by_user.values() if r.status == "safe")
-        need_c = sum(1 for r in latest_by_user.values() if r.status == "need_help")
-        pending = max(0, targeted_count - responded)
-        dept_stats: dict[str, dict[str, Any]] = {}
-        for u in targeted:
-            if not u.department_id:
-                continue
-            dname = nm.get(u.department_id, "Unknown")
-            bucket = dept_stats.setdefault(
-                dname,
-                {"department": dname, "safe": 0, "need_help": 0, "pending": 0},
-            )
-            lr = latest_by_user.get(u.user_id)
-            if lr is None:
-                bucket["pending"] += 1
-            elif lr.status == "safe":
-                bucket["safe"] += 1
-            else:
-                bucket["need_help"] += 1
+        kpis = self._responses.admin_kpi(db, event_id=active_event.event_id)
+        departments = self._responses.admin_dept_stats(db, event_id=active_event.event_id)
         return {
             "event": self._event_out(active_event, nm),
-            "kpis": {
-                "safe": safe_c,
-                "need_help": need_c,
-                "responded": responded,
-                "pending": pending,
-                "targeted": targeted_count,
-            },
-            "departments": sorted(dept_stats.values(), key=lambda x: x["department"]),
+            "kpis": kpis,
+            "departments": departments,
         }
+
+    # ------------------------------------------------------------------
+    # Profile (self-service)
+    # ------------------------------------------------------------------
+
+    def _profile_out(self, db: Session, user: User) -> dict[str, Any]:
+        """Extended user dict that includes phone and employeeNo — for /users/me."""
+        roles = _role_names(user)
+        rcast: list[Any] = [x for x in roles if x in ("employee", "supervisor", "admin")]
+        pd = self._users.get_primary_department_id(db, user.user_id)
+        dm = self._users.derived_manager_id(db, user.user_id)
+        out = {
+            "id": str(user.user_id),
+            "employeeNo": user.employee_no,
+            "name": user.name,
+            "email": user.email,
+            "phone": user.phone,
+            "departmentId": str(pd) if pd else None,
+            "managerId": str(dm) if dm else None,
+            "roles": rcast,
+            "needsProfileCompletion": _needs_profile_completion(user),
+            "mustChangePassword": user.must_change_password,
+        }
+        return self._attach_push_prefs(db, user, out)
+
+    def get_profile(self, db: Session, user_id: uuid.UUID) -> dict[str, Any]:
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return self._profile_out(db, user)
+
+    def update_profile(
+        self, db: Session, user_id: uuid.UUID, payload: ProfileUpdateIn
+    ) -> dict[str, Any]:
+        if self._users.get_by_id(db, user_id) is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = self._users.update_profile(
+            db,
+            user_id,
+            name=payload.name.strip(),
+            phone=payload.phone.strip() if payload.phone else None,
+        )
+        if (
+            payload.push_enabled is not None
+            or payload.push_emergency_enabled is not None
+            or payload.push_reminder_enabled is not None
+            or payload.push_escalation_enabled is not None
+        ):
+            self._notif_prefs.apply_partial(
+                db,
+                user_id,
+                push_master_enabled=payload.push_enabled,
+                push_emergency_enabled=payload.push_emergency_enabled,
+                push_reminder_enabled=payload.push_reminder_enabled,
+                push_escalation_enabled=payload.push_escalation_enabled,
+            )
+        db.commit()
+        db.expire_all()
+        refreshed = self._users.get_by_id(db, user_id)
+        assert refreshed is not None
+        return self._profile_out(db, refreshed)
+
+    def change_password(
+        self, db: Session, user_id: uuid.UUID, payload: ChangePasswordIn
+    ) -> dict[str, Any]:
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if not user.password_hash or not verify_password(payload.currentPassword, user.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        self._users.update_password(db, user_id, new_hash=hash_password(payload.newPassword))
+        db.commit()
+        return {"message": "Password changed successfully."}
+
+    # ------------------------------------------------------------------
+    # Admin: user management
+    # ------------------------------------------------------------------
+
+    def _parse_optional_uuid(self, value: str | None, *, field: str) -> uuid.UUID | None:
+        if not value:
+            return None
+        try:
+            return uuid.UUID(value.strip())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid {field}") from e
+
+    def admin_deactivate_user(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if actor_id == user_id:
+            raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.status == "inactive":
+            raise HTTPException(status_code=409, detail="Account is already inactive")
+        self._users.set_status(db, user_id, status="inactive")
+        db.commit()
+        return {"message": "Account deactivated."}
+
+    def admin_activate_user(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.status == "active":
+            raise HTTPException(status_code=409, detail="Account is already active")
+        self._users.set_status(db, user_id, status="active")
+        db.commit()
+        return {"message": "Account activated."}
+
+    def admin_reset_password(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._users.get_by_id(db, user_id) is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        default_password = "Welcome@1234"
+        self._users.update_password(db, user_id, new_hash=hash_password(default_password))
+        db.commit()
+        return {"message": "Password reset.", "temporaryPassword": default_password}
+
+    # ------------------------------------------------------------------
+    # Admin: event type management
+    # ------------------------------------------------------------------
+
+    def admin_create_event_type(
+        self, db: Session, actor_id: uuid.UUID, payload: EventTypeCreateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        name = payload.name.strip()
+        if self._event_types.get_by_label(db, name) is not None:
+            raise HTTPException(status_code=409, detail="Event type already exists")
+        row = self._event_types.get_or_create_by_display_name(db, name)
+        db.commit()
+        return {"id": str(row.event_type_id), "code": row.code, "name": row.name}
+
+    # ------------------------------------------------------------------
+    # Admin: department management
+    # ------------------------------------------------------------------
+
+    def admin_create_department(
+        self, db: Session, actor_id: uuid.UUID, payload: DepartmentCreateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        parent_id = self._parse_optional_uuid(payload.parentId, field="parentId")
+        if parent_id and self._depts.get_by_id(db, parent_id) is None:
+            raise HTTPException(status_code=400, detail="Parent department not found")
+        dept = self._depts.create(db, name=payload.name.strip(), parent_id=parent_id)
+        db.commit()
+        return self._dept_out(dept)
+
+    def admin_update_department(
+        self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID, payload: DepartmentUpdateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+        parent_id = self._parse_optional_uuid(payload.parentId, field="parentId")
+        if parent_id:
+            if self._depts.get_by_id(db, parent_id) is None:
+                raise HTTPException(status_code=400, detail="Parent department not found")
+            if parent_id == dept_id:
+                raise HTTPException(status_code=400, detail="Department cannot be its own parent")
+        dept = self._depts.update(db, dept_id, name=payload.name.strip(), parent_id=parent_id)
+        db.commit()
+        return self._dept_out(dept)
+
+    def admin_delete_department(
+        self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        if self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+        if self._depts.has_members(db, dept_id):
+            raise HTTPException(status_code=409, detail="Department still has members")
+        if self._depts.has_sub_departments(db, dept_id):
+            raise HTTPException(status_code=409, detail="Department still has sub-departments")
+        self._depts.delete(db, dept_id)
+        db.commit()
+        return {"message": "Department deleted."}
+
+    def admin_list_users(
+        self,
+        db: Session,
+        actor_id: uuid.UUID,
+        dept_id: uuid.UUID | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+        offset = (page - 1) * page_size
+        if dept_id is not None:
+            if self._depts.get_by_id(db, dept_id) is None:
+                raise HTTPException(status_code=404, detail="Department not found")
+            total = self._users.count_by_department(db, dept_id)
+            users = self._users.list_by_department(db, dept_id, limit=page_size, offset=offset)
+        else:
+            total = self._users.count_all(db)
+            users = self._users.list_all(db, limit=page_size, offset=offset)
+        return {
+            "users": [self._profile_out(db, u) for u in users],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    def admin_create_user(
+        self, db: Session, actor_id: uuid.UUID, payload: AdminUserCreateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+
+        email = payload.email.strip().lower()
+        if self._users.get_by_email(db, email):
+            raise HTTPException(status_code=409, detail="Email already registered.")
+
+        dept_id = self._parse_optional_uuid(payload.departmentId, field="departmentId")
+        if dept_id and self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=400, detail="Department not found")
+
+        emp_no = payload.employeeNo.strip()
+        if self._users.employee_no_exists(db, emp_no):
+            raise HTTPException(status_code=409, detail="Employee number already in use.")
+
+        raw_pw = (payload.password or "").strip()
+        temporary_password: str | None = None
+        if raw_pw:
+            pw_plain = raw_pw
+        else:
+            temporary_password = emp_no
+            pw_plain = temporary_password
+
+        user = User(
+            employee_no=emp_no,
+            name=payload.name.strip(),
+            email=email,
+            phone=payload.phone.strip(),
+            status="active",
+            password_hash=hash_password(pw_plain),
+            must_change_password=temporary_password is not None,
+        )
+        db.add(user)
+        db.flush()
+        self._notif_prefs.ensure_for_user(db, user.user_id)
+        self._users.set_primary_department(db, user.user_id, dept_id)
+        self._users.set_roles(db, user.user_id, payload.roles)
+        db.commit()
+
+        full = self._users.get_by_id(db, user.user_id)
+        assert full is not None
+        out: dict[str, Any] = {"message": "User created.", "user": self._profile_out(db, full)}
+        if temporary_password is not None:
+            out["temporaryPassword"] = temporary_password
+        return out
+
+    def admin_update_user(
+        self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID, payload: AdminUserUpdateIn
+    ) -> dict[str, Any]:
+        if not self._users.user_has_role(db, actor_id, "admin"):
+            raise HTTPException(status_code=403, detail="Admin only")
+
+        if self._users.get_by_id(db, user_id) is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        dept_id = self._parse_optional_uuid(payload.departmentId, field="departmentId")
+        if dept_id and self._depts.get_by_id(db, dept_id) is None:
+            raise HTTPException(status_code=400, detail="Department not found")
+
+        self._users.update_user_admin(
+            db,
+            user_id,
+            name=payload.name.strip(),
+            phone=payload.phone.strip() if payload.phone else None,
+            department_id=dept_id,
+        )
+        self._users.set_roles(db, user_id, payload.roles)
+        db.commit()
+        # expire_all forces SQLAlchemy to re-query from DB rather than serve
+        # user_roles from the identity-map cache (needed when expire_on_commit=False)
+        db.expire_all()
+
+        full = self._users.get_by_id(db, user_id)
+        assert full is not None
+        return self._profile_out(db, full)
 
     def register(self, db: Session, payload: RegisterIn) -> dict[str, Any]:
         email = payload.email.strip().lower()
@@ -478,18 +845,18 @@ class PortalService:
             name=payload.name.strip(),
             email=email,
             phone=payload.phone.strip() if payload.phone else None,
-            department_id=dept_uuid,
-            manager_id=None,
             status="active",
             password_hash=hash_password(payload.password),
         )
         db.add(user)
         db.flush()
+        self._users.set_primary_department(db, user.user_id, dept_uuid)
         db.add(UserRole(user_id=user.user_id, role_id=rid))
+        self._notif_prefs.ensure_for_user(db, user.user_id)
         db.commit()
         full = self._users.get_by_id(db, user.user_id)
         assert full is not None
-        return {"message": "Registration successful.", "user": self._user_out(full)}
+        return {"message": "Registration successful.", "user": self._user_out(db, full)}
 
     def login(self, db: Session, payload: LoginIn) -> dict[str, Any]:
         user = self._users.get_by_email(db, payload.email.strip().lower())
@@ -498,10 +865,15 @@ class PortalService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password.",
             )
+        if user.status != "active":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is inactive.",
+            )
         roles = _role_names(user)
         token = create_access_token(user.user_id, roles)
         return {
-            "user": self._user_out(user),
+            "user": self._user_out(db, user),
             "access_token": token,
             "token_type": "bearer",
         }
@@ -529,7 +901,7 @@ class PortalService:
         roles = _role_names(user)
         token = create_access_token(user.user_id, roles)
         return {
-            "user": self._user_out(user),
+            "user": self._user_out(db, user),
             "access_token": token,
             "token_type": "bearer",
         }
@@ -553,7 +925,13 @@ class PortalService:
         if self._users.get_by_id(db, user_id) is None:
             raise HTTPException(status_code=404, detail="User not found")
         rows = self._notifications.list_for_user(db, user_id)
-        return [self._notif_out(r) for r in rows]
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            d = self._notif_out(r)
+            ev = self._events.get_by_id(db, r.event_id)
+            d["eventTitle"] = ev.title if ev else ""
+            out.append(d)
+        return out
 
     def failed_notifications_for_event(
         self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID
@@ -647,45 +1025,16 @@ class PortalService:
 
         team_users = [
             u
-            for u in self._users.list_subordinates(db, actor_id)
+            for u in self._users.list_all_subordinates(db, actor_id)
             if "employee" in _role_names(u)
         ]
 
-        reports = self._responses.list_for_event(db, event_id)
-        latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
-        for r in reports:
-            prev = latest_by_user.get(r.user_id)
-            if prev is None or r.responded_at > prev.responded_at:
-                latest_by_user[r.user_id] = r
-
-        sent = 0
-        already_safe = 0
-
-        def _make_send_fn(target_user: User, event_title: str, eid: uuid.UUID):
-            return lambda: send_fcm_mock(
-                device_token=str(target_user.user_id),
-                title="安全確認提醒",
-                body=f"請盡快回報您的安全狀態：{event_title}",
-                data={"event_id": str(eid)},
-            )
-
-        for user in team_users:
-            lr = latest_by_user.get(user.user_id)
-            if lr is not None and lr.status == "safe":
-                already_safe += 1
-                continue
-            self._notif_svc.deliver_with_idempotency(
-                db,
-                event_id=event_id,
-                user_id=user.user_id,
-                channel="fcm_reminder",
-                send_fn=_make_send_fn(user, ev.title, event_id),
-            )
-            sent += 1
+        from app.services.notification_dispatch import dispatch_reminders
+        stats = dispatch_reminders(db, event_id, team_users)
 
         return {
             "message": "Reminders sent",
-            "sent": sent,
-            "already_safe": already_safe,
-            "total_team": len(team_users),
+            "sent": stats["sent"],
+            "already_safe": stats["already_safe"],
+            "total_team": stats["total"],
         }

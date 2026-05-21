@@ -8,7 +8,6 @@ export function deriveEventUiStatus(
 ): EventUiStatus {
   if (!event) return 'monitoring';
   if (event.status === 'closed') return 'resolved';
-  if (event.status === 'draft') return 'monitoring';
   if (kpis && kpis.total > 0) {
     const pendRatio = kpis.pending / kpis.total;
     if (kpis.needHelp > 0 || pendRatio >= 0.2) return 'escalated';
