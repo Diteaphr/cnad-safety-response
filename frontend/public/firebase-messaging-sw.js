@@ -3,7 +3,8 @@
 // so we can read event.data directly without the Firebase SDK.
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+// No clients.claim() — claiming open pages causes Firebase SDK to detect
+// a SW change and reset app state, which kicks users back to login.
 
 self.addEventListener('push', (event) => {
   // Notify all open app windows so the push receipt is visible in the app.
