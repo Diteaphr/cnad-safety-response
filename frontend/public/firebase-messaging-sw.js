@@ -2,7 +2,15 @@
 // The browser decrypts the push payload before passing it to the SW,
 // so we can read event.data directly without the Firebase SDK.
 
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
 self.addEventListener('push', (event) => {
+  // Notify all open app windows so the push receipt is visible in the app.
+  self.clients.matchAll({ type: 'window' }).then((wins) => {
+    wins.forEach((w) => w.postMessage({ type: 'SW_PUSH_RECEIVED', hasData: !!event.data }));
+  });
+
   if (!event.data) return;
 
   let payload;

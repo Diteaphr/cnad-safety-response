@@ -266,6 +266,18 @@ function App() {
     return () => unsub?.();
   }, [session.isLoggedIn]);
 
+  // Listen for SW_PUSH_RECEIVED to confirm the service worker got the push event.
+  useEffect(() => {
+    if (!session.isLoggedIn) return;
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'SW_PUSH_RECEIVED') {
+        console.log('[App] SW received push, hasData:', e.data.hasData);
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', handler);
+    return () => navigator.serviceWorker?.removeEventListener('message', handler);
+  }, [session.isLoggedIn]);
+
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
   const [eventForm, setEventForm] = useState({
