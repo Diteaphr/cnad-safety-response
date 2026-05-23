@@ -11,6 +11,10 @@ Integration tests for notification delivery logic:
     - SMS fallback when FCM fails (user has phone)
     - No SMS fallback when user has no phone
 
+  send_fcm_batch (unit)
+    - Mock mode returns True for every message
+    - Results list length matches input
+
   POST /api/events/{id}/reminders
     - SMS fallback when FCM fails (user has phone)
 """
@@ -32,6 +36,11 @@ def _reminders_url(event_id) -> str:
 
 def _notifs_by_channel(notifs: list[dict]) -> dict[str, dict]:
     return {n["channel"]: n for n in notifs}
+
+
+def _all_fail(messages):
+    """side_effect for send_fcm_batch: return False for every message."""
+    return [False] * len(messages)
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +144,7 @@ def test_activate_sms_fallback_when_fcm_fails(
     )
     event = make_event(status="active")
 
-    with patch("app.services.notification_dispatch.send_fcm_mock", return_value=False):
+    with patch("app.services.notification_dispatch.send_fcm_batch", side_effect=_all_fail):
         dispatch_activation_notifications(db, event.event_id)
 
     notifs = client.get(NOTIFICATIONS_ME, headers=auth_headers(emp)).json()["notifications"]
@@ -158,7 +167,7 @@ def test_activate_no_sms_fallback_when_user_has_no_phone(
     )
     event = make_event(status="active")
 
-    with patch("app.services.notification_dispatch.send_fcm_mock", return_value=False):
+    with patch("app.services.notification_dispatch.send_fcm_batch", side_effect=_all_fail):
         dispatch_activation_notifications(db, event.event_id)
 
     notifs = client.get(NOTIFICATIONS_ME, headers=auth_headers(emp)).json()["notifications"]
@@ -215,6 +224,39 @@ def test_activation_targeted_dept_includes_child_dept_employees(
 
     other_notifs = client.get(NOTIFICATIONS_ME, headers=auth_headers(emp_other)).json()["notifications"]
     assert other_notifs == []
+
+
+# ---------------------------------------------------------------------------
+# send_fcm_batch — unit tests
+# ---------------------------------------------------------------------------
+
+def test_send_fcm_batch_mock_returns_all_true():
+    """Mock mode (firebase_enabled=false) returns True for every message."""
+    from app.services.integrations.mock_notification_channels import send_fcm_batch
+
+    messages = [
+        {"token": f"tok{i}", "title": "Test", "body": "Body", "data": {}}
+        for i in range(5)
+    ]
+    results = send_fcm_batch(messages)
+    assert results == [True] * 5
+
+
+def test_send_fcm_batch_empty_input():
+    from app.services.integrations.mock_notification_channels import send_fcm_batch
+
+    assert send_fcm_batch([]) == []
+
+
+def test_send_fcm_batch_result_length_matches_input():
+    from app.services.integrations.mock_notification_channels import send_fcm_batch
+
+    messages = [
+        {"token": f"tok{i}", "title": "T", "body": "B", "data": {}}
+        for i in range(12)
+    ]
+    results = send_fcm_batch(messages)
+    assert len(results) == 12
 
 
 # ---------------------------------------------------------------------------
