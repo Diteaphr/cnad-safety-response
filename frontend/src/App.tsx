@@ -950,9 +950,13 @@ function App() {
     });
     setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
     // 登入後在背景取得 FCM token 並儲存到後端（失敗不影響登入流程）
+    // TODO: remove debug alert after FCM is confirmed working
     import('./lib/firebase').then(({ requestFcmToken }) =>
-      requestFcmToken().then((token) => { if (token) updateFcmTokenApi(token); })
-    ).catch(() => {});
+      requestFcmToken().then((token) => {
+        alert('[FCM debug] token=' + (token ?? 'null'));
+        if (token) updateFcmTokenApi(token);
+      })
+    ).catch((e) => { alert('[FCM debug] import error: ' + e); });
   };
 
   const enterAdminCenter = () => {
