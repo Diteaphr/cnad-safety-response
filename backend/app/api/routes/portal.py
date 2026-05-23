@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, DepartmentCreateIn, DepartmentUpdateIn, EventActionIn, EventTypeCreateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
+from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, DepartmentCreateIn, DepartmentUpdateIn, EventActionIn, EventTypeCreateIn, FcmTokenIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.services.portal_service import PortalService
 
 logger = logging.getLogger(__name__)
@@ -288,6 +288,15 @@ def update_my_profile(
     db: Session = Depends(get_db),
 ):
     return _portal.update_profile(db, actor, payload)
+
+
+@router.put("/users/me/fcm-token")
+def update_fcm_token(
+    payload: FcmTokenIn,
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.update_fcm_token(db, actor, payload.token)
 
 
 @router.put("/users/me/password")

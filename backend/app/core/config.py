@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     # Email／demo 登入核發之 access token 有效小時數（預設 720 ≈ 30 天，可用 JWT_ACCESS_TOKEN_EXPIRE_HOURS 覆寫）。
     jwt_access_token_expire_hours: int = 720
 
+    # Firebase Cloud Messaging
+    # 設 true 後會嘗試用 Firebase Admin SDK 真實發送；false 則 log-only mock。
+    # 本機開發保持 false；Cloud Run 設 true 並確保 service account 有 FCM 發送權限。
+    firebase_enabled: bool = False
+    # 選填：Service Account JSON 字串（base64 或原始 JSON）。
+    # 留空時使用 Application Default Credentials（Cloud Run 推薦做法）。
+    firebase_credentials_json: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

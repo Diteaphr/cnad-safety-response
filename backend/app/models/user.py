@@ -28,6 +28,7 @@ class User(Base):
     status: Mapped[str] = mapped_column(String, nullable=False)
     password_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     must_change_password: Mapped[bool] = mapped_column(default=False, nullable=False)
+    fcm_token: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     department_memberships: Mapped[list["UserDepartment"]] = relationship(
         "UserDepartment",

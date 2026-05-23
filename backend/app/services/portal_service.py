@@ -32,6 +32,7 @@ from app.repositories.user_notification_preference_repository import (
 from app.repositories.user_repository import UserRepository
 from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DepartmentCreateIn, DepartmentUpdateIn, EventTypeCreateIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
 from app.schemas.response import SafetyResponseCreate
+from app.services.integrations.mock_notification_channels import send_fcm_mock
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
 
@@ -567,6 +568,14 @@ class PortalService:
         assert refreshed is not None
         return self._profile_out(db, refreshed)
 
+    def update_fcm_token(self, db: Session, user_id: uuid.UUID, token: str) -> dict[str, str]:
+        user = self._users.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        user.fcm_token = token
+        db.commit()
+        return {"status": "ok"}
+
     def change_password(
         self, db: Session, user_id: uuid.UUID, payload: ChangePasswordIn
     ) -> dict[str, Any]:
@@ -989,7 +998,7 @@ class PortalService:
                 title = "簡訊提醒"
                 body = f"請回報活動「{ev.title}」的安全狀態"
             return send_fcm_mock(
-                device_token=str(target_user.user_id),
+                device_token=target_user.fcm_token or str(target_user.user_id),
                 title=title,
                 body=body,
                 data={"event_id": str(ev.event_id), "retry": "true"},

@@ -173,6 +173,12 @@ class ChangePasswordIn(BaseModel):
     newPassword: str = Field(min_length=8, max_length=128)
 
 
+class FcmTokenIn(BaseModel):
+    """前端登入後將 FCM device token 存到後端。"""
+
+    token: str = Field(min_length=1, max_length=512)
+
+
 class EventTypeCreateIn(BaseModel):
     """Admin creates a new event type."""
 

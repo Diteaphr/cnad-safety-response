@@ -79,7 +79,7 @@ def dispatch_activation_notifications(db: Session, event_id: uuid.UUID) -> int:
             user_id=user.user_id,
             primary_channel="fcm_activation",
             primary_send_fn=lambda u=user: send_fcm_mock(
-                device_token=str(u.user_id),
+                device_token=u.fcm_token or str(u.user_id),
                 title="緊急安全確認",
                 body=f"請立即回報您的安全狀態：{event.title}",
                 data={"event_id": str(event_id)},
@@ -136,7 +136,7 @@ def dispatch_reminders(
             user_id=user.user_id,
             primary_channel="fcm_reminder",
             primary_send_fn=lambda u=user: send_fcm_mock(
-                device_token=str(u.user_id),
+                device_token=u.fcm_token or str(u.user_id),
                 title="安全確認提醒",
                 body=f"請盡快回報您的安全狀態：{event.title}",
                 data={"event_id": str(event_id)},

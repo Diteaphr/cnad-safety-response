@@ -32,6 +32,7 @@ import {
   getSupervisorDashboardApi,
   getUsers,
   loginWithEmailApi,
+  updateFcmTokenApi,
   PORTAL_ACCESS_TOKEN_STORAGE_KEY,
   PORTAL_SURFACE_STORAGE_KEY,
   submitReportApi,
@@ -948,6 +949,10 @@ function App() {
       caps: capsNext,
     });
     setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
+    // 登入後在背景取得 FCM token 並儲存到後端（失敗不影響登入流程）
+    import('./lib/firebase').then(({ requestFcmToken }) =>
+      requestFcmToken().then((token) => { if (token) updateFcmTokenApi(token); })
+    ).catch(() => {});
   };
 
   const enterAdminCenter = () => {

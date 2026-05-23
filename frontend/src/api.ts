@@ -477,3 +477,10 @@ export async function retryFailedNotificationApi(notificationId: string): Promis
     method: 'POST',
   });
 }
+
+export async function updateFcmTokenApi(token: string): Promise<void> {
+  await apiFetch('/api/users/me/fcm-token', {
+    method: 'PUT',
+    body: JSON.stringify({ token }),
+  });
+}
