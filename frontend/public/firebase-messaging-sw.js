@@ -1,8 +1,7 @@
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+// Service worker for FCM push notifications.
+// Uses the Web Push API directly — no Firebase SDK needed in the SW.
+// The main app's Firebase SDK handles token registration via getToken().
 
-// Handle background push directly — no Firebase init required.
-// FCM delivers the message as a standard Web Push event; we read it and show it.
 self.addEventListener('push', (event) => {
   if (!event.data) return;
   let payload = {};
@@ -21,11 +20,4 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(clients.openWindow('/'));
-});
-
-// Optional: Firebase init from main app (kept for forward-compat)
-self.addEventListener('message', (event) => {
-  if (event.data?.type !== 'FIREBASE_INIT') return;
-  if (firebase.apps.length > 0) return;
-  firebase.initializeApp(event.data.config);
 });
