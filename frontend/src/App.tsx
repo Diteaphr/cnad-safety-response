@@ -247,6 +247,25 @@ function App() {
     adminDashEventIdRef.current = selectedAdminEventId;
   }, [selectedAdminEventId]);
 
+  // Show notifications when the app is in the foreground (onMessage fires instead of SW).
+  useEffect(() => {
+    if (!session.isLoggedIn) return;
+    let unsub: (() => void) | undefined;
+    void import('./lib/firebase').then(({ onForegroundMessage }) => {
+      unsub = onForegroundMessage((payload: unknown) => {
+        const p = payload as { notification?: { title?: string; body?: string } };
+        const title = p.notification?.title ?? '安全確認';
+        const body = p.notification?.body ?? '';
+        if (Notification.permission === 'granted') {
+          navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js').then((reg) => {
+            reg?.showNotification(title, { body, icon: '/icon-192x192.png' });
+          });
+        }
+      });
+    });
+    return () => unsub?.();
+  }, [session.isLoggedIn]);
+
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
   const [eventForm, setEventForm] = useState({
