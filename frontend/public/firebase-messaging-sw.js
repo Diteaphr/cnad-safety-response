@@ -1,23 +1,24 @@
-// Service worker for FCM push notifications.
-// Uses the Web Push API directly — no Firebase SDK needed in the SW.
-// The main app's Firebase SDK handles token registration via getToken().
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  let payload = {};
-  try { payload = event.data.json(); } catch { return; }
-  const title = payload.notification?.title ?? '安全確認';
-  const body  = payload.notification?.body  ?? '';
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/icon-192x192.png',
-      data: payload.data ?? {},
-    })
-  );
+// Firebase config is a public identifier, not a secret.
+// See: https://firebase.google.com/docs/projects/api-keys
+firebase.initializeApp({
+  apiKey: 'AIzaSyALQqA4tL9T-1XNXv5erfi0chtIh94jUm8',
+  authDomain: 'cnad-safety-response.firebaseapp.com',
+  projectId: 'cnad-safety-response',
+  storageBucket: 'cnad-safety-response.firebasestorage.app',
+  messagingSenderId: '959534192972',
+  appId: '1:959534192972:web:f0142b4c52764282f5d7e9',
 });
 
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(clients.openWindow('/'));
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage((payload) => {
+  const { title, body } = payload.notification ?? {};
+  self.registration.showNotification(title ?? '安全確認', {
+    body: body ?? '',
+    icon: '/icon-192x192.png',
+    data: payload.data,
+  });
 });

@@ -15,31 +15,15 @@ const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
 const app = initializeApp(firebaseConfig);
 const messaging = getMessaging(app);
 
-// Service worker 初始化後傳入 config（避免 key 寫死在 sw 裡）
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.ready.then((registration) => {
-    registration.active?.postMessage({ type: 'FIREBASE_INIT', config: firebaseConfig });
-  });
-}
-
 /** 向使用者要通知權限，並取得 FCM device token。未設定 VAPID 或使用者拒絕時回傳 null。 */
 export async function requestFcmToken(): Promise<string | null> {
   if (!VAPID_KEY) return null;
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return null;
-    // 明確指定 firebase-messaging-sw.js，避免與 Vite PWA 的 sw.js 衝突
-    const swRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-    // 強制清除舊 push subscription 和 Firebase token，確保取得全新的 token
+    // 刪掉舊 token，讓 Firebase 自行找 firebase-messaging-sw.js 並建立新 subscription
     try { await deleteToken(messaging); } catch {}
-    if (swRegistration) {
-      const existing = await swRegistration.pushManager.getSubscription();
-      if (existing) await existing.unsubscribe();
-    }
-    const token = await getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      ...(swRegistration ? { serviceWorkerRegistration: swRegistration } : {}),
-    });
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
     return token || null;
   } catch (err) {
     console.error('[FCM] getToken failed:', err);
