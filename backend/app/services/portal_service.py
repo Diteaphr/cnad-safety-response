@@ -571,6 +571,11 @@ class PortalService:
         assert refreshed is not None
         return self._profile_out(db, refreshed)
 
+    def get_fcm_token_debug(self, db: Session, user_id: uuid.UUID) -> dict:
+        user = self._users.get_by_id(db, user_id)
+        token = user.fcm_token if user else None
+        return {"has_token": bool(token), "prefix": token[:16] if token else None}
+
     def update_fcm_token(self, db: Session, user_id: uuid.UUID, token: str) -> dict[str, str]:
         user = self._users.get_by_id(db, user_id)
         if user is None:

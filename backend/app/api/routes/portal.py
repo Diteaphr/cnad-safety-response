@@ -290,6 +290,14 @@ def update_my_profile(
     return _portal.update_profile(db, actor, payload)
 
 
+@router.get("/users/me/fcm-token")
+def get_fcm_token_debug(
+    actor: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    return _portal.get_fcm_token_debug(db, actor)
+
+
 @router.put("/users/me/fcm-token")
 def update_fcm_token(
     payload: FcmTokenIn,
