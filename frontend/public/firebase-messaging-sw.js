@@ -1,24 +1,33 @@
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+// Direct Web Push handler — no Firebase compat SDK needed.
+// The browser decrypts the push payload before passing it to the SW,
+// so we can read event.data directly without the Firebase SDK.
 
-// Firebase config is a public identifier, not a secret.
-// See: https://firebase.google.com/docs/projects/api-keys
-firebase.initializeApp({
-  apiKey: 'AIzaSyALQqA4tL9T-1XNXv5erfi0chtIh94jUm8',
-  authDomain: 'cnad-safety-response.firebaseapp.com',
-  projectId: 'cnad-safety-response',
-  storageBucket: 'cnad-safety-response.firebasestorage.app',
-  messagingSenderId: '959534192972',
-  appId: '1:959534192972:web:f0142b4c52764282f5d7e9',
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { notification: { title: '安全確認', body: event.data.text() } };
+  }
+
+  // FCM sends { notification: { title, body }, data: { ... } }
+  const notif = payload.notification ?? {};
+  const title = notif.title ?? '安全確認';
+  const body = notif.body ?? '';
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icon-192x192.png',
+      badge: '/icon-192x192.png',
+      data: payload.data ?? {},
+    })
+  );
 });
 
-const messaging = firebase.messaging();
-
-messaging.onBackgroundMessage((payload) => {
-  const { title, body } = payload.notification ?? {};
-  self.registration.showNotification(title ?? '安全確認', {
-    body: body ?? '',
-    icon: '/icon-192x192.png',
-    data: payload.data,
-  });
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(clients.openWindow('/'));
 });
