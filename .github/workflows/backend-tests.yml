@@ -1,7 +1,7 @@
 name: Backend Tests
 
 on:
-  workflow_dispatch: # CI disabled for now — enable by restoring push/pull_request triggers
+  workflow_dispatch: # 手動觸發；需要時再開 push/pull_request
 
 jobs:
   test:
