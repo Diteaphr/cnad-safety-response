@@ -20,10 +20,40 @@ export async function requestFcmToken(): Promise<string | null> {
   if (!VAPID_KEY) return null;
   try {
     const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return null;
-    // 刪掉舊 token，讓 Firebase 自行找 firebase-messaging-sw.js 並建立新 subscription
-    try { await deleteToken(messaging); } catch {}
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+    if (permission !== 'granted') {
+      console.warn('[FCM] permission denied:', permission);
+      return null;
+    }
+
+    // Explicitly register firebase-messaging-sw.js so we control which SW handles push.
+    // Using register() (not getRegistration()) ensures we always get OUR named SW,
+    // not whatever Workbox SW might be controlling the page.
+    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    console.log('[FCM] SW scope:', swReg.scope, 'state:', (swReg.active ?? swReg.installing ?? swReg.waiting)?.state);
+
+    // Delete old FCM token
+    try {
+      await deleteToken(messaging);
+      console.log('[FCM] old token deleted');
+    } catch (e) {
+      console.warn('[FCM] deleteToken failed (may be ok if no prior token):', e);
+    }
+
+    // Force-unsubscribe any existing push subscription so FCM creates a fresh one
+    try {
+      const existingSub = await swReg.pushManager.getSubscription();
+      if (existingSub) {
+        await existingSub.unsubscribe();
+        console.log('[FCM] unsubscribed old push subscription');
+      } else {
+        console.log('[FCM] no existing push subscription');
+      }
+    } catch (e) {
+      console.warn('[FCM] unsubscribe failed:', e);
+    }
+
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+    console.log('[FCM] new token prefix:', token?.slice(0, 12));
     return token || null;
   } catch (err) {
     console.error('[FCM] getToken failed:', err);

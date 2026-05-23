@@ -4,8 +4,11 @@ Portal API — business logic for frontend SPA (three-layer: called only from AP
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 from typing import Any, List, Optional
 
 from fastapi import HTTPException, status
@@ -572,6 +575,9 @@ class PortalService:
         user = self._users.get_by_id(db, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found.")
+        old_prefix = (user.fcm_token or "")[:12]
+        new_prefix = token[:12]
+        logger.info("[FCM] update_fcm_token user=%s old=%s... new=%s...", user_id, old_prefix, new_prefix)
         user.fcm_token = token
         db.commit()
         return {"status": "ok"}
