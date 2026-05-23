@@ -28,9 +28,15 @@ export async function requestFcmToken(): Promise<string | null> {
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return null;
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+    // 明確指定 firebase-messaging-sw.js，避免與 Vite PWA 的 sw.js 衝突
+    const swRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      ...(swRegistration ? { serviceWorkerRegistration: swRegistration } : {}),
+    });
     return token || null;
-  } catch {
+  } catch (err) {
+    console.error('[FCM] getToken failed:', err);
     return null;
   }
 }
