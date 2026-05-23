@@ -2,9 +2,8 @@
 // The browser decrypts the push payload before passing it to the SW,
 // so we can read event.data directly without the Firebase SDK.
 
-self.addEventListener('install', () => self.skipWaiting());
-// No clients.claim() — claiming open pages causes Firebase SDK to detect
-// a SW change and reset app state, which kicks users back to login.
+// No skipWaiting / clients.claim — both can cause Firebase SDK to detect
+// a SW controller change and reset app state, kicking users back to login.
 
 self.addEventListener('push', (event) => {
   // Notify all open app windows so the push receipt is visible in the app.

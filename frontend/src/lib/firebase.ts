@@ -25,10 +25,9 @@ export async function requestFcmToken(): Promise<string | null> {
       return null;
     }
 
-    // Explicitly register firebase-messaging-sw.js so we control which SW handles push.
-    // Using register() (not getRegistration()) ensures we always get OUR named SW,
-    // not whatever Workbox SW might be controlling the page.
-    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    // SW is registered at app startup (App.tsx). Here we just retrieve it.
+    // Calling register() mid-flow on iOS triggers a hard reload after permission grant.
+    const swReg = await navigator.serviceWorker.ready;
     console.log('[FCM] SW scope:', swReg.scope, 'state:', (swReg.active ?? swReg.installing ?? swReg.waiting)?.state);
 
     // Delete old FCM token

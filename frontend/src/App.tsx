@@ -84,6 +84,16 @@ const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
 
 function App() {
   const { locale } = useLocale();
+
+  // Register firebase-messaging-sw.js at app startup so it is already active
+  // before the user grants notification permission. Registering mid-flow
+  // (inside requestFcmToken) triggers iOS Safari to reload the page.
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {});
+    }
+  }, []);
+
   const [session, setSession] = useState<SessionState>({
     isLoggedIn: false,
     user: null,
