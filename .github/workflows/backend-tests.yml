@@ -1,7 +1,12 @@
 name: Backend Tests
 
 on:
-  workflow_dispatch: # 手動觸發；需要時再開 push/pull_request
+  pull_request:
+    paths: ['backend/**']
+  push:
+    branches: [main]
+    paths: ['backend/**']
+  workflow_dispatch:
 
 jobs:
   test:
