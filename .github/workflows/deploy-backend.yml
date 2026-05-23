@@ -24,5 +24,5 @@ jobs:
             --source ./backend \
             --region asia-east1 \
             --project cnad-safety-response \
-            --update-env-vars "USE_GCP=${{ secrets.USE_GCP }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_NOTIFICATION_TOPIC=${{ secrets.PUBSUB_NOTIFICATION_TOPIC }}" \
+            --update-env-vars "USE_GCP=${{ secrets.USE_GCP }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_NOTIFICATION_TOPIC=${{ secrets.PUBSUB_NOTIFICATION_TOPIC }},SERVICE_URL=${{ secrets.SERVICE_URL }}" \
             --quiet

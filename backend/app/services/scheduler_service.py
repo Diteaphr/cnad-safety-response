@@ -12,6 +12,14 @@ Production (Cloud Run, REDIS_ENABLED=true):
   Lock TTL is 14 minutes — slightly less than the 15-min interval — so the
   lock always expires before the next run even if an instance crashes mid-job.
 
+Keep-alive ping (Cloud Run scale-to-0 mitigation):
+  Cloud Run scales to 0 after ~15 minutes of idle, killing this scheduler.
+  When SERVICE_URL is set, a lightweight GET /health ping runs every 10 minutes
+  so the instance stays alive for the duration of an active event.
+  Cost: ~4,300 requests/month — negligible against the 2M free-tier limit.
+  Limitation: cannot resurrect an already-dead instance; only prevents death.
+  The first cold start (admin activating event) is still unavoidable.
+
 Phase 3 migration path:
   Replace BackgroundScheduler with Cloud Scheduler + Cloud Tasks HTTP target.
   The scan logic in _scan_all_active_events() stays unchanged; only the trigger
@@ -20,6 +28,8 @@ Phase 3 migration path:
 from __future__ import annotations
 
 import logging
+import os
+import urllib.request
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -62,6 +72,26 @@ def _release_lock() -> None:
         r.close()
     except Exception:
         logger.warning("Redis lock release failed", exc_info=False)
+
+
+# ---------------------------------------------------------------------------
+# Keep-alive ping
+# ---------------------------------------------------------------------------
+
+def _keep_alive_ping() -> None:
+    """GET /health on this service's own URL to prevent Cloud Run scale-to-0.
+
+    Only active when SERVICE_URL env var is set (production).
+    Runs every 10 minutes — well within Cloud Run's idle-scaling window.
+    """
+    url = os.environ.get("SERVICE_URL", "").rstrip("/")
+    if not url:
+        return
+    try:
+        urllib.request.urlopen(f"{url}/health", timeout=5)
+        logger.debug("Keep-alive ping OK → %s/health", url)
+    except Exception:
+        logger.debug("Keep-alive ping failed (non-critical)")
 
 
 # ---------------------------------------------------------------------------
@@ -130,8 +160,15 @@ def start_scheduler() -> None:
         id="reminder_scan",
         next_run_time=None,  # don't fire immediately on startup
     )
+    _scheduler.add_job(
+        _keep_alive_ping,
+        trigger="interval",
+        minutes=10,
+        id="keep_alive",
+        next_run_time=None,  # don't fire immediately on startup
+    )
     _scheduler.start()
-    logger.info("APScheduler started: reminder_scan every 15 minutes")
+    logger.info("APScheduler started: reminder_scan every 15 min, keep_alive every 10 min")
 
 
 def stop_scheduler() -> None:
