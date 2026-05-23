@@ -19,16 +19,18 @@ const messaging = getMessaging(app);
 export async function requestFcmToken(): Promise<string | null> {
   if (!VAPID_KEY) return null;
   try {
+    // Register SW before asking permission. This lets the SW controller
+    // change settle BEFORE iOS processes the permission grant — preventing
+    // the hard-reload that iOS triggers when both happen simultaneously.
+    await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const swReg = await navigator.serviceWorker.ready;
+    console.log('[FCM] SW scope:', swReg.scope, 'state:', (swReg.active ?? swReg.installing ?? swReg.waiting)?.state);
+
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       console.warn('[FCM] permission denied:', permission);
       return null;
     }
-
-    // SW is registered at app startup (App.tsx). Here we just retrieve it.
-    // Calling register() mid-flow on iOS triggers a hard reload after permission grant.
-    const swReg = await navigator.serviceWorker.ready;
-    console.log('[FCM] SW scope:', swReg.scope, 'state:', (swReg.active ?? swReg.installing ?? swReg.waiting)?.state);
 
     // Delete old FCM token
     try {
