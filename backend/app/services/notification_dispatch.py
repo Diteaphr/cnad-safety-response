@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -309,6 +310,12 @@ def dispatch_reminders(
         if prev is None or r.responded_at > prev.responded_at:
             latest_by_user[r.user_id] = r
 
+    # Channel key includes the 15-minute scan window so each scan cycle is a
+    # fresh idempotency key — employees who haven't reported get reminded every
+    # 15 minutes until they respond (not just once).
+    now = datetime.now(timezone.utc)
+    scan_window = f"{now.strftime('%Y%m%d_%H')}{(now.minute // 15) * 15:02d}"
+
     sent = already_safe = 0
     for user in employees:
         lr = latest_by_user.get(user.user_id)
@@ -319,14 +326,14 @@ def dispatch_reminders(
             db,
             event_id=event_id,
             user_id=user.user_id,
-            primary_channel="fcm_reminder",
+            primary_channel=f"fcm_reminder_{scan_window}",
             primary_send_fn=lambda u=user: send_fcm_mock(
                 device_token=u.fcm_token or str(u.user_id),
                 title="安全確認提醒",
                 body=f"請盡快回報您的安全狀態：{event.title}",
                 data={"event_id": str(event_id)},
             ),
-            fallback_channel="sms_reminder" if user.phone else None,
+            fallback_channel=f"sms_reminder_{scan_window}" if user.phone else None,
             fallback_send_fn=(
                 lambda u=user: send_twilio_sms_mock(
                     to_e164=u.phone,
