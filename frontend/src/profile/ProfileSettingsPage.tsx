@@ -19,7 +19,7 @@ import { useLocale } from '../locale/LocaleContext';
 import type { AppLocale } from '../locale/LocaleContext';
 import { getStrings, type ProfilePageStrings } from '../locale/strings';
 import type { Department, Role, ToastState, User } from '../types';
-import { getMyProfileApi, updateMyProfileApi } from '../api';
+import { getMyProfileApi, updateMyProfileApi, updateFcmTokenApi } from '../api';
 import { ManagerContactDialog } from './ManagerContactDialog';
 import { initialsFromName } from './utils';
 
@@ -442,7 +442,16 @@ export function ProfileSettingsPage({
                 <p className="profile-settings-notify-desc">{pp.pushMasterDesc}</p>
               </div>
               {toggleRow(pushMaster, (next) => {
-                void persistNotificationPrefs({ pushEnabled: next });
+                if (next) {
+                  void (async () => {
+                    const { requestFcmToken } = await import('../lib/firebase');
+                    const token = await requestFcmToken();
+                    if (token) await updateFcmTokenApi(token);
+                    await persistNotificationPrefs({ pushEnabled: true });
+                  })();
+                } else {
+                  void persistNotificationPrefs({ pushEnabled: false });
+                }
               })}
             </li>
             <li>
