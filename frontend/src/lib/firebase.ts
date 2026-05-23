@@ -30,8 +30,12 @@ export async function requestFcmToken(): Promise<string | null> {
     if (permission !== 'granted') return null;
     // 明確指定 firebase-messaging-sw.js，避免與 Vite PWA 的 sw.js 衝突
     const swRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-    // 強制刪掉舊 token，避免 Firebase 回傳已失效的 cached token
+    // 強制清除舊 push subscription 和 Firebase token，確保取得全新的 token
     try { await deleteToken(messaging); } catch {}
+    if (swRegistration) {
+      const existing = await swRegistration.pushManager.getSubscription();
+      if (existing) await existing.unsubscribe();
+    }
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       ...(swRegistration ? { serviceWorkerRegistration: swRegistration } : {}),
