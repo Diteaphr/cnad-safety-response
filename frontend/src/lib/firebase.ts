@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { getMessaging, getToken, deleteToken, onMessage } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
@@ -30,6 +30,8 @@ export async function requestFcmToken(): Promise<string | null> {
     if (permission !== 'granted') return null;
     // 明確指定 firebase-messaging-sw.js，避免與 Vite PWA 的 sw.js 衝突
     const swRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+    // 強制刪掉舊 token，避免 Firebase 回傳已失效的 cached token
+    try { await deleteToken(messaging); } catch {}
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       ...(swRegistration ? { serviceWorkerRegistration: swRegistration } : {}),
