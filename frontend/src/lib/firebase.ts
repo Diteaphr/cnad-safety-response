@@ -15,6 +15,13 @@ const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
 const app = initializeApp(firebaseConfig);
 const messaging = getMessaging(app);
 
+// Service worker 初始化後傳入 config（避免 key 寫死在 sw 裡）
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.ready.then((registration) => {
+    registration.active?.postMessage({ type: 'FIREBASE_INIT', config: firebaseConfig });
+  });
+}
+
 /** 向使用者要通知權限，並取得 FCM device token。未設定 VAPID 或使用者拒絕時回傳 null。 */
 export async function requestFcmToken(): Promise<string | null> {
   if (!VAPID_KEY) return null;
