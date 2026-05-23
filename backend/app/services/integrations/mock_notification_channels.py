@@ -3,10 +3,14 @@ FCM / SMS notification channels.
 
 FIREBASE_ENABLED=false  → log-only mock（本機開發預設）
 FIREBASE_ENABLED=true   → 使用 Firebase Admin SDK 真實發送
+
+send_fcm        — 單筆發送（供 remind / fallback 使用）
+send_fcm_batch  — 批次平行發送（500 則/批，ThreadPoolExecutor）
 """
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 from typing import Any, Optional
@@ -54,7 +58,7 @@ def _ensure_firebase() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# FCM
+# FCM — 單筆
 # ---------------------------------------------------------------------------
 
 def send_fcm(
@@ -87,6 +91,80 @@ def send_fcm(
     except Exception as e:
         logger.error("[FCM] send failed token=%s... error=%s", device_token[:12], e)
         return False
+
+
+# ---------------------------------------------------------------------------
+# FCM — 批次平行（activation fan-out 使用）
+# ---------------------------------------------------------------------------
+
+_FCM_CHUNK_SIZE = 500
+_FCM_MAX_WORKERS = 10
+
+
+def send_fcm_batch(messages: list[dict[str, Any]]) -> list[bool]:
+    """批次平行發送 FCM。
+
+    messages: list of {token, title, body, data}
+    Returns: list[bool]，順序與輸入相同，True = 成功。
+
+    原理：
+      - 每 500 則為一個批次，呼叫 Firebase Admin SDK messaging.send_each()
+      - 最多 _FCM_MAX_WORKERS 個批次同時在 ThreadPoolExecutor 中平行執行
+      - 本機 mock 模式下，log 所有訊息並全部回傳 True
+    """
+    if not messages:
+        return []
+
+    if not _ensure_firebase():
+        for m in messages:
+            logger.info(
+                "[MOCK FCM batch] token=%s... title=%r",
+                (m.get("token") or "")[:12],
+                m.get("title"),
+            )
+        return [True] * len(messages)
+
+    from firebase_admin import messaging
+
+    chunks = [
+        messages[i: i + _FCM_CHUNK_SIZE]
+        for i in range(0, len(messages), _FCM_CHUNK_SIZE)
+    ]
+
+    # results[i] holds the bool list for chunk i
+    chunk_results: list[list[bool]] = [[] for _ in chunks]
+
+    def _send_chunk(idx: int, chunk: list[dict]) -> tuple[int, list[bool]]:
+        fcm_msgs = [
+            messaging.Message(
+                notification=messaging.Notification(
+                    title=m["title"], body=m["body"]
+                ),
+                token=m["token"],
+                data={k: str(v) for k, v in (m.get("data") or {}).items()},
+            )
+            for m in chunk
+        ]
+        try:
+            batch_resp = messaging.send_each(fcm_msgs)
+            return idx, [r.success for r in batch_resp.responses]
+        except Exception as exc:
+            logger.error(
+                "[FCM batch] chunk %d/%d failed: %s", idx + 1, len(chunks), exc
+            )
+            return idx, [False] * len(chunk)
+
+    workers = min(_FCM_MAX_WORKERS, len(chunks))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_send_chunk, i, chunk) for i, chunk in enumerate(chunks)]
+        for future in concurrent.futures.as_completed(futures):
+            idx, results = future.result()
+            chunk_results[idx] = results
+
+    flat = [ok for chunk in chunk_results for ok in chunk]
+    success_count = sum(flat)
+    logger.info("[FCM batch] %d/%d sent successfully", success_count, len(messages))
+    return flat
 
 
 # ---------------------------------------------------------------------------
