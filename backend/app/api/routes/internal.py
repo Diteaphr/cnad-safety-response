@@ -11,9 +11,11 @@ Supported message kinds
                   dev:  _batch_fcm_dispatch (in-process)
                   prod: publish N user_fcm messages to Pub/Sub
 
-  user_fcm    → send FCM to a single user (one Cloud Run instance per message)
-                  Enables true horizontal scaling: Cloud Run auto-scales to
-                  consume 30k messages in parallel across multiple instances.
+  user_fcm         → send FCM to a single user (one Cloud Run instance per message)
+                       Enables true horizontal scaling: Cloud Run auto-scales to
+                       consume 30k messages in parallel across multiple instances.
+
+  supervisor_alert → notify the supervisor when an employee reports need_help
 
 Production wiring:
   1. Create a Pub/Sub push subscription pointing to:
@@ -35,6 +37,7 @@ from app.core.database import get_db
 from app.services.notification_dispatch import (
     dispatch_activation_notifications,
     dispatch_single_user_notification,
+    dispatch_supervisor_alert,
 )
 
 logger = logging.getLogger(__name__)
@@ -108,6 +111,22 @@ def dispatch_notifications(body: dict, db: Session = Depends(get_db)):
         )
         logger.info(
             "Pub/Sub dispatch: user_fcm event=%s user=%s", event_id, user_id
+        )
+
+    # ── Supervisor alert: employee reported need_help → notify their manager
+    elif kind == "supervisor_alert":
+        try:
+            event_id = uuid.UUID(payload["event_id"])
+            employee_user_id = uuid.UUID(payload["user_id"])
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400, detail="Missing or invalid event_id/user_id"
+            ) from exc
+
+        dispatch_supervisor_alert(db, event_id=event_id, employee_user_id=employee_user_id)
+        logger.info(
+            "Pub/Sub dispatch: supervisor_alert event=%s employee=%s",
+            event_id, employee_user_id,
         )
 
     else:

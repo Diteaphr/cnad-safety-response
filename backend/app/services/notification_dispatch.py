@@ -207,6 +207,84 @@ def _batch_fcm_dispatch(db: Session, employees: list[User], event) -> int:
     return len(employees)
 
 
+def _find_supervisor(db: Session, employee: User) -> Optional[User]:
+    """Return the manager of the employee's primary department, or None."""
+    from sqlalchemy import select
+
+    from app.models.department import Department
+    from app.models.user_department import UserDepartment
+
+    ud = db.execute(
+        select(UserDepartment).where(
+            UserDepartment.user_id == employee.user_id,
+            UserDepartment.is_primary == True,  # noqa: E712
+        )
+    ).scalar_one_or_none()
+    if ud is None:
+        return None
+
+    dept = db.get(Department, ud.department_id)
+    if dept is None or dept.manager_id is None:
+        return None
+
+    return db.get(User, dept.manager_id)
+
+
+def dispatch_supervisor_alert(
+    db: Session,
+    *,
+    event_id: uuid.UUID,
+    employee_user_id: uuid.UUID,
+) -> None:
+    """Send FCM alert to the supervisor of an employee who reported need_help.
+
+    Looks up the employee's primary department manager and delivers via
+    deliver_with_fallback (idempotent: supervisor gets at most one alert per event).
+    """
+    event = _event_repo.get_by_id(db, event_id)
+    if event is None:
+        logger.warning("dispatch_supervisor_alert: event %s not found", event_id)
+        return
+
+    employee = db.get(User, employee_user_id)
+    if employee is None:
+        logger.warning("dispatch_supervisor_alert: employee %s not found", employee_user_id)
+        return
+
+    supervisor = _find_supervisor(db, employee)
+    if supervisor is None:
+        logger.info(
+            "dispatch_supervisor_alert: no supervisor for employee %s, skipping",
+            employee_user_id,
+        )
+        return
+
+    token = supervisor.fcm_token or str(supervisor.user_id)
+    _notif_svc.deliver_with_fallback(
+        db,
+        event_id=event_id,
+        user_id=supervisor.user_id,
+        primary_channel="fcm_supervisor_alert",
+        primary_send_fn=lambda: send_fcm_mock(
+            device_token=token,
+            title="需要協助通知",
+            body=f"{employee.name} 在事件「{event.title}」中回報需要協助",
+            data={"event_id": str(event_id), "employee_id": str(employee_user_id)},
+        ),
+        fallback_channel="sms_supervisor_alert" if supervisor.phone else None,
+        fallback_send_fn=(
+            lambda: send_twilio_sms_mock(
+                to_e164=supervisor.phone,
+                body=f"【需要協助】{employee.name} 在「{event.title}」中回報需要協助，請立即跟進。",
+            )
+        ) if supervisor.phone else None,
+    )
+    logger.info(
+        "dispatch_supervisor_alert: event=%s employee=%s supervisor=%s",
+        event_id, employee_user_id, supervisor.user_id,
+    )
+
+
 def dispatch_reminders(
     db: Session,
     event_id: uuid.UUID,
