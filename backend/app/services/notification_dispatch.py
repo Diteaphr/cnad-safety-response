@@ -6,21 +6,31 @@ Notification fan-out logic — shared across three callers:
   3. scheduler_service (automated 15-min reminder scan)
   4. api/routes/internal.py (Pub/Sub push endpoint in prod)
 
-Activation dispatch uses a two-phase approach for performance:
-  Phase 1 — send_fcm_batch(): all FCM messages sent in parallel (up to 500/batch,
-             multiple batches in ThreadPoolExecutor). No DB session involved.
-  Phase 2 — sequential: persist sent/failed status + SMS fallback for failures.
+── Activation dispatch ──────────────────────────────────────────────────────
 
-Reminder dispatch keeps the sequential deliver_with_fallback pattern because
-reminder audiences are small (only non-respondents).
+Production (USE_GCP=true + PUBSUB_NOTIFICATION_TOPIC set):
+  dispatch_activation_notifications()
+    └── _pubsub_fan_out(): publish one Pub/Sub message per employee.
+        Each message → Cloud Run instance → dispatch_single_user_notification()
+        Cloud Run auto-scales horizontally; no single-instance connection limit.
+        30k users → ~30k messages → multiple instances in parallel.
+
+Dev / fallback (USE_GCP=false):
+  dispatch_activation_notifications()
+    └── _batch_fcm_dispatch(): send_fcm_batch() + ThreadPoolExecutor (local).
+
+── Reminder dispatch ────────────────────────────────────────────────────────
+  Sequential deliver_with_fallback (reminder audience is small).
 """
 from __future__ import annotations
 
 import logging
 import uuid
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.safety_response import SafetyResponse
 from app.models.user import User
 from app.repositories.event_repository import EventRepository
@@ -61,18 +71,13 @@ def _employees_targeted_by_event(db: Session, event_id: uuid.UUID) -> list[User]
     return [u for u in _user_repo.list_by_department_ids(db, target_dept_ids) if _is_employee(u)]
 
 
+# ── Public entry points ───────────────────────────────────────────────────────
+
 def dispatch_activation_notifications(db: Session, event_id: uuid.UUID) -> int:
-    """Send FCM (+ SMS fallback) to all employees targeted by the event.
+    """Fan-out activation notifications to all target employees.
 
-    Two-phase execution:
-      Phase 1: send_fcm_batch() — parallel I/O, no DB session.
-      Phase 2: persist results + SMS fallback — sequential DB writes (fast).
-
-    Note: Phase 1 runs for all employees before idempotency is checked in
-    Phase 2. On Pub/Sub redelivery a user may receive a duplicate push
-    notification, but no duplicate DB rows are created (deliver_with_idempotency
-    guards the write). This is an acceptable tradeoff for a safety system where
-    missing a notification is worse than receiving a duplicate.
+    Routes to Pub/Sub per-user fan-out (prod) or direct batch FCM (dev).
+    Returns count of employees targeted.
     """
     event = _event_repo.get_by_id(db, event_id)
     if event is None:
@@ -84,23 +89,100 @@ def dispatch_activation_notifications(db: Session, event_id: uuid.UUID) -> int:
         logger.info("dispatch_activation_notifications: event %s — no target employees", event_id)
         return 0
 
-    # ── Phase 1: parallel batch FCM (no DB session) ──────────────────────────
+    if settings.use_gcp and settings.pubsub_notification_topic:
+        return _pubsub_fan_out(employees, event)
+    return _batch_fcm_dispatch(db, employees, event)
+
+
+def dispatch_single_user_notification(
+    db: Session,
+    *,
+    event_id: uuid.UUID,
+    user_id: uuid.UUID,
+    token: str,
+    phone: Optional[str],
+    title: str,
+    body: str,
+) -> None:
+    """Send FCM (+ SMS fallback) to a single user.
+
+    Called by the internal Pub/Sub push endpoint for each user_fcm message.
+    deliver_with_fallback handles idempotency: if already sent, no-op.
+    """
+    _notif_svc.deliver_with_fallback(
+        db,
+        event_id=event_id,
+        user_id=user_id,
+        primary_channel="fcm_activation",
+        primary_send_fn=lambda: send_fcm_mock(
+            device_token=token,
+            title=title,
+            body=body,
+            data={"event_id": str(event_id)},
+        ),
+        fallback_channel="sms_activation" if phone else None,
+        fallback_send_fn=(
+            lambda: send_twilio_sms_mock(
+                to_e164=phone,
+                body=f"【安全確認】{body}",
+            )
+        ) if phone else None,
+    )
+
+
+# ── Private helpers ───────────────────────────────────────────────────────────
+
+def _pubsub_fan_out(employees: list[User], event) -> int:
+    """Publish one Pub/Sub message per employee (production path).
+
+    Each message is consumed by a separate Cloud Run invocation so the
+    workload is distributed across auto-scaled instances — no single-instance
+    connection pool limit applies.
+    """
+    from app.services.integrations.pubsub_placeholder import publish_user_notifications_batch
+
+    messages = [
+        {
+            "kind": "user_fcm",
+            "event_id": str(event.event_id),
+            "user_id": str(user.user_id),
+            "token": user.fcm_token or str(user.user_id),
+            "phone": user.phone,
+            "title": "緊急安全確認",
+            "body": f"請立即回報您的安全狀態：{event.title}",
+        }
+        for user in employees
+    ]
+    count = publish_user_notifications_batch(messages)
+    logger.info(
+        "dispatch_activation_notifications: event %s → published %d user_fcm messages (Pub/Sub fan-out)",
+        event.event_id,
+        count,
+    )
+    return count
+
+
+def _batch_fcm_dispatch(db: Session, employees: list[User], event) -> int:
+    """Direct parallel batch FCM dispatch (dev / fallback path).
+
+    Phase 1: send_fcm_batch() — parallel I/O, no DB session.
+    Phase 2: persist results + SMS fallback — sequential DB writes.
+    """
     fcm_payloads = [
         {
             "token": user.fcm_token or str(user.user_id),
             "title": "緊急安全確認",
             "body": f"請立即回報您的安全狀態：{event.title}",
-            "data": {"event_id": str(event_id)},
+            "data": {"event_id": str(event.event_id)},
         }
         for user in employees
     ]
     fcm_results: list[bool] = send_fcm_batch(fcm_payloads)
 
-    # ── Phase 2: persist results + SMS fallback (sequential, DB writes only) ──
     for user, fcm_ok in zip(employees, fcm_results):
         _notif_svc.deliver_with_idempotency(
             db,
-            event_id=event_id,
+            event_id=event.event_id,
             user_id=user.user_id,
             channel="fcm_activation",
             send_fn=lambda ok=fcm_ok: ok,
@@ -108,7 +190,7 @@ def dispatch_activation_notifications(db: Session, event_id: uuid.UUID) -> int:
         if not fcm_ok and user.phone:
             _notif_svc.deliver_with_idempotency(
                 db,
-                event_id=event_id,
+                event_id=event.event_id,
                 user_id=user.user_id,
                 channel="sms_activation",
                 send_fn=lambda u=user: send_twilio_sms_mock(
@@ -118,8 +200,8 @@ def dispatch_activation_notifications(db: Session, event_id: uuid.UUID) -> int:
             )
 
     logger.info(
-        "dispatch_activation_notifications: event %s → %d employees notified (parallel batch)",
-        event_id,
+        "dispatch_activation_notifications: event %s → %d employees notified (batch FCM)",
+        event.event_id,
         len(employees),
     )
     return len(employees)
