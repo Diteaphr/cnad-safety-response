@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 import os
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -153,19 +154,20 @@ def start_scheduler() -> None:
     if _scheduler is not None:
         return
     _scheduler = BackgroundScheduler(daemon=True)
+    now = datetime.now(timezone.utc)
     _scheduler.add_job(
         _run_reminder_scan,
         trigger="interval",
         minutes=15,
         id="reminder_scan",
-        next_run_time=None,  # don't fire immediately on startup
+        next_run_time=now + timedelta(minutes=15),
     )
     _scheduler.add_job(
         _keep_alive_ping,
         trigger="interval",
         minutes=10,
         id="keep_alive",
-        next_run_time=None,  # don't fire immediately on startup
+        next_run_time=now + timedelta(minutes=10),
     )
     _scheduler.start()
     logger.info("APScheduler started: reminder_scan every 15 min, keep_alive every 10 min")
