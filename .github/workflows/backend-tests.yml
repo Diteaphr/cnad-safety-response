@@ -8,6 +8,9 @@ on:
     paths: ['backend/**']
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: pytest (Python 3.11 + PostgreSQL 16)
