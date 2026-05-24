@@ -178,6 +178,11 @@ body {
   overflow-x: clip;
   --layout-pad-inline: clamp(16px, 3.8vw, 28px);
   --layout-content-max: 1180px;
+  /* Mobile shell metrics (0 on desktop; set in max-width: 1024px block). */
+  --app-mobile-header-h: 0px;
+  --offline-bar-h: 0px;
+  --app-mobile-shell-top-offset: 0px;
+  --app-content-available-h: 100dvh;
 }
 
 .app-frame.app-frame--member {
@@ -1982,6 +1987,18 @@ textarea { min-height: 90px; resize: vertical; }
     min-height: 100vh;
     min-height: 100dvh;
     overflow-x: clip;
+    /*
+     * 頂列「工具列區」固定高度（不含狀態列 safe-area）。
+     * 總視覺高度 = env(safe-area-inset-top) + 此值，與 sidebar / overlay 的 top 同步。
+     */
+    --app-mobile-header-h: 44px;
+    --offline-bar-h: 0px;
+    --app-mobile-shell-top-offset: calc(
+      var(--offline-bar-h) + env(safe-area-inset-top, 0px) + var(--app-mobile-header-h)
+    );
+    --app-content-available-h: calc(
+      100dvh - var(--app-mobile-shell-top-offset) - env(safe-area-inset-bottom, 0px)
+    );
   }
 
   .offline-bar {
@@ -2000,6 +2017,9 @@ textarea { min-height: 90px; resize: vertical; }
     justify-self: stretch;
     padding-left: max(12px, env(safe-area-inset-left));
     padding-right: max(12px, env(safe-area-inset-right));
+    /* Reserve space for fixed mobile header on every page. */
+    margin-top: var(--app-mobile-shell-top-offset);
+    padding-top: 0;
   }
 
   .page-section,
@@ -2035,18 +2055,6 @@ textarea { min-height: 90px; resize: vertical; }
     font-size: 16px;
   }
 
-  :root {
-    /*
-     * 頂列「工具列區」固定高度（不含狀態列 safe-area）。
-     * 總視覺高度 = env(safe-area-inset-top) + 此值，與 sidebar / overlay 的 top 同步。
-     */
-    --app-mobile-header-h: 44px;
-    --offline-bar-h: 0px;
-    --app-mobile-shell-top-offset: calc(
-      var(--offline-bar-h) + env(safe-area-inset-top, 0px) + var(--app-mobile-header-h)
-    );
-  }
-
   .app-frame:has(.offline-bar) {
     --offline-bar-h: 38px;
   }
@@ -2076,10 +2084,6 @@ textarea { min-height: 90px; resize: vertical; }
     right: 0;
     z-index: 106;
     overflow: hidden;
-  }
-
-  .app-frame > .content {
-    padding-top: var(--app-mobile-shell-top-offset);
   }
 
   .app-mobile-shell-title {
@@ -2241,7 +2245,7 @@ textarea { min-height: 90px; resize: vertical; }
   }
 
   .content:not(:has(.employee-event-page)) {
-    padding: var(--app-mobile-shell-top-offset) max(14px, env(safe-area-inset-left))
+    padding: 14px max(14px, env(safe-area-inset-left))
       max(16px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-right));
   }
 
@@ -2307,7 +2311,7 @@ textarea { min-height: 90px; resize: vertical; }
   }
   /* 底部導覽已移除；員工事件詳細頁維持全幅／底色，僅統一下緣安全區 */
   .content:has(.employee-event-page) {
-    padding-top: var(--app-mobile-shell-top-offset);
+    padding-top: 0;
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   }
   .employee-edit-sticky-bar {
@@ -2346,6 +2350,14 @@ textarea { min-height: 90px; resize: vertical; }
   /*
    * Desktop: only main content scrolls; sidebar fills viewport visually.
    */
+  .app-frame {
+    padding-top: 0;
+  }
+
+  .app-frame > .content {
+    margin-top: 0;
+  }
+
   .app-mobile-shell-header {
     display: none !important;
   }
@@ -6284,15 +6296,19 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 
 /* Member home — status center & one-screen layout */
 .member-priority-home {
-  min-height: calc(100dvh - var(--app-mobile-shell-top-offset, 44px) - env(safe-area-inset-bottom, 0px));
+  min-height: var(--app-content-available-h);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
 }
 
 .member-priority-home--idle {
-  justify-content: center;
+  justify-content: flex-start;
   gap: clamp(12px, 3vh, 24px);
+}
+
+.member-priority-home--idle.member-priority-home--fit {
+  justify-content: center;
 }
 
 .member-priority-home--pending {
