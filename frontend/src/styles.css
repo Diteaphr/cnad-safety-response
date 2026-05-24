@@ -6487,6 +6487,229 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   margin-inline: auto;
 }
 
+.report-history-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 10px;
+  border: 1px solid #e5edf5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.report-history-status-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(15, 39, 66, 0.08);
+}
+
+.report-history-status-icon--safe {
+  background: #2ecc71;
+}
+
+.report-history-status-icon--need {
+  background: #f88379;
+}
+
+.report-history-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-history-card-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.report-history-card-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--member-text);
+  line-height: 1.3;
+}
+
+.report-history-card-type {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #8aa3bd;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.report-history-card-meta {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: #8aa3bd;
+}
+
+.report-history-edit-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: #3d5f85;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+
+.report-history-edit-btn:hover {
+  color: #1e5494;
+}
+
+.report-history-edit-label {
+  white-space: nowrap;
+}
+
+.member-idle-history-list > li + li {
+  margin-top: 10px;
+}
+
+.report-revision-modal-backdrop {
+  align-items: flex-end;
+  padding: 0;
+}
+
+.report-revision-modal {
+  width: min(100%, 520px);
+  max-height: min(92vh, 760px);
+  margin: 0 auto;
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .report-revision-modal-backdrop {
+    align-items: center;
+    padding: 16px;
+  }
+
+  .report-revision-modal {
+    border-radius: 16px;
+    max-height: min(88vh, 760px);
+  }
+}
+
+.report-revision-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 8px;
+  border-bottom: 1px solid #e8eef5;
+}
+
+.report-revision-modal-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.report-revision-modal-close {
+  border: none;
+  background: transparent;
+  color: #6a7f94;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.report-revision-modal-prompt {
+  margin: 0;
+  padding: 12px 16px 0;
+  color: #3d5f85;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.report-revision-tone-need {
+  color: #c52b30;
+  font-weight: 700;
+}
+
+.report-revision-tone-safe {
+  color: #178239;
+  font-weight: 700;
+}
+
+.report-revision-btn-need {
+  background: linear-gradient(145deg, #b81f34, #d93c3f);
+  color: #fff;
+  border: none;
+  font-weight: 700;
+}
+
+.report-revision-btn-need:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.report-revision-btn-need:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.report-revision-modal-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+.report-revision-modal-error {
+  margin: 12px 16px 0;
+}
+
+.report-revision-attach-card {
+  margin-top: 12px;
+}
+
+.report-revision-modal-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+  border-top: 1px solid #e8eef5;
+  background: #fff;
+}
+
+.report-revision-switch-safe {
+  border: none;
+  background: transparent;
+  color: #3d5f85;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 4px;
+}
+
+.report-revision-switch-safe:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.member-priority-home--idle .member-waiting-assistance-list {
+  margin-top: 8px;
+}
+
+.member-priority-home--idle .member-waiting-assistance-list > li + li {
+  margin-top: 10px;
+}
+
 .member-priority-home--pending .member-priority-stack {
   margin-top: 0;
   gap: 14px;

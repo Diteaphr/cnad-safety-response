@@ -34,11 +34,13 @@ import { PageBackButton } from '../../components/PageBackButton';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusBadge } from '../../components/StatusBadge';
 import { useLocale } from '../../locale/LocaleContext';
-import type { AppLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import { stripRedundantStatusFromTitle } from '../../lib/adminEventDisplay';
 import { loadEmployeeReportDraft, saveEmployeeReportDraft } from '../../lib/employeeReportDraft';
 import type { EventItem, SafetyResponse } from '../../types';
+import { formatEmployeeCardTime, formatFileSize } from './memberFormat';
+import { ReportHistoryCard } from './ReportHistoryCard';
+import { ReportRevisionModal } from './ReportRevisionModal';
 
 export type EmployeeReportFields = {
   comment: string;
@@ -59,21 +61,6 @@ function employeeEventTypeIcon(type: EventItem['type']) {
     default:
       return Package;
   }
-}
-
-function formatEmployeeCardTime(iso: string | null, locale: AppLocale) {
-  if (iso == null || iso === '') {
-    return '—';
-  }
-  const tag = locale === 'en' ? 'en-US' : 'zh-TW';
-  return new Date(iso).toLocaleString(tag, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
 }
 
 function EmployeeEventListCard({
@@ -755,13 +742,6 @@ function EventSelectionPage({
       </div>
     </section>
   );
-}
-
-function formatFileSize(bytes?: number | null) {
-  if (bytes == null || bytes <= 0) return '—';
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${Math.round(kb)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
 }
 
 interface EditDraftBaseline {
@@ -1693,67 +1673,6 @@ function EmployeeQuickReportPanel({
   );
 }
 
-export function EmployeeHomePage({
-  draftUserId,
-  userName,
-  selectedEvent,
-  currentDepartment,
-  latestResponse,
-  reportSubmitting,
-  submitErrorMessage,
-  onDismissSubmitError,
-  onRetrySubmit,
-  onSubmit,
-  onBackToEvents,
-  openInEditMode = false,
-}: {
-  draftUserId: string | null;
-  userName: string;
-  selectedEvent: EventItem | null;
-  currentDepartment: string;
-  latestResponse?: SafetyResponse;
-  reportSubmitting: boolean;
-  submitErrorMessage: string | null;
-  onDismissSubmitError: () => void;
-  onRetrySubmit: () => void;
-  onSubmit: (
-    status: 'safe' | 'need_help',
-    fields: EmployeeReportFields,
-    meta?: { omitStoredAttachment?: boolean },
-  ) => void | Promise<void>;
-  onBackToEvents: () => void;
-  openInEditMode?: boolean;
-}) {
-  const { locale } = useLocale();
-  const ec = getStrings(locale).employee;
-  return (
-    <section className="employee-event-page">
-      {!selectedEvent ? (
-        <div className="employee-event-empty">
-          <p>{ec.noEventSelected}</p>
-        </div>
-      ) : (
-        <EmployeeQuickReportPanel
-          draftUserId={draftUserId}
-          userName={userName}
-          selectedEvent={selectedEvent}
-          currentDepartment={currentDepartment}
-          latestResponse={latestResponse}
-          reportSubmitting={reportSubmitting}
-          submitErrorMessage={submitErrorMessage}
-          onDismissSubmitError={onDismissSubmitError}
-          onRetrySubmit={onRetrySubmit}
-          onSubmit={onSubmit}
-          layout="full"
-          hideEmergencyContact={false}
-          onBackToEvents={onBackToEvents}
-          openInEditMode={openInEditMode}
-        />
-      )}
-    </section>
-  );
-}
-
 function MemberEmergencyContactsCollapsible() {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
@@ -1801,84 +1720,137 @@ function MemberEmergencyContactsCollapsible() {
 function MemberIdleHistoryList({
   idleHistoryOngoing,
   idleHistoryClosed,
-  onOpenEmployeeEvent,
+  currentDepartment,
+  onSubmitReport,
+  onRetryReport,
+  submittingEventId,
+  submitErrorMessage,
+  submitErrorEventId,
+  onDismissSubmitError,
 }: {
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
-  onOpenEmployeeEvent: (eventId: string) => void;
+  currentDepartment: string;
+  onSubmitReport: (
+    eventId: string,
+    status: 'safe' | 'need_help',
+    fields: EmployeeReportFields,
+    meta?: { omitStoredAttachment?: boolean; showOverlay?: boolean },
+  ) => void | Promise<void>;
+  onRetryReport: () => void;
+  submittingEventId: string | null;
+  submitErrorMessage: string | null;
+  submitErrorEventId: string | null;
+  onDismissSubmitError: () => void;
 }) {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
+  const [editingRow, setEditingRow] = useState<MemberHomeRow | null>(null);
+  const prevSubmittingRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const wasSubmitting = prevSubmittingRef.current;
+    prevSubmittingRef.current = submittingEventId;
+    if (!editingRow || !wasSubmitting || submittingEventId) return;
+    if (submitErrorEventId === editingRow.event.id) return;
+    setEditingRow(null);
+  }, [submittingEventId, submitErrorEventId, editingRow]);
+
+  const editingEventId = editingRow?.event.id ?? null;
+  const modalSubmitting = editingEventId !== null && submittingEventId === editingEventId;
+  const modalError =
+    editingEventId !== null && submitErrorEventId === editingEventId ? submitErrorMessage : null;
 
   return (
-    <div className="member-idle-history">
-      <h3 className="section-title member-idle-history-title">{ec.sectionOngoingEvents}</h3>
-      {idleHistoryOngoing.length === 0 ? (
-        <p className="empty muted-text">{ec.idleNoOngoingSupplemented}</p>
-      ) : (
-        <ul className="member-idle-history-list">
-          {idleHistoryOngoing.map((row) => {
-            const lr = row.latest;
-            if (!lr) return null;
-            return (
-              <li key={row.event.id}>
-                <button
-                  type="button"
-                  className="member-idle-history-row member-idle-history-row--clickable"
-                  onClick={() => onOpenEmployeeEvent(row.event.id)}
-                >
-                  <div className="member-idle-history-row-main">
-                    <span className="member-idle-history-event-title">
-                      {stripRedundantStatusFromTitle(row.event.title)}
-                    </span>
-                    <span className="muted-text subtle">{row.event.type}</span>
-                  </div>
-                  <div className="member-idle-history-row-aside">
-                    <StatusBadge status={lr.status} />
-                    <ChevronRight size={18} aria-hidden />
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+    <>
+      <div className="member-idle-history">
+        <h3 className="section-title member-idle-history-title">{ec.sectionOngoingEvents}</h3>
+        {idleHistoryOngoing.length === 0 ? (
+          <p className="empty muted-text">{ec.idleNoOngoingSupplemented}</p>
+        ) : (
+          <ul className="member-idle-history-list">
+            {idleHistoryOngoing.map((row) => {
+              const lr = row.latest;
+              if (!lr) return null;
+              return (
+                <li key={row.event.id}>
+                  <ReportHistoryCard
+                    event={row.event}
+                    latest={lr}
+                    currentDepartment={currentDepartment}
+                    editable
+                    onEdit={() => setEditingRow(row)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-      <h3 className="section-title member-idle-history-title member-idle-history-title--closed">
-        {ec.sectionClosedEvents}
-      </h3>
-      {idleHistoryClosed.length === 0 ? (
-        <p className="empty muted-text">{ec.idleNoClosedHistory}</p>
-      ) : (
-        <ul className="member-idle-history-list">
-          {idleHistoryClosed.map((row) => {
-            const lr = row.latest;
-            if (!lr) return null;
-            return (
-              <li key={row.event.id} className="member-idle-history-row member-idle-history-row--readonly">
-                <div className="member-idle-history-row-main">
-                  <span className="member-idle-history-event-title">{row.event.title}</span>
-                  <span className="muted-text subtle">{formatEmployeeCardTime(lr.updatedAt, locale)}</span>
-                </div>
-                <StatusBadge status={lr.status} />
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+        <h3 className="section-title member-idle-history-title member-idle-history-title--closed">
+          {ec.sectionClosedEvents}
+        </h3>
+        {idleHistoryClosed.length === 0 ? (
+          <p className="empty muted-text">{ec.idleNoClosedHistory}</p>
+        ) : (
+          <ul className="member-idle-history-list">
+            {idleHistoryClosed.map((row) => {
+              const lr = row.latest;
+              if (!lr) return null;
+              return (
+                <li key={row.event.id}>
+                  <ReportHistoryCard event={row.event} latest={lr} currentDepartment={currentDepartment} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <ReportRevisionModal
+        open={editingRow !== null}
+        event={editingRow?.event ?? null}
+        latestResponse={editingRow?.latest ?? null}
+        reportSubmitting={modalSubmitting}
+        submitErrorMessage={modalError}
+        onDismissSubmitError={onDismissSubmitError}
+        onRetrySubmit={onRetryReport}
+        onSubmit={(status, fields, meta) => {
+          if (!editingRow) return;
+          void onSubmitReport(editingRow.event.id, status, fields, meta);
+        }}
+        onClose={() => setEditingRow(null)}
+      />
+    </>
   );
 }
 
 export function MemberReportHistoryPage({
   idleHistoryOngoing,
   idleHistoryClosed,
-  onOpenEmployeeEvent,
+  currentDepartment,
+  onSubmitReport,
+  onRetryReport,
+  submittingEventId,
+  submitErrorMessage,
+  submitErrorEventId,
+  onDismissSubmitError,
   onBack,
 }: {
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
-  onOpenEmployeeEvent: (eventId: string) => void;
+  currentDepartment: string;
+  onSubmitReport: (
+    eventId: string,
+    status: 'safe' | 'need_help',
+    fields: EmployeeReportFields,
+    meta?: { omitStoredAttachment?: boolean; showOverlay?: boolean },
+  ) => void | Promise<void>;
+  onRetryReport: () => void;
+  submittingEventId: string | null;
+  submitErrorMessage: string | null;
+  submitErrorEventId: string | null;
+  onDismissSubmitError: () => void;
   onBack: () => void;
 }) {
   const { locale } = useLocale();
@@ -1890,7 +1862,13 @@ export function MemberReportHistoryPage({
       <MemberIdleHistoryList
         idleHistoryOngoing={idleHistoryOngoing}
         idleHistoryClosed={idleHistoryClosed}
-        onOpenEmployeeEvent={onOpenEmployeeEvent}
+        currentDepartment={currentDepartment}
+        onSubmitReport={onSubmitReport}
+        onRetryReport={onRetryReport}
+        submittingEventId={submittingEventId}
+        submitErrorMessage={submitErrorMessage}
+        submitErrorEventId={submitErrorEventId}
+        onDismissSubmitError={onDismissSubmitError}
       />
     </section>
   );
@@ -1911,7 +1889,6 @@ export function MemberPriorityHomePage({
   onDismissSubmitError,
   idleHistoryOngoing,
   idleHistoryClosed,
-  onOpenEmployeeEvent,
   supervisorTeamNudge,
   onDismissSupervisorNudge,
   onGoTeamDashboardFromNudge,
@@ -1927,7 +1904,7 @@ export function MemberPriorityHomePage({
     eventId: string,
     status: 'safe' | 'need_help',
     fields: EmployeeReportFields,
-    meta?: { omitStoredAttachment?: boolean },
+    meta?: { omitStoredAttachment?: boolean; showOverlay?: boolean },
   ) => void | Promise<void>;
   onRetryReport: () => void;
   submittingEventId: string | null;
@@ -1936,7 +1913,6 @@ export function MemberPriorityHomePage({
   onDismissSubmitError: () => void;
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
-  onOpenEmployeeEvent: (eventId: string) => void;
   supervisorTeamNudge: null | { pendingPct: number; eventTitle: string };
   onDismissSupervisorNudge: () => void;
   onGoTeamDashboardFromNudge: () => void;
@@ -1944,6 +1920,21 @@ export function MemberPriorityHomePage({
 }) {
   const { locale } = useLocale();
   const { employee: ec, layoutNav } = getStrings(locale);
+  const [editingRow, setEditingRow] = useState<MemberHomeRow | null>(null);
+  const prevSubmittingRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const wasSubmitting = prevSubmittingRef.current;
+    prevSubmittingRef.current = submittingEventId;
+    if (!editingRow || !wasSubmitting || submittingEventId) return;
+    if (submitErrorEventId === editingRow.event.id) return;
+    setEditingRow(null);
+  }, [submittingEventId, submitErrorEventId, editingRow]);
+
+  const editingEventId = editingRow?.event.id ?? null;
+  const modalSubmitting = editingEventId !== null && submittingEventId === editingEventId;
+  const modalError =
+    editingEventId !== null && submitErrorEventId === editingEventId ? submitErrorMessage : null;
 
   const latestFor = (eventId: string) =>
     userId
@@ -1993,27 +1984,22 @@ export function MemberPriorityHomePage({
           <div className="member-waiting-assistance">
             <h3 className="member-waiting-assistance-title">{ec.waitingAssistanceTitle}</h3>
             <p className="member-waiting-assistance-body muted-text">{ec.waitingAssistanceBody}</p>
-            <ul className="member-waiting-assistance-list">
-              {waitingVisible.map((row) => (
-                <li key={row.event.id}>
-                  <button
-                    type="button"
-                    className="member-idle-history-row member-idle-history-row--clickable"
-                    onClick={() => onOpenEmployeeEvent(row.event.id)}
-                  >
-                    <div className="member-idle-history-row-main">
-                      <span className="member-idle-history-event-title">
-                        {stripRedundantStatusFromTitle(row.event.title)}
-                      </span>
-                      <span className="muted-text subtle">{row.event.type}</span>
-                    </div>
-                    <div className="member-idle-history-row-aside">
-                      <StatusBadge status="need_help" />
-                      <ChevronRight size={18} aria-hidden />
-                    </div>
-                  </button>
-                </li>
-              ))}
+            <ul className="member-waiting-assistance-list member-idle-history-list">
+              {waitingVisible.map((row) => {
+                const lr = row.latest;
+                if (!lr) return null;
+                return (
+                  <li key={row.event.id}>
+                    <ReportHistoryCard
+                      event={row.event}
+                      latest={lr}
+                      currentDepartment={currentDepartment}
+                      editable
+                      onEdit={() => setEditingRow(row)}
+                    />
+                  </li>
+                );
+              })}
             </ul>
             {waitingOverflow > 0 ? (
               <button type="button" className="member-idle-history-link" onClick={onNavigateHistory}>
@@ -2022,6 +2008,21 @@ export function MemberPriorityHomePage({
             ) : null}
           </div>
         ) : null}
+
+        <ReportRevisionModal
+          open={editingRow !== null}
+          event={editingRow?.event ?? null}
+          latestResponse={editingRow?.latest ?? null}
+          reportSubmitting={modalSubmitting}
+          submitErrorMessage={modalError}
+          onDismissSubmitError={onDismissSubmitError}
+          onRetrySubmit={onRetryReport}
+          onSubmit={(status, fields, meta) => {
+            if (!editingRow) return;
+            void onSubmitReport(editingRow.event.id, status, fields, meta);
+          }}
+          onClose={() => setEditingRow(null)}
+        />
 
         <MemberEmergencyContactsCollapsible />
       </section>

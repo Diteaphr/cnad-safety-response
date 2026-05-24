@@ -291,6 +291,21 @@ export type EmployeeReportStrings = {
   overlayDone: string;
   overlayGotIt: string;
   overlayAutoCloseCountdown: (seconds: number) => string;
+  overlayRevisionTitle: string;
+  overlayRevisionSafeBody: string;
+  overlayRevisionNeedHelpBody: string;
+  historyEditAria: string;
+  historyEditLabel: string;
+  historySwitchToNeedHelpPrompt: string;
+  historySwitchToNeedHelpPromptPrefix: string;
+  historySwitchToNeedHelpPromptSuffix: string;
+  historySwitchToSafeLink: string;
+  historySwitchToSafePrefix: string;
+  historySaveChanges: string;
+  historyDiscardTitle: string;
+  historyDiscardBody: string;
+  historyDiscardContinue: string;
+  historyDiscardConfirm: string;
   emergencyContactToggle: string;
 };
 
@@ -1312,7 +1327,7 @@ const employeeZh: EmployeeReportStrings = {
   statusDetailSafe: '狀態：平安（I\'m Safe）',
   statusDetailNeedHelp: '狀態：需要協助（I need help）',
   supplementOrUpdate: '補充或更新資訊',
-  tapCardToEditHint: '點選事件即可檢視或更新您的回報內容。',
+  tapCardToEditHint: '如需修改回報，請至歷史回報紀錄點選編輯。',
   overlaySubmittedSafe: '已送出：平安',
   overlaySubmittedNeedHelp: '已送出：需要協助',
   supervisorNudgeTitle: '已回報成功',
@@ -1356,6 +1371,21 @@ const employeeZh: EmployeeReportStrings = {
   overlayDone: '完成',
   overlayGotIt: '知道了',
   overlayAutoCloseCountdown: (seconds) => `${seconds} 秒後自動關閉`,
+  overlayRevisionTitle: '修改成功',
+  overlayRevisionSafeBody: '您的回報已更新為平安。',
+  overlayRevisionNeedHelpBody: '您的協助請求已更新，相關人員將與您聯繫。',
+  historyEditAria: '編輯回報',
+  historyEditLabel: '修改',
+  historySwitchToNeedHelpPrompt: '是否要改為需要協助？請填寫以下詳細資訊。',
+  historySwitchToNeedHelpPromptPrefix: '是否要改為',
+  historySwitchToNeedHelpPromptSuffix: '？請填寫以下詳細資訊。',
+  historySwitchToSafeLink: '修改狀態為平安',
+  historySwitchToSafePrefix: '修改狀態為',
+  historySaveChanges: '儲存修改',
+  historyDiscardTitle: '捨棄未儲存的變更？',
+  historyDiscardBody: '您有尚未儲存的修改，離開後將不會保留。',
+  historyDiscardContinue: '繼續編輯',
+  historyDiscardConfirm: '捨棄變更',
   emergencyContactToggle: '緊急聯絡',
 };
 
@@ -1397,7 +1427,7 @@ const employeeEn: EmployeeReportStrings = {
   statusDetailSafe: "Status: I'm Safe",
   statusDetailNeedHelp: 'Status: I need help',
   supplementOrUpdate: 'Add or update details',
-  tapCardToEditHint: 'Tap an event to view or update your report.',
+  tapCardToEditHint: 'To update your report, open report history and tap Edit.',
   overlaySubmittedSafe: "Submitted: I'm safe",
   overlaySubmittedNeedHelp: 'Submitted: I need help',
   supervisorNudgeTitle: 'Report submitted',
@@ -1441,6 +1471,21 @@ const employeeEn: EmployeeReportStrings = {
   overlayDone: 'Done',
   overlayGotIt: 'Got it',
   overlayAutoCloseCountdown: (seconds) => `Closing in ${seconds}s`,
+  overlayRevisionTitle: 'Revision saved',
+  overlayRevisionSafeBody: 'Your report has been updated to safe.',
+  overlayRevisionNeedHelpBody: 'Your help request has been updated. Assistance is on the way.',
+  historyEditAria: 'Edit report',
+  historyEditLabel: 'Edit',
+  historySwitchToNeedHelpPrompt: 'Switch to need help? Please fill in the details below.',
+  historySwitchToNeedHelpPromptPrefix: 'Switch to ',
+  historySwitchToNeedHelpPromptSuffix: '? Please fill in the details below.',
+  historySwitchToSafeLink: 'Change status to safe',
+  historySwitchToSafePrefix: 'Change status to ',
+  historySaveChanges: 'Save changes',
+  historyDiscardTitle: 'Discard unsaved changes?',
+  historyDiscardBody: 'You have unsaved edits. They will be lost if you leave now.',
+  historyDiscardContinue: 'Continue editing',
+  historyDiscardConfirm: 'Discard changes',
   emergencyContactToggle: 'Emergency contacts',
 };
 

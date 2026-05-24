@@ -18,7 +18,6 @@ import {
 import { AdminEventCenterPage } from './features/events/AdminEventCenterPage';
 import { createInitialEventForm } from './features/events/EventAndAdminPages';
 import {
-  EmployeeHomePage,
   MemberPriorityHomePage,
   MemberReportHistoryPage,
   type EmployeeReportFields,
@@ -85,7 +84,6 @@ const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
   'member-home',
   'member-report-history',
   'team-dashboard-home',
-  'employee-event-detail',
   'supervisor-event-detail',
 ];
 
@@ -113,6 +111,7 @@ function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [submissionOverlay, setSubmissionOverlay] = useState<{
     variant: 'safe' | 'need_help';
+    mode: 'initial' | 'revision';
     eventTitle: string;
     submittedSummary?: ReportSubmissionSummary;
   } | null>(null);
@@ -125,7 +124,7 @@ function App() {
     eventId: string;
     status: 'safe' | 'need_help';
     fields: EmployeeReportFields;
-    meta?: { omitStoredAttachment?: boolean };
+    meta?: { omitStoredAttachment?: boolean; showOverlay?: boolean };
   } | null>(null);
 
   const [supervisorDashboard, setSupervisorDashboard] = useState<SupervisorDashboardApi | null>(null);
@@ -133,7 +132,6 @@ function App() {
   const [myNotifications, setMyNotifications] = useState<PortalNotificationRow[]>([]);
   const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<number | null>(null);
   const [contactedByEvent, setContactedByEvent] = useState<Record<string, Record<string, boolean>>>({});
-  const [selectedEmployeeEventId, setSelectedEmployeeEventId] = useState('');
   const [selectedSupervisorEventId, setSelectedSupervisorEventId] = useState('');
   const [selectedAdminEventId, setSelectedAdminEventId] = useState('');
   const eventsSelectionInitialized = useRef(false);
@@ -252,7 +250,6 @@ function App() {
     if (eventsSelectionInitialized.current) return;
     eventsSelectionInitialized.current = true;
     const id = events.find((e) => e.status === 'active')?.id ?? events[0].id;
-    setSelectedEmployeeEventId(id);
     setSelectedSupervisorEventId(id);
     setSelectedAdminEventId(id);
   }, [events]);
@@ -298,10 +295,6 @@ function App() {
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
   const [eventForm, setEventForm] = useState(createInitialEventForm);
-  const [employeeEventOpenInEdit, setEmployeeEventOpenInEdit] = useState(false);
-  const [employeeEventOpenedFrom, setEmployeeEventOpenedFrom] = useState<'member-home' | 'member-report-history'>(
-    'member-home',
-  );
   const [supervisorDeptFilter, setSupervisorDeptFilter] = useState<string>('all');
 
   const employeeDeptId = session.user?.departmentId;
@@ -508,8 +501,8 @@ function App() {
 
   const layoutNavKey = useMemo((): NavKey => {
     if (navKey === 'member-report-history') return 'member-home';
-    if (navKey === 'employee-event-detail' || navKey === 'supervisor-event-detail') {
-      if (navKey === 'supervisor-event-detail' && supervisorOpenedDetailFrom === 'team-dashboard-home') {
+    if (navKey === 'supervisor-event-detail') {
+      if (supervisorOpenedDetailFrom === 'team-dashboard-home') {
         return 'team-dashboard-home';
       }
       return 'member-home';
@@ -522,10 +515,6 @@ function App() {
   useLayoutEffect(() => {
     scrollPortalMainToTop();
   }, [navKey]);
-  const selectedEmployeeEvent = useMemo(
-    () => events.find((event) => event.id === selectedEmployeeEventId) ?? null,
-    [events, selectedEmployeeEventId],
-  );
   const selectedSupervisorEvent = useMemo(
     () => events.find((event) => event.id === selectedSupervisorEventId) ?? null,
     [events, selectedSupervisorEventId],
@@ -626,14 +615,6 @@ function App() {
         }
         return { title: LN.adminUsers };
       }
-      case 'employee-event-detail':
-        return {
-          title: selectedEmployeeEvent?.title ?? LC.mobileAppTitle,
-          onBack: () => {
-            setEmployeeEventOpenInEdit(false);
-            setNavKey(employeeEventOpenedFrom);
-          },
-        };
       case 'supervisor-event-detail':
         return {
           title: selectedSupervisorEvent?.title ?? LN.teamReports,
@@ -662,13 +643,11 @@ function App() {
   }, [
     locale,
     navKey,
-    selectedEmployeeEvent?.title,
     selectedSupervisorEvent?.title,
     selectedAdminEvent?.title,
     supervisorOpenedDetailFrom,
     profileHistorySubordinate?.name,
     profileDirectReports.length,
-    employeeEventOpenedFrom,
     userMgmtSelectedDeptId,
     departments,
   ]);
@@ -1073,12 +1052,6 @@ function App() {
   }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, navKey, refreshOperationalData]);
 
   useEffect(() => {
-    if (navKey !== 'employee-event-detail') {
-      setReportSubmitError(null);
-    }
-  }, [navKey]);
-
-  useEffect(() => {
     if (!selectedSupervisorEventId || !supervisorUi) return;
     setContactedByEvent((prev) => ({
       ...prev,
@@ -1170,7 +1143,7 @@ function App() {
     eventId: string,
     status: 'safe' | 'need_help',
     fields: EmployeeReportFields,
-    meta?: { omitStoredAttachment?: boolean },
+    meta?: { omitStoredAttachment?: boolean; showOverlay?: boolean },
   ) => {
     if (!session.user) return;
     const uid = session.user.id;
@@ -1186,9 +1159,10 @@ function App() {
     const keepPriorAttach = !(meta?.omitStoredAttachment ?? false);
 
     const maybeOpenSubmissionOverlay = (nextResponse: SafetyResponse) => {
-      if (prior) return;
+      if (prior && !meta?.showOverlay) return;
       setSubmissionOverlay({
         variant: status,
+        mode: prior ? 'revision' : 'initial',
         eventTitle: stripRedundantStatusFromTitle(eventRow.title),
         submittedSummary:
           status === 'need_help'
@@ -1247,7 +1221,7 @@ function App() {
         setResponses(mergedResponses);
         lastSubmitMetaRef.current = null;
         maybeOpenSubmissionOverlay(nextResponse);
-        if (prior) {
+        if (prior && !meta?.showOverlay) {
           showToast({
             tone: 'success',
             message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}（Demo 本地）`,
@@ -1302,7 +1276,7 @@ function App() {
       setResponses(mergedResponses);
       lastSubmitMetaRef.current = null;
       maybeOpenSubmissionOverlay(nextResponse);
-      if (prior) {
+      if (prior && !meta?.showOverlay) {
         showToast({
           tone: 'success',
           message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}`,
@@ -1380,26 +1354,6 @@ function App() {
       showToast({ tone: 'danger', message: e instanceof Error ? e.message : '建立失敗' });
       return false;
     }
-  };
-
-  const openEmployeeEvent = (
-    eventId: string,
-    editIfReported: boolean,
-    from: 'member-home' | 'member-report-history' = 'member-home',
-  ) => {
-    const uid = session.user?.id;
-    const hasReport =
-      !!uid &&
-      responses.some(
-        (r) =>
-          r.eventId === eventId &&
-          r.userId === uid &&
-          (r.status === 'safe' || r.status === 'need_help'),
-      );
-    setEmployeeEventOpenedFrom(from);
-    setSelectedEmployeeEventId(eventId);
-    setEmployeeEventOpenInEdit(editIfReported && hasReport);
-    setNavKey('employee-event-detail');
   };
 
   const closeEvent = async (eventId: string) => {
@@ -1502,7 +1456,6 @@ function App() {
             }}
             idleHistoryOngoing={idlePersonalHistory.ongoing}
             idleHistoryClosed={idlePersonalHistory.closed}
-            onOpenEmployeeEvent={(eventId) => openEmployeeEvent(eventId, true, 'member-home')}
             onNavigateHistory={() => setNavKey('member-report-history')}
             supervisorTeamNudge={supervisorUi ? supervisorTeamNudge : null}
             onDismissSupervisorNudge={() => setSupervisorTeamNudge(null)}
@@ -1516,7 +1469,20 @@ function App() {
           <MemberReportHistoryPage
             idleHistoryOngoing={idlePersonalHistory.ongoing}
             idleHistoryClosed={idlePersonalHistory.closed}
-            onOpenEmployeeEvent={(eventId) => openEmployeeEvent(eventId, true, 'member-report-history')}
+            currentDepartment={currentDepartment}
+            onSubmitReport={submitEmployeeStatus}
+            onRetryReport={() => {
+              const p = lastSubmitMetaRef.current;
+              if (!p) return;
+              void submitEmployeeStatus(p.eventId, p.status, p.fields, p.meta);
+            }}
+            submittingEventId={submittingReportEventId}
+            submitErrorMessage={reportSubmitError}
+            submitErrorEventId={reportSubmitErrorEventId}
+            onDismissSubmitError={() => {
+              setReportSubmitError(null);
+              setReportSubmitErrorEventId(null);
+            }}
             onBack={() => setNavKey('member-home')}
           />
         )}
@@ -1531,39 +1497,6 @@ function App() {
               setSupervisorOpenedDetailFrom('team-dashboard-home');
               setNavKey('supervisor-event-detail');
             }}
-          />
-        )}
-        {navKey === 'employee-event-detail' && session.surface === 'member' && (
-          <EmployeeHomePage
-            draftUserId={session.user?.id ?? null}
-            userName={session.user?.name ?? ''}
-            selectedEvent={selectedEmployeeEvent}
-            currentDepartment={currentDepartment}
-            latestResponse={responses
-              .filter((r) => r.userId === session.user?.id && r.eventId === selectedEmployeeEvent?.id)
-              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]}
-            reportSubmitting={submittingReportEventId === selectedEmployeeEvent?.id}
-            submitErrorMessage={
-              reportSubmitErrorEventId === selectedEmployeeEvent?.id ? reportSubmitError : null
-            }
-            onDismissSubmitError={() => {
-              setReportSubmitError(null);
-              setReportSubmitErrorEventId(null);
-            }}
-            onRetrySubmit={() => {
-              const p = lastSubmitMetaRef.current;
-              if (!p || !selectedEmployeeEvent || p.eventId !== selectedEmployeeEvent.id) return;
-              void submitEmployeeStatus(p.eventId, p.status, p.fields, p.meta);
-            }}
-            onSubmit={(status, fields, meta) => {
-              if (!selectedEmployeeEvent) return;
-              void submitEmployeeStatus(selectedEmployeeEvent.id, status, fields, meta);
-            }}
-            onBackToEvents={() => {
-              setEmployeeEventOpenInEdit(false);
-              setNavKey(employeeEventOpenedFrom);
-            }}
-            openInEditMode={employeeEventOpenInEdit}
           />
         )}
         {navKey === 'supervisor-event-detail' && supervisorUi && (
@@ -1702,6 +1635,7 @@ function App() {
       {submissionOverlay ? (
         <ReportSubmissionOverlay
           variant={submissionOverlay.variant}
+          mode={submissionOverlay.mode}
           eventTitle={submissionOverlay.eventTitle}
           submittedSummary={submissionOverlay.submittedSummary}
           onDismiss={() => setSubmissionOverlay(null)}
