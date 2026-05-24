@@ -58,16 +58,19 @@ export function AdminEventCenterPage({
   departments,
   onSelectEvent,
   adminQuickCreate,
+  variant = 'admin',
 }: {
   rows: AdminEventListRow[];
   departments: Department[];
   onSelectEvent: (eventId: string) => void;
-  adminQuickCreate: {
+  variant?: 'admin' | 'supervisor';
+  adminQuickCreate?: {
     eventForm: EventFormState;
     setEventForm: (value: EventFormState) => void;
     eventTypeCatalog: { name: string }[] | null;
     departments: Department[];
     onSubmitCreate: () => Promise<boolean>;
+    onPrepareCreate?: () => void;
     onEventTypesChanged?: () => void | Promise<void>;
     showToast?: (t: { tone: 'success' | 'warning' | 'danger' | 'info'; message: string }) => void;
   };
@@ -133,6 +136,7 @@ export function AdminEventCenterPage({
   const pageRows = filtered.slice(sliceFrom, sliceFrom + pageSize);
 
   const submitQuickCreate = async () => {
+    if (!adminQuickCreate) return;
     setCreateSubmitting(true);
     try {
       const ok = await adminQuickCreate.onSubmitCreate();
@@ -153,8 +157,8 @@ export function AdminEventCenterPage({
   };
 
   return (
-    <section className="page-section admin-event-center">
-      {createModalOpen ? (
+    <section className={`page-section admin-event-center${variant === 'supervisor' ? ' supervisor-event-center' : ''}`}>
+      {variant === 'admin' && createModalOpen && adminQuickCreate ? (
         <div
           className="modal-backdrop admin-create-event-backdrop"
           role="presentation"
@@ -202,8 +206,12 @@ export function AdminEventCenterPage({
 
       <header className="admin-event-center-header">
         <div>
-          <h2 className="admin-event-center-title">{p.eventManagement}</h2>
-          <p className="muted-text admin-event-center-sub">{p.adminEventCenterSubtitle}</p>
+          <h2 className="admin-event-center-title">
+            {variant === 'supervisor' ? dash.teamHomeTitle : p.eventManagement}
+          </h2>
+          <p className="muted-text admin-event-center-sub">
+            {variant === 'supervisor' ? dash.teamHomeSubtitle : p.adminEventCenterSubtitle}
+          </p>
         </div>
       </header>
 
@@ -390,16 +398,21 @@ export function AdminEventCenterPage({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        className="portal-admin-create-extended"
-        onClick={() => setCreateModalOpen(true)}
-        aria-label={p.fabCreateEventAria}
-        aria-haspopup="dialog"
-      >
-        <Plus size={22} strokeWidth={2.4} aria-hidden />
-        <span>{p.createEventButton}</span>
-      </button>
+      {variant === 'admin' && adminQuickCreate ? (
+        <button
+          type="button"
+          className="portal-admin-create-extended"
+          onClick={() => {
+            adminQuickCreate.onPrepareCreate?.();
+            setCreateModalOpen(true);
+          }}
+          aria-label={p.fabCreateEventAria}
+          aria-haspopup="dialog"
+        >
+          <Plus size={22} strokeWidth={2.4} aria-hidden />
+          <span>{p.createEventButton}</span>
+        </button>
+      ) : null}
     </section>
   );
 }

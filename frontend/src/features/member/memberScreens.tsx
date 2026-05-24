@@ -33,6 +33,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { useLocale } from '../../locale/LocaleContext';
 import type { AppLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
+import { stripRedundantStatusFromTitle } from '../../lib/adminEventDisplay';
 import { loadEmployeeReportDraft, saveEmployeeReportDraft } from '../../lib/employeeReportDraft';
 import type { EventItem, SafetyResponse } from '../../types';
 
@@ -170,7 +171,7 @@ function EmployeeEventListCard({
           </div>
 
           <div className="employee-events-card-body">
-            <div className="employee-events-card-title">{event.title}</div>
+            <div className="employee-events-card-title">{stripRedundantStatusFromTitle(event.title)}</div>
             <div className="employee-events-meta">
               <span className="employee-events-meta-dot">
                 {event.type}
@@ -311,7 +312,7 @@ function MemberEventDualCard({
             <Icon size={22} strokeWidth={1.85} />
           </div>
           <div className="employee-events-card-body">
-            <div className="employee-events-card-title">{event.title}</div>
+            <div className="employee-events-card-title">{stripRedundantStatusFromTitle(event.title)}</div>
             <div className="employee-events-meta">
               <span className="employee-events-meta-dot">
                 {event.type}
@@ -413,7 +414,7 @@ function MemberEventTeamCard({
             <Icon size={22} strokeWidth={1.85} />
           </div>
           <div className="employee-events-card-body">
-            <div className="employee-events-card-title">{event.title}</div>
+            <div className="employee-events-card-title">{stripRedundantStatusFromTitle(event.title)}</div>
             <div className="employee-events-meta">
               <span className="employee-events-meta-dot">
                 {event.type}
@@ -793,6 +794,7 @@ function EmployeeQuickReportPanel({
   stackSectionId,
   onBackToEvents,
   stackInitialReport = false,
+  openInEditMode = false,
 }: {
   draftUserId: string | null;
   userName: string;
@@ -815,6 +817,8 @@ function EmployeeQuickReportPanel({
   onBackToEvents?: () => void;
   /** 待回報首報：窄列＋雙大鈕、送出僅 status、成功 overlay */
   stackInitialReport?: boolean;
+  /** 進入頁面時直接開啟編輯已提交回報 */
+  openInEditMode?: boolean;
 }) {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
@@ -884,6 +888,32 @@ function EmployeeQuickReportPanel({
     setEmployeeLocation(stored?.location ?? '');
     setSelectedNeedHelp(false);
   }, [selectedEvent?.id, draftUserId, latestResponse?.id]);
+
+  useEffect(() => {
+    if (!openInEditMode || !latestResponse) return;
+    const wasNeedHelp = latestResponse.status === 'need_help';
+    const pendingInit = wasNeedHelp ? 'need_help' : 'safe';
+    const c = latestResponse.comment ?? '';
+    const loc = latestResponse.location ?? '';
+    setEmployeeComment(c);
+    setEmployeeLocation(loc);
+    setEmployeeAttachment(null);
+    setUploadNotice(null);
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+    setDraftBaseline({
+      comment: c,
+      location: loc,
+      attachment: null,
+      selectedNeedHelp: wasNeedHelp,
+      pendingSubmission: pendingInit,
+      omitStoredAttachment: false,
+    });
+    setOmitStoredAttachment(false);
+    setWantToUpdate(true);
+    setPendingSubmission(pendingInit);
+    setSelectedNeedHelp(wasNeedHelp);
+    setInitialSuccessOverlayOpen(false);
+  }, [openInEditMode, latestResponse?.id, selectedEvent?.id]);
 
   useEffect(() => {
     if (!draftUserId || !selectedEvent?.id || Boolean(latestResponse) || wantToUpdate) return;
@@ -1250,9 +1280,7 @@ function EmployeeQuickReportPanel({
                     <p className="muted-text">
                       {latestResponse.status === 'safe' ? ec.statusDetailSafe : ec.statusDetailNeedHelp}
                     </p>
-                    <button type="button" className="btn primary btn-block" onClick={enterRevisionMode}>
-                      {ec.supplementOrUpdate}
-                    </button>
+                    <p className="muted-text small">{ec.tapCardToEditHint}</p>
                   </div>
                 </div>
               ) : null}
@@ -1726,6 +1754,7 @@ export function EmployeeHomePage({
   onRetrySubmit,
   onSubmit,
   onBackToEvents,
+  openInEditMode = false,
 }: {
   draftUserId: string | null;
   userName: string;
@@ -1742,6 +1771,7 @@ export function EmployeeHomePage({
     meta?: { omitStoredAttachment?: boolean },
   ) => void | Promise<void>;
   onBackToEvents: () => void;
+  openInEditMode?: boolean;
 }) {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
@@ -1766,6 +1796,7 @@ export function EmployeeHomePage({
           layout="full"
           hideEmergencyContact={false}
           onBackToEvents={onBackToEvents}
+          openInEditMode={openInEditMode}
         />
       )}
     </section>
@@ -1787,7 +1818,7 @@ export function MemberPriorityHomePage({
   onDismissSubmitError,
   idleHistoryOngoing,
   idleHistoryClosed,
-  onSupplementEvent,
+  onOpenEmployeeEvent,
   supervisorTeamNudge,
   onDismissSupervisorNudge,
   onGoTeamDashboardFromNudge,
@@ -1811,7 +1842,7 @@ export function MemberPriorityHomePage({
   onDismissSubmitError: () => void;
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
-  onSupplementEvent: (eventId: string) => void;
+  onOpenEmployeeEvent: (eventId: string) => void;
   supervisorTeamNudge: null | { pendingPct: number; eventTitle: string };
   onDismissSupervisorNudge: () => void;
   onGoTeamDashboardFromNudge: () => void;
@@ -1865,18 +1896,24 @@ export function MemberPriorityHomePage({
                 const lr = row.latest;
                 if (!lr) return null;
                 return (
-                  <li key={row.event.id} className="member-idle-history-row">
-                    <div className="member-idle-history-row-main">
-                      <span className="member-idle-history-event-title">{row.event.title}</span>
-                      <span className="muted-text subtle">{row.event.type}</span>
-                    </div>
-                    <div className="member-idle-history-row-aside">
-                      <StatusBadge status={lr.status} />
-                      <button type="button" className="btn primary btn-sm" onClick={() => onSupplementEvent(row.event.id)}>
-                        {ec.supplementOrUpdate}
+                    <li key={row.event.id}>
+                      <button
+                        type="button"
+                        className="member-idle-history-row member-idle-history-row--clickable"
+                        onClick={() => onOpenEmployeeEvent(row.event.id)}
+                      >
+                        <div className="member-idle-history-row-main">
+                          <span className="member-idle-history-event-title">
+                            {stripRedundantStatusFromTitle(row.event.title)}
+                          </span>
+                          <span className="muted-text subtle">{row.event.type}</span>
+                        </div>
+                        <div className="member-idle-history-row-aside">
+                          <StatusBadge status={lr.status} />
+                          <ChevronRight size={18} aria-hidden />
+                        </div>
                       </button>
-                    </div>
-                  </li>
+                    </li>
                 );
               })}
             </ul>
@@ -1991,7 +2028,7 @@ export function MemberPriorityHomePage({
                 </div>
                 <div className="member-priority-card-head-text">
                   <h3 className="member-priority-card-title" id={lid}>
-                    {row.event.title}
+                    {stripRedundantStatusFromTitle(row.event.title)}
                   </h3>
                   <p className="member-priority-card-meta">
                     {row.event.type} · {formatEmployeeCardTime(row.event.startAt, locale)}

@@ -3,15 +3,16 @@ import { Layout } from './components/Layout';
 import { Toast } from './components/Toast';
 import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
 import { DirectReportsListPage } from './profile/DirectReportsListPage';
-import { ProfileOnboardingPage } from './profile/ProfileOnboardingPage';
+import { ForcePasswordChangePage } from './profile/ForcePasswordChangePage';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
 import { LoginPage } from './features/auth/AuthScreens';
-import { SupervisorDashboardPage, AdminDashboardPage, TeamDashboardHomePage } from './features/dashboard/DashboardPages';
+import { SupervisorDashboardPage, AdminDashboardPage } from './features/dashboard/DashboardPages';
 import {
   GlobalNotificationInboxPage,
   UserManagementPage,
 } from './features/events/EventAndAdminPages';
 import { AdminEventCenterPage } from './features/events/AdminEventCenterPage';
+import { createInitialEventForm } from './features/events/EventAndAdminPages';
 import {
   EmployeeHomePage,
   MemberPriorityHomePage,
@@ -42,7 +43,6 @@ import {
   type SupervisorDashboardApi,
 } from './api';
 import { deriveUserCapabilities, initialSurfaceFromRoles } from './lib/portalSessionRoles';
-import { cloneMockCatalog, demoRoleAccounts } from './mockData';
 import { appendReminderAudit, loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
 import { useLocale } from './locale/LocaleContext';
@@ -98,8 +98,7 @@ function App() {
   );
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  /** Demo 登入：畫面資料來自 `mockData.ts`，不呼叫後端（方便前端離線預覽）。 */
-  const [useMockOfflineCatalog, setUseMockOfflineCatalog] = useState(false);
+  const useMockOfflineCatalog = false;
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -193,7 +192,6 @@ function App() {
       try {
         const user = await getMyProfileApi();
         if (cancelled) return;
-        setUseMockOfflineCatalog(false);
         mergeUserIntoList(user);
         const capsNext = deriveUserCapabilities(user.roles);
         let surfaceNext = initialSurfaceFromRoles(user.roles);
@@ -281,15 +279,9 @@ function App() {
 
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
   const [searchText, setSearchText] = useState('');
-  const [eventForm, setEventForm] = useState({
-    title: '',
-    type: 'Earthquake',
-    customType: '',
-    description: '',
-    startAt: new Date().toISOString().slice(0, 16),
-    location: '',
-    targetDepartmentIds: [] as string[],
-  });
+  const [eventForm, setEventForm] = useState(createInitialEventForm);
+  const [employeeEventOpenInEdit, setEmployeeEventOpenInEdit] = useState(false);
+  const [supervisorDeptFilter, setSupervisorDeptFilter] = useState<string>('all');
 
   const employeeDeptId = session.user?.departmentId;
 
@@ -406,6 +398,49 @@ function App() {
     event: EventItem;
     teamCounts: { total: number; safe: number; needHelp: number; pending: number };
   };
+
+  const supervisorEventListRows = useMemo((): AdminEventListRow[] => {
+    if (!hasDirectReports) return [];
+    return employeeAccessibleEvents
+      .map((event) => {
+        let safe = 0;
+        let needHelp = 0;
+        let pending = 0;
+        for (const sid of subordinateUserIds) {
+          const lr = responses
+            .filter((r) => r.eventId === event.id && r.userId === sid)
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+          if (!lr) pending += 1;
+          else if (lr.status === 'safe') safe += 1;
+          else needHelp += 1;
+        }
+        const total = subordinateUserIds.length;
+        const reported = safe + needHelp;
+        const responseRate = total ? Math.round((reported / total) * 100) : 0;
+        let lastTs = new Date(event.startAt ?? event.createdAt).getTime();
+        for (const sid of subordinateUserIds) {
+          const lr = responses
+            .filter((r) => r.eventId === event.id && r.userId === sid)
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+          if (lr?.updatedAt) {
+            const t = new Date(lr.updatedAt).getTime();
+            if (t > lastTs) lastTs = t;
+          }
+        }
+        return {
+          event,
+          total,
+          safe,
+          needHelp,
+          pending,
+          responseRate,
+          reported,
+          lastActivityAt: lastTs,
+        };
+      })
+      .filter((r) => r.total > 0)
+      .sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
+  }, [hasDirectReports, employeeAccessibleEvents, subordinateUserIds, responses]);
 
   const supervisorTeamDashboardRows = useMemo(() => {
     if (!hasDirectReports || !employeeDeptId) {
@@ -688,15 +723,26 @@ function App() {
         }
         const uMeta = users.find((x) => x.id === uid);
         const noteMerge = latest ? [latest.location, latest.comment].filter(Boolean).join(' · ') : undefined;
+        const portal = getStrings(locale).portal;
+        const subNote =
+          t.sub_team_summary != null
+            ? portal.supervisorSubTeamNote(
+                t.sub_team_summary.safe,
+                t.sub_team_summary.need_help,
+                t.sub_team_summary.pending,
+                t.sub_team_summary.total ?? 0,
+              )
+            : undefined;
         return {
           id: uid,
-          name: t.name,
+          name: t.is_supervisor ? `${t.name}（${portal.supervisorSubTeamLead}）` : t.name,
           department: t.department,
           status: st,
           updatedAt: t.reported_at ?? latest?.updatedAt,
-          note: noteMerge || latest?.comment,
+          note: subNote ?? noteMerge ?? latest?.comment,
           phone: t.phone ?? uMeta?.phone,
           locationLine: latest?.location,
+          isSubTeamLead: Boolean(t.is_supervisor && t.sub_team_summary),
         };
       });
     }
@@ -709,6 +755,7 @@ function App() {
     responses,
     users,
     scopedClientRows,
+    locale,
   ]);
 
   const adminEventDetailRows = useMemo(() => {
@@ -716,13 +763,28 @@ function App() {
     return employeeRows.filter((r) => r.department === adminDepartmentFilter);
   }, [adminDepartmentFilter, employeeRows]);
 
+  const supervisorDepartmentOptions = useMemo(() => {
+    const names = new Set(
+      employeeRows.map((r) => r.department).filter((d) => d && d !== '-' && d.trim() !== ''),
+    );
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [employeeRows]);
+
+  const supervisorShowDeptTabs = supervisorDepartmentOptions.length > 1;
+
+  const supervisorFilteredRows = useMemo(() => {
+    if (!supervisorShowDeptTabs || supervisorDeptFilter === 'all') return employeeRows;
+    return employeeRows.filter((r) => r.department === supervisorDeptFilter);
+  }, [employeeRows, supervisorDeptFilter, supervisorShowDeptTabs]);
+
   const stats = useMemo(() => {
     if (supervisorUi && supervisorViewAligned && supervisorDashboard) {
       /** 與下方員工表同源：`team` 僅直屬部屬列；勿用 `kpis`（為整棵組織樹匯總）以免總人數與清單不一致 */
-      const total = employeeRows.length;
-      const safe = employeeRows.filter((r) => r.status === 'safe').length;
-      const needHelp = employeeRows.filter((r) => r.status === 'need_help').length;
-      const pending = employeeRows.filter((r) => r.status === 'pending').length;
+      const scope = supervisorFilteredRows;
+      const total = scope.length;
+      const safe = scope.filter((r) => r.status === 'safe').length;
+      const needHelp = scope.filter((r) => r.status === 'need_help').length;
+      const pending = scope.filter((r) => r.status === 'pending').length;
       const responseRate = total ? Math.min(100, Math.round(((safe + needHelp) / total) * 100)) : 0;
       return { total, safe, needHelp, pending, responseRate };
     }
@@ -759,6 +821,7 @@ function App() {
     adminDashboard,
     adminDepartmentFilter,
     employeeRows,
+    supervisorFilteredRows,
     scopedClientRows,
   ]);
 
@@ -935,40 +998,7 @@ function App() {
     [refreshOperationalData, showToast, useMockOfflineCatalog],
   );
 
-  const handleLogin = async (demoId: string) => {
-    clearAccessToken();
-    setUseMockOfflineCatalog(true);
-    const account = demoRoleAccounts.find((item) => item.id === demoId);
-    if (!account) return;
-    const snapshot = cloneMockCatalog();
-    const mockUser = snapshot.users.find((u) => u.id === account.userId);
-    if (!mockUser) {
-      showToast({ tone: 'danger', message: 'Demo 帳號設定錯誤：找不到對應使用者。' });
-      return;
-    }
-    eventsSelectionInitialized.current = false;
-    setDepartments(snapshot.departments);
-    setUsers(snapshot.users);
-    setEvents(snapshot.events);
-    setResponses(snapshot.responses);
-    setCatalogError(null);
-    setMyNotifications([]);
-    setSupervisorDashboard(null);
-    setAdminDashboard(null);
-    const capsNext = deriveUserCapabilities(mockUser.roles);
-    const surfaceNext = initialSurfaceFromRoles(mockUser.roles);
-    setSession({
-      isLoggedIn: true,
-      user: { ...mockUser },
-      surface: surfaceNext,
-      caps: capsNext,
-    });
-    setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
-    showToast({ tone: 'info', message: 'Demo 模式：資料來自 mockData（未連資料庫）。' });
-  };
-
   const handleEmailLogin = async (email: string, password: string) => {
-    setUseMockOfflineCatalog(false);
     const { user } = await loginWithEmailApi({ email, password });
     await loadCatalogFromApi();
     mergeUserIntoList(user);
@@ -999,7 +1029,6 @@ function App() {
 
   const logout = () => {
     clearAccessToken();
-    setUseMockOfflineCatalog(false);
     setSession({ isLoggedIn: false, user: null, surface: 'member', caps: emptyCaps });
     void loadCatalogFromApi();
     showToast({ tone: 'info', message: 'Logged out.' });
@@ -1138,6 +1167,14 @@ function App() {
 
   const createEvent = async (): Promise<boolean> => {
     if (!session.user) return false;
+    if (!eventForm.title.trim()) {
+      showToast({ tone: 'danger', message: '請填寫事件標題。' });
+      return false;
+    }
+    if (!eventForm.type.trim()) {
+      showToast({ tone: 'danger', message: getStrings(locale).portal.formLabelEventTypePlaceholder });
+      return false;
+    }
     if (useMockOfflineCatalog) {
       const eid =
         typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -1180,11 +1217,27 @@ function App() {
         /* ignore */
       }
       await refreshOperationalData();
+      setEventForm(createInitialEventForm());
       return true;
     } catch (e) {
       showToast({ tone: 'danger', message: e instanceof Error ? e.message : '建立失敗' });
       return false;
     }
+  };
+
+  const openEmployeeEvent = (eventId: string, editIfReported: boolean) => {
+    const uid = session.user?.id;
+    const hasReport =
+      !!uid &&
+      responses.some(
+        (r) =>
+          r.eventId === eventId &&
+          r.userId === uid &&
+          (r.status === 'safe' || r.status === 'need_help'),
+      );
+    setSelectedEmployeeEventId(eventId);
+    setEmployeeEventOpenInEdit(editIfReported && hasReport);
+    setNavKey('employee-event-detail');
   };
 
   const closeEvent = async (eventId: string) => {
@@ -1218,30 +1271,22 @@ function App() {
     supervisorUi && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
   if (!session.isLoggedIn) {
     return (
-      <LoginPage
-        accounts={demoRoleAccounts}
-        loading={!catalogLoaded}
-        error={catalogError}
-        onLogin={handleLogin}
-        onEmailLogin={handleEmailLogin}
-      />
+      <LoginPage loading={!catalogLoaded} error={catalogError} onEmailLogin={handleEmailLogin} />
     );
   }
 
-
-
-  if (session.user?.needsProfileCompletion) {
+  if (session.user?.mustChangePassword) {
     return (
       <>
-        <ProfileOnboardingPage
-          user={session.user}
+        <ForcePasswordChangePage
           showToast={showToast}
-          onCompleted={(nextUser) => {
+          onCompleted={async (nextUser) => {
             mergeUserIntoList(nextUser);
+            const me = await getMyProfileApi();
             setSession((prev) => ({
               ...prev,
-              user: nextUser,
-              caps: deriveUserCapabilities(nextUser.roles),
+              user: me,
+              caps: deriveUserCapabilities(me.roles),
             }));
           }}
         />
@@ -1287,10 +1332,7 @@ function App() {
             }}
             idleHistoryOngoing={idlePersonalHistory.ongoing}
             idleHistoryClosed={idlePersonalHistory.closed}
-            onSupplementEvent={(eventId) => {
-              setSelectedEmployeeEventId(eventId);
-              setNavKey('employee-event-detail');
-            }}
+            onOpenEmployeeEvent={(eventId) => openEmployeeEvent(eventId, true)}
             supervisorTeamNudge={supervisorUi ? supervisorTeamNudge : null}
             onDismissSupervisorNudge={() => setSupervisorTeamNudge(null)}
             onGoTeamDashboardFromNudge={() => {
@@ -1300,12 +1342,13 @@ function App() {
           />
         )}
         {navKey === 'team-dashboard-home' && supervisorUi && (
-          <TeamDashboardHomePage
-            activeRows={supervisorTeamDashboardRows.active}
-            closedRows={supervisorTeamDashboardRows.closed}
-            dashboardFreshAt={dashboardUpdatedAt}
-            onOpenEvent={(eventId) => {
+          <AdminEventCenterPage
+            variant="supervisor"
+            rows={supervisorEventListRows}
+            departments={departments}
+            onSelectEvent={(eventId) => {
               setSelectedSupervisorEventId(eventId);
+              setSupervisorDeptFilter('all');
               setSupervisorOpenedDetailFrom('team-dashboard-home');
               setNavKey('supervisor-event-detail');
             }}
@@ -1337,14 +1380,23 @@ function App() {
               if (!selectedEmployeeEvent) return;
               void submitEmployeeStatus(selectedEmployeeEvent.id, status, fields, meta);
             }}
-            onBackToEvents={() => setNavKey('member-home')}
+            onBackToEvents={() => {
+              setEmployeeEventOpenInEdit(false);
+              setNavKey('member-home');
+            }}
+            openInEditMode={employeeEventOpenInEdit}
           />
         )}
         {navKey === 'supervisor-event-detail' && supervisorUi && (
           <SupervisorDashboardPage
             event={selectedSupervisorEvent}
             stats={stats}
-            rows={employeeRows}
+            rows={supervisorFilteredRows}
+            departments={departments}
+            showDepartmentTabs={supervisorShowDeptTabs}
+            departmentFilter={supervisorDeptFilter}
+            setDepartmentFilter={setSupervisorDeptFilter}
+            departmentOptions={supervisorDepartmentOptions}
             filter={supervisorFilter}
             setFilter={setSupervisorFilter}
             searchText={searchText}
@@ -1378,6 +1430,7 @@ function App() {
               setEventForm,
               eventTypeCatalog,
               departments,
+              onPrepareCreate: () => setEventForm(createInitialEventForm()),
               onEventTypesChanged: refreshEventTypes,
               showToast,
               onSubmitCreate: async () => {

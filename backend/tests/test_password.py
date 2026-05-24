@@ -201,7 +201,7 @@ def test_must_change_password_cleared_after_change(client, make_user):
     assert profile.json()["mustChangePassword"] is False
 
 
-def test_must_change_password_not_set_when_password_given(client, make_user):
+def test_must_change_password_always_set_on_admin_create(client, make_user):
     admin = make_user(email="admin@test.com", role="admin")
     resp = client.post(
         "/api/admin/users",
@@ -209,7 +209,8 @@ def test_must_change_password_not_set_when_password_given(client, make_user):
         headers=auth_headers(admin),
     )
     assert resp.status_code == 200
+    assert resp.json()["temporaryPassword"] == "EMP2024099"
 
-    login = client.post("/api/auth/login", json={"email": "new@test.com", "password": "given1234"})
+    login = client.post("/api/auth/login", json={"email": "new@test.com", "password": "EMP2024099"})
     profile = client.get("/api/users/me", headers={"Authorization": f"Bearer {login.json()['access_token']}"})
-    assert profile.json()["mustChangePassword"] is False
+    assert profile.json()["mustChangePassword"] is True

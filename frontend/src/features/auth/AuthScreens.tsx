@@ -1,20 +1,18 @@
 import { useState } from 'react';
-import type { DemoAccount } from '../../api';
+import { useLocale } from '../../locale/LocaleContext';
+import { getStrings } from '../../locale/strings';
 
 export function LoginPage({
-  accounts,
   loading,
   error,
-  onLogin,
   onEmailLogin,
 }: {
-  accounts: DemoAccount[];
   loading: boolean;
   error: string | null;
-  onLogin: (demoId: string) => void | Promise<void>;
   onEmailLogin: (email: string, password: string) => Promise<void>;
 }) {
-  const [demoId, setDemoId] = useState('employee');
+  const { locale } = useLocale();
+  const auth = getStrings(locale).auth;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailLoginError, setEmailLoginError] = useState<string | null>(null);
@@ -27,7 +25,7 @@ export function LoginPage({
     try {
       await onEmailLogin(email.trim(), password);
     } catch (e) {
-      setEmailLoginError(e instanceof Error ? e.message : '登入失敗');
+      setEmailLoginError(e instanceof Error ? e.message : auth.loginFailed);
     } finally {
       setEmailSubmitting(false);
     }
@@ -36,10 +34,10 @@ export function LoginPage({
   return (
     <div className="auth-shell">
       <div className="auth-card">
-        <h1>Employee Safety & Response</h1>
-        <p>Emergency safety reporting and command dashboard.</p>
-        {loading && <p className="muted-text">載入後端資料…</p>}
-        {error && <p className="muted-text" style={{ color: 'var(--danger, #c0392b)' }}>{error}</p>}
+        <h1>{auth.title}</h1>
+        <p className="muted-text auth-lead">{auth.subtitle}</p>
+        {loading && <p className="muted-text">{auth.loading}</p>}
+        {error && <p className="auth-inline-error">{error}</p>}
 
         <form
           className="auth-email-form"
@@ -48,58 +46,39 @@ export function LoginPage({
             void submitEmail();
           }}
         >
-          <h2 className="auth-section-title">使用 Email 登入</h2>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            disabled={loading}
-          />
-          <input
-            placeholder="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            disabled={loading}
-          />
+          <label className="event-form-field">
+            <span className="event-form-field-label">{auth.emailLabel}</span>
+            <input
+              type="email"
+              placeholder={auth.emailPlaceholder}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              disabled={loading}
+            />
+          </label>
+          <label className="event-form-field">
+            <span className="event-form-field-label">{auth.passwordLabel}</span>
+            <input
+              placeholder={auth.passwordPlaceholder}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              disabled={loading}
+            />
+          </label>
           {emailLoginError ? <p className="auth-inline-error">{emailLoginError}</p> : null}
           <button
             className="btn primary"
             type="submit"
             disabled={loading || emailSubmitting || !email.trim() || !password}
           >
-            {emailSubmitting ? '登入中…' : 'Sign in'}
+            {emailSubmitting ? auth.submitting : auth.signIn}
           </button>
-          <p className="muted-text auth-footnote" style={{ marginTop: 12 }}>
-            新帳號由管理員建立；不提供公開註冊。
-          </p>
+          <p className="muted-text auth-footnote">{auth.footnote}</p>
         </form>
-
-        <hr className="auth-divider" />
-        <h2 className="auth-section-title">Demo（原型）</h2>
-        <label>
-          Prototype Role Selector
-          <select value={demoId} onChange={(e) => setDemoId(e.target.value)} disabled={loading || accounts.length === 0}>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="btn ghost"
-          onClick={() => void onLogin(demoId)}
-          type="button"
-          disabled={loading || accounts.length === 0}
-        >
-          Login with demo role
-        </button>
       </div>
     </div>
   );
 }
-

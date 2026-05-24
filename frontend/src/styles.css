@@ -3697,6 +3697,16 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   margin: 0;
 }
 
+.member-idle-history-row--clickable {
+  width: 100%;
+  border: none;
+  background: var(--surface-card, #fff);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
 .member-idle-history-row {
   display: flex;
   flex-wrap: wrap;
@@ -6092,4 +6102,120 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 }
 .user-mgmt-roster-row {
   align-items: flex-start;
+}
+
+/*
+ * Supervisor (團隊報表 + event detail): reuses admin layout classes but member blue chrome.
+ * Remap admin CSS variables on supervisor roots so descendants never pick up purple.
+ */
+.supervisor-event-center,
+.supervisor-event-detail-root,
+.supervisor-dash-page {
+  --admin-accent: var(--member-nav-bg);
+  --admin-accent-soft: var(--member-text-soft);
+  --admin-border-subtle: var(--member-border-soft);
+  --admin-border-default: var(--member-border-subtle);
+  --admin-surface-content: var(--member-surface-elevated);
+  --admin-chip-border: rgba(var(--palette-blue-midnight-rgb), 0.2);
+  --admin-chip-border-active: rgba(var(--palette-blue-midnight-rgb), 0.34);
+  --admin-chip-inactive-bg: rgba(var(--palette-blue-baby-blue-rgb), 0.28);
+  --admin-card-hover-bg: rgba(var(--palette-blue-baby-blue-rgb), 0.22);
+  --admin-card-hover-border: rgba(var(--palette-blue-cool-cerulean-rgb), 0.65);
+  --admin-ghost-hover-bg: rgba(var(--palette-blue-light-grey-rgb), 0.45);
+  --admin-nav-idle-border: rgba(var(--palette-blue-light-grey-rgb), 0.75);
+  --admin-sidebar-muted: var(--member-text-soft);
+  --admin-focus-ring: rgba(var(--palette-blue-midnight-rgb), 0.2);
+  --admin-cta-bg: var(--member-nav-bg);
+  --admin-cta-bg-hover: var(--member-nav-active-bg);
+  --admin-neutral-ink: var(--member-text);
+  --admin-note-info-bg: rgba(var(--palette-blue-baby-blue-rgb), 0.2);
+  --admin-note-info-text: var(--member-text);
+}
+
+/* Hardcoded purple rgba in shared admin-event-center rules */
+.supervisor-event-center .admin-event-center-thead {
+  background: rgba(var(--palette-blue-baby-blue-rgb), 0.22);
+}
+
+.supervisor-event-center .admin-event-center-type-icon {
+  background: rgba(var(--palette-blue-baby-blue-rgb), 0.35);
+}
+
+.supervisor-event-center .admin-event-center-progress-track,
+.supervisor-event-detail-root .admin-event-center-progress-track {
+  background: rgba(var(--palette-blue-light-grey-rgb), 0.55);
+}
+
+.supervisor-event-detail-root .admin-kpi-card {
+  border-color: rgba(var(--palette-blue-light-grey-rgb), 0.85);
+  background: #fbfdff;
+}
+
+.supervisor-event-detail-root .admin-kpi-card--neutral {
+  background: rgba(var(--palette-blue-platinum-rgb), 0.7);
+}
+
+.supervisor-event-detail-root .admin-dept-status-table th {
+  background: rgba(var(--palette-blue-baby-blue-rgb), 0.22);
+}
+
+.supervisor-event-detail-root .admin-dept-status-card:hover {
+  border-color: var(--member-accent);
+}
+
+/* Filter / tab chips: solid member navy when active (not admin purple) */
+.supervisor-event-center .event-filter-chip,
+.supervisor-event-detail-root .event-filter-chip {
+  border-color: #d6e3f3;
+  background: #f7fbff;
+  color: #345273;
+}
+
+.supervisor-event-center .event-filter-chip:hover,
+.supervisor-event-detail-root .event-filter-chip:hover {
+  border-color: #bfdbfe;
+  color: var(--member-nav-bg);
+}
+
+.supervisor-event-center .event-filter-chip.is-active,
+.supervisor-event-detail-root .admin-event-detail-tabs .event-filter-chip.is-active,
+.supervisor-event-detail-root .supervisor-event-detail-scope-bar .event-filter-chip.is-active {
+  background: var(--member-nav-bg);
+  color: #fff;
+  border-color: var(--member-nav-bg);
+}
+
+.supervisor-event-center .event-filter-chip.is-active:hover,
+.supervisor-event-detail-root .admin-event-detail-tabs .event-filter-chip.is-active:hover,
+.supervisor-event-detail-root .supervisor-event-detail-scope-bar .event-filter-chip.is-active:hover {
+  background: var(--member-nav-active-bg);
+  border-color: var(--member-nav-active-bg);
+  color: #fff;
+}
+
+.supervisor-event-detail-root .dash-shell-back.dash-shell-back {
+  border-color: rgba(var(--palette-blue-midnight-rgb), 0.28);
+  background: #eff6ff;
+  color: var(--member-nav-bg);
+}
+
+.supervisor-event-detail-root .dash-shell-back.dash-shell-back:hover {
+  background: #dbeafe;
+}
+
+.supervisor-event-detail-root .supervisor-dept-back {
+  color: var(--member-nav-bg);
+}
+
+.supervisor-event-detail-root .dash-panel-elevated {
+  border-color: var(--member-border-soft);
+}
+
+.supervisor-event-center .admin-event-center-table-wrap {
+  border-color: var(--member-border-soft);
+}
+
+.supervisor-event-center .admin-event-center-tip {
+  border-color: var(--member-border-soft);
+  background: rgba(var(--palette-blue-baby-blue-rgb), 0.15);
 }

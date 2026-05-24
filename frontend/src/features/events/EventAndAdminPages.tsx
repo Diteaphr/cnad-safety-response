@@ -15,6 +15,19 @@ export type EventFormState = {
   location: string;
   targetDepartmentIds: string[];
 };
+
+export function createInitialEventForm(): EventFormState {
+  return {
+    title: '',
+    type: '',
+    customType: '',
+    description: '',
+    startAt: new Date().toISOString().slice(0, 16),
+    location: '',
+    targetDepartmentIds: [],
+  };
+}
+
 import { ChevronRight, Plus } from 'lucide-react';
 
 function typeLabel(ev: string, p: ReturnType<typeof getStrings>['portal']) {
@@ -198,7 +211,12 @@ export function AdminQuickCreateFormFields({
       </label>
       <label className="event-form-field">
         <span className="event-form-field-label">{p.formLabelEventType}</span>
-        <select value={eventForm.type} onChange={(e) => setEventForm({ ...eventForm, type: e.target.value })}>
+        <select
+          value={eventForm.type}
+          onChange={(e) => setEventForm({ ...eventForm, type: e.target.value })}
+          required
+        >
+          <option value="">{p.formLabelEventTypePlaceholder}</option>
           {typeSelectRows.map((row) => (
             <option key={row.name} value={row.name}>
               {typeLabel(row.name, p)}

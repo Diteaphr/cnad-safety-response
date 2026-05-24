@@ -286,6 +286,7 @@ function mapProfileToUser(data: {
   employeeNo?: string | null;
   employeeCode?: string | null;
   needsProfileCompletion?: boolean;
+  mustChangePassword?: boolean;
   pushEnabled?: boolean;
   pushEmergencyEnabled?: boolean;
   pushReminderEnabled?: boolean;
@@ -306,7 +307,24 @@ function mapProfileToUser(data: {
     employeeCode: code ?? undefined,
     phone: data.phone ?? undefined,
     needsProfileCompletion: data.needsProfileCompletion,
+    mustChangePassword: data.mustChangePassword,
   };
+}
+
+export async function changeMyPasswordApi(body: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<User> {
+  const data = await apiFetch<{ message: string; user?: Parameters<typeof mapProfileToUser>[0] }>(
+    '/api/users/me/password',
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    },
+  );
+  if (data.user) return mapProfileToUser(data.user);
+  const me = await getMyProfileApi();
+  return me;
 }
 
 export async function updateMyProfileApi(body: {
@@ -343,7 +361,6 @@ export async function adminCreateUserApi(body: {
   email: string;
   phone: string;
   employeeNo: string;
-  password?: string;
   departmentId: string;
   roles?: Role[];
 }): Promise<{ message: string; user: User; temporaryPassword?: string }> {
@@ -370,7 +387,6 @@ export async function adminCreateUserApi(body: {
       employeeNo: body.employeeNo,
       departmentId: body.departmentId,
       roles: body.roles ?? ['employee'],
-      ...(body.password ? { password: body.password } : {}),
     }),
   });
   return { message: data.message, user: mapProfileToUser(data.user), temporaryPassword: data.temporaryPassword };

@@ -195,6 +195,18 @@ export type ProfilePageStrings = {
   profileCancelEdit: string;
   profileUpdatedToast: string;
   profileSaveError: string;
+  forcePasswordTitle: string;
+  forcePasswordSubtitle: string;
+  forcePasswordCurrentLabel: string;
+  forcePasswordNewLabel: string;
+  forcePasswordConfirmLabel: string;
+  forcePasswordHint: string;
+  forcePasswordSubmit: string;
+  forcePasswordRequired: string;
+  forcePasswordMinLength: string;
+  forcePasswordMismatch: string;
+  forcePasswordSuccess: string;
+  forcePasswordError: string;
 };
 
 export type EmployeeReportStrings = {
@@ -235,6 +247,7 @@ export type EmployeeReportStrings = {
   statusDetailSafe: string;
   statusDetailNeedHelp: string;
   supplementOrUpdate: string;
+  tapCardToEditHint: string;
   overlaySubmittedSafe: string;
   overlaySubmittedNeedHelp: string;
   supervisorNudgeTitle: string;
@@ -270,6 +283,20 @@ export type StatusBadgeStrings = {
   safe: string;
   needHelp: string;
   pending: string;
+};
+
+export type AuthStrings = {
+  title: string;
+  subtitle: string;
+  loading: string;
+  emailLabel: string;
+  emailPlaceholder: string;
+  passwordLabel: string;
+  passwordPlaceholder: string;
+  signIn: string;
+  submitting: string;
+  footnote: string;
+  loginFailed: string;
 };
 
 export type LayoutNavStrings = {
@@ -337,6 +364,10 @@ export type PortalStrings = {
   activateButton: string;
   closeEventButton: string;
   formLabelEventType: string;
+  formLabelEventTypePlaceholder: string;
+  supervisorSubTeamNote: (safe: number, needHelp: number, pending: number, total: number) => string;
+  supervisorDeptFilterAll: string;
+  supervisorSubTeamLead: string;
   formLabelNotifyTarget: string;
   notifyScopeAll: string;
   notifyScopeDepartments: string;
@@ -424,6 +455,7 @@ export type PortalStrings = {
 
 /** Copy for dashboards + profile confirmations (minimal i18n layer). */
 export function getStrings(locale: AppLocale): {
+  auth: AuthStrings;
   dash: DashboardStrings;
   profile: ProfileStrings;
   profilePage: ProfilePageStrings;
@@ -435,6 +467,7 @@ export function getStrings(locale: AppLocale): {
 } {
   return locale === 'en'
     ? {
+        auth: authEn,
         dash: dashEn,
         profile: profileEn,
         profilePage: profilePageEn,
@@ -445,6 +478,7 @@ export function getStrings(locale: AppLocale): {
         portal: portalEn,
       }
     : {
+        auth: authZh,
         dash: dashZh,
         profile: profileZh,
         profilePage: profilePageZh,
@@ -782,6 +816,18 @@ const profilePageZh: ProfilePageStrings = {
   profileCancelEdit: '取消',
   profileUpdatedToast: '個人資料已更新。',
   profileSaveError: '無法儲存，請稍後再試。',
+  forcePasswordTitle: '請設定新密碼',
+  forcePasswordSubtitle: '首次登入須變更密碼。請使用管理員提供的員工編號作為「目前密碼」。',
+  forcePasswordCurrentLabel: '目前密碼（員工編號）',
+  forcePasswordNewLabel: '新密碼',
+  forcePasswordConfirmLabel: '確認新密碼',
+  forcePasswordHint: '新密碼至少 8 個字元。',
+  forcePasswordSubmit: '儲存並繼續',
+  forcePasswordRequired: '請填寫目前密碼與新密碼。',
+  forcePasswordMinLength: '新密碼至少 8 個字元。',
+  forcePasswordMismatch: '兩次輸入的新密碼不一致。',
+  forcePasswordSuccess: '密碼已更新。',
+  forcePasswordError: '無法變更密碼，請確認目前密碼是否正確。',
 };
 
 const profilePageEn: ProfilePageStrings = {
@@ -841,6 +887,47 @@ const profilePageEn: ProfilePageStrings = {
   profileCancelEdit: 'Cancel',
   profileUpdatedToast: 'Profile saved.',
   profileSaveError: 'Could not save. Please try again.',
+  forcePasswordTitle: 'Set a new password',
+  forcePasswordSubtitle:
+    'You must change your password before continuing. Use your employee number as the current password.',
+  forcePasswordCurrentLabel: 'Current password (employee number)',
+  forcePasswordNewLabel: 'New password',
+  forcePasswordConfirmLabel: 'Confirm new password',
+  forcePasswordHint: 'New password must be at least 8 characters.',
+  forcePasswordSubmit: 'Save and continue',
+  forcePasswordRequired: 'Please enter your current and new password.',
+  forcePasswordMinLength: 'New password must be at least 8 characters.',
+  forcePasswordMismatch: 'New passwords do not match.',
+  forcePasswordSuccess: 'Password updated.',
+  forcePasswordError: 'Could not change password. Check your current password.',
+};
+
+const authZh: AuthStrings = {
+  title: '員工安全回報系統',
+  subtitle: '請使用 Email 與密碼登入。',
+  loading: '連線中…',
+  emailLabel: 'Email',
+  emailPlaceholder: 'your.name@company.com',
+  passwordLabel: '密碼',
+  passwordPlaceholder: '密碼',
+  signIn: '登入',
+  submitting: '登入中…',
+  footnote: '帳號由管理員建立；首次登入請使用員工編號作為密碼，登入後需立即變更。',
+  loginFailed: '登入失敗，請確認 Email 與密碼。',
+};
+
+const authEn: AuthStrings = {
+  title: 'Employee Safety & Response',
+  subtitle: 'Sign in with your work email and password.',
+  loading: 'Connecting…',
+  emailLabel: 'Email',
+  emailPlaceholder: 'your.name@company.com',
+  passwordLabel: 'Password',
+  passwordPlaceholder: 'Password',
+  signIn: 'Sign in',
+  submitting: 'Signing in…',
+  footnote: 'Accounts are created by an administrator. Use your employee number as the first password, then change it after login.',
+  loginFailed: 'Sign-in failed. Check your email and password.',
 };
 
 const layoutNavZh: LayoutNavStrings = {
@@ -934,6 +1021,11 @@ const portalZh: PortalStrings = {
   activateButton: '啟用',
   closeEventButton: '結束',
   formLabelEventType: '事件類型',
+  formLabelEventTypePlaceholder: '請選擇事件類型',
+  supervisorSubTeamNote: (safe, needHelp, pending, total) =>
+    `轄下團隊 ${total} 人 · 平安 ${safe} · 需協助 ${needHelp} · 未回報 ${pending}`,
+  supervisorDeptFilterAll: '全部部門',
+  supervisorSubTeamLead: '轄下團隊',
   formLabelNotifyTarget: '通知對象',
   notifyScopeAll: '全體員工',
   notifyScopeDepartments: '限定部門',
@@ -1056,6 +1148,11 @@ const portalEn: PortalStrings = {
   activateButton: 'Activate',
   closeEventButton: 'Close',
   formLabelEventType: 'Event type',
+  formLabelEventTypePlaceholder: 'Select event type',
+  supervisorSubTeamNote: (safe, needHelp, pending, total) =>
+    `Sub-team ${total} · Safe ${safe} · Need help ${needHelp} · Pending ${pending}`,
+  supervisorDeptFilterAll: 'All departments',
+  supervisorSubTeamLead: 'Sub-team lead',
   formLabelNotifyTarget: 'Notify',
   notifyScopeAll: 'All employees',
   notifyScopeDepartments: 'Selected departments',
@@ -1192,6 +1289,7 @@ const employeeZh: EmployeeReportStrings = {
   statusDetailSafe: '狀態：平安（I\'m Safe）',
   statusDetailNeedHelp: '狀態：需要協助（I need help）',
   supplementOrUpdate: '補充或更新資訊',
+  tapCardToEditHint: '點選事件即可檢視或更新您的回報內容。',
   overlaySubmittedSafe: '已送出：平安',
   overlaySubmittedNeedHelp: '已送出：需要協助',
   supervisorNudgeTitle: '已回報成功',
@@ -1262,6 +1360,7 @@ const employeeEn: EmployeeReportStrings = {
   statusDetailSafe: "Status: I'm Safe",
   statusDetailNeedHelp: 'Status: I need help',
   supplementOrUpdate: 'Add or update details',
+  tapCardToEditHint: 'Tap an event to view or update your report.',
   overlaySubmittedSafe: "Submitted: I'm safe",
   overlaySubmittedNeedHelp: 'Submitted: I need help',
   supervisorNudgeTitle: 'Report submitted',

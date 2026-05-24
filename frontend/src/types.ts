@@ -47,6 +47,7 @@ export interface User {
   teamsUsername?: string;
   /** 後端：缺少電話等必填聯絡資料時為 true，需先完成引導頁 */
   needsProfileCompletion?: boolean;
+  mustChangePassword?: boolean;
 }
 
 export interface Department {

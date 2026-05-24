@@ -62,7 +62,7 @@ def get_all_reports(db: Session = Depends(get_db)):
 
 @router.get("/demo-accounts")
 def demo_accounts():
-    return {"accounts": _portal.demo_accounts()}
+    raise HTTPException(status_code=404, detail="Demo accounts are not available.")
 
 
 @router.post("/auth/register")

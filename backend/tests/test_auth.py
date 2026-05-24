@@ -81,32 +81,7 @@ def test_login_token_is_decodable(client, make_user):
 DEMO_LOGIN = "/api/auth/demo-login"
 
 
-def test_demo_login_rejects_unknown_user_id(client, roles, make_user):
-    """Demo JWT is only minted for fixed seed UUIDs in demo_accounts."""
+def test_demo_login_disabled(client, make_user):
     stranger = make_user()
     resp = client.post(DEMO_LOGIN, json={"userId": str(stranger.user_id)})
-    assert resp.status_code == 403
-
-
-def test_demo_login_success_for_seed_uuid(client, db, roles):
-    """POST /reports requires Bearer — demo SPA uses this endpoint after choosing a demo persona."""
-    from app.seeding import ids
-
-    u = User(
-        user_id=ids.U_02,
-        employee_no="SUP001",
-        name="Super Demo",
-        email="super_demo@test.local",
-        status="active",
-        password_hash=hash_password("unused"),
-    )
-    db.add(u)
-    db.add(UserRole(user_id=ids.U_02, role_id=roles["supervisor"].role_id))
-    db.commit()
-
-    resp = client.post(DEMO_LOGIN, json={"userId": str(ids.U_02)})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["token_type"] == "bearer"
-    assert body["user"]["id"] == str(ids.U_02)
-    assert "access_token" in body
+    assert resp.status_code == 404

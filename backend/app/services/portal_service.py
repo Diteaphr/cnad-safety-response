@@ -90,6 +90,7 @@ class PortalService:
             "employeeCode": user.employee_no,
             "phone": user.phone or None,
             "needsProfileCompletion": _needs_profile_completion(user),
+            "mustChangePassword": user.must_change_password,
         }
         return self._attach_push_prefs(db, user, out)
 
@@ -761,13 +762,8 @@ class PortalService:
         if self._users.employee_no_exists(db, emp_no):
             raise HTTPException(status_code=409, detail="Employee number already in use.")
 
-        raw_pw = (payload.password or "").strip()
-        temporary_password: str | None = None
-        if raw_pw:
-            pw_plain = raw_pw
-        else:
-            temporary_password = emp_no
-            pw_plain = temporary_password
+        # Policy: initial password is always employee number; user must change on first login.
+        pw_plain = emp_no
 
         user = User(
             employee_no=emp_no,
@@ -776,7 +772,7 @@ class PortalService:
             phone=payload.phone.strip(),
             status="active",
             password_hash=hash_password(pw_plain),
-            must_change_password=temporary_password is not None,
+            must_change_password=True,
         )
         db.add(user)
         db.flush()
@@ -787,10 +783,11 @@ class PortalService:
 
         full = self._users.get_by_id(db, user.user_id)
         assert full is not None
-        out: dict[str, Any] = {"message": "User created.", "user": self._profile_out(db, full)}
-        if temporary_password is not None:
-            out["temporaryPassword"] = temporary_password
-        return out
+        return {
+            "message": "User created.",
+            "user": self._profile_out(db, full),
+            "temporaryPassword": emp_no,
+        }
 
     def admin_update_user(
         self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID, payload: AdminUserUpdateIn
@@ -899,32 +896,12 @@ class PortalService:
         }
 
     def issue_demo_login_token(self, db: Session, *, user_id_str: str) -> dict[str, Any]:
-        """僅發給種子資料的 Demo 使用者，供 SPA 下拉登入不需密碼。生產 env 請關閉。"""
-        if settings.env.lower() in ("production", "prod"):
-            raise HTTPException(
-                status_code=403,
-                detail="Demo authentication is disabled in production.",
-            )
-        try:
-            uid = uuid.UUID(user_id_str.strip())
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail="Invalid user id.") from e
-        allowed_ids = {acc["userId"] for acc in self.demo_accounts()}
-        if str(uid) not in allowed_ids:
-            raise HTTPException(
-                status_code=403,
-                detail="Demo login is restricted to seeded demo accounts.",
-            )
-        user = self._users.get_by_id(db, uid)
-        if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        roles = _role_names(user)
-        token = create_access_token(user.user_id, roles)
-        return {
-            "user": self._user_out(db, user),
-            "access_token": token,
-            "token_type": "bearer",
-        }
+        """Disabled — use email/password login with database accounts."""
+        del db, user_id_str
+        raise HTTPException(
+            status_code=404,
+            detail="Demo authentication is not available.",
+        )
 
     # ------------------------------------------------------------------
     # Notifications
