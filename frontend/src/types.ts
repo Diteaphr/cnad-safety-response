@@ -14,6 +14,7 @@ export type SafetyStatus = 'safe' | 'need_help' | 'pending';
 
 export type NavKey =
   | 'member-home'
+  | 'member-report-history'
   | 'team-dashboard-home'
   | 'employee-event-detail'
   | 'supervisor-event-detail'

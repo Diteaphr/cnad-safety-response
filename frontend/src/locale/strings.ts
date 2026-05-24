@@ -277,6 +277,20 @@ export type EmployeeReportStrings = {
   revisionDetailsHeading: string;
   replaceAttachment: string;
   removeAttachmentAria: string;
+  reportCompleteTitle: string;
+  reportCompleteBody: string;
+  waitingAssistanceTitle: string;
+  waitingAssistanceBody: string;
+  waitingAssistanceMore: (n: number) => string;
+  viewReportHistory: string;
+  navBlockedPending: string;
+  overlayCompleteTitle: string;
+  overlayNeedHelpTitle: string;
+  overlayNeedHelpBody: string;
+  overlayDone: string;
+  overlayGotIt: string;
+  overlayAutoCloseCountdown: (seconds: number) => string;
+  emergencyContactToggle: string;
 };
 
 export type StatusBadgeStrings = {
@@ -301,6 +315,7 @@ export type AuthStrings = {
 
 export type LayoutNavStrings = {
   memberHome: string;
+  reportHistory: string;
   teamReports: string;
   notifications: string;
   accountSettings: string;
@@ -932,6 +947,7 @@ const authEn: AuthStrings = {
 
 const layoutNavZh: LayoutNavStrings = {
   memberHome: '我的狀態',
+  reportHistory: '歷史回報紀錄',
   teamReports: '團隊回報',
   notifications: '通知',
   accountSettings: '帳號與設定',
@@ -944,6 +960,7 @@ const layoutNavZh: LayoutNavStrings = {
 
 const layoutNavEn: LayoutNavStrings = {
   memberHome: 'My status',
+  reportHistory: 'Report history',
   teamReports: 'Team reports',
   notifications: 'Notifications',
   accountSettings: 'Account & settings',
@@ -1320,6 +1337,20 @@ const employeeZh: EmployeeReportStrings = {
   revisionDetailsHeading: '補充詳情',
   replaceAttachment: '更換',
   removeAttachmentAria: '移除附件',
+  reportCompleteTitle: '回報完畢',
+  reportCompleteBody: '目前無事件需立即回報',
+  waitingAssistanceTitle: '等待協助中',
+  waitingAssistanceBody: '請等待協助，相關人員將與您聯繫。',
+  waitingAssistanceMore: (n) => `還有 ${n} 件進行中事件，請至歷史紀錄查看`,
+  viewReportHistory: '查看歷史回報紀錄',
+  navBlockedPending: '請先回報再進行其他操作',
+  overlayCompleteTitle: '回報完成',
+  overlayNeedHelpTitle: '已送出協助請求',
+  overlayNeedHelpBody: '請等待協助，相關人員將與您聯繫。',
+  overlayDone: '完成',
+  overlayGotIt: '知道了',
+  overlayAutoCloseCountdown: (seconds) => `${seconds} 秒後自動關閉`,
+  emergencyContactToggle: '緊急聯絡',
 };
 
 const employeeEn: EmployeeReportStrings = {
@@ -1391,5 +1422,19 @@ const employeeEn: EmployeeReportStrings = {
   revisionDetailsHeading: 'Additional details',
   replaceAttachment: 'Replace',
   removeAttachmentAria: 'Remove attachment',
+  reportCompleteTitle: 'All caught up',
+  reportCompleteBody: 'No events require an immediate report right now.',
+  waitingAssistanceTitle: 'Assistance requested',
+  waitingAssistanceBody: 'Please wait — someone will reach out to you.',
+  waitingAssistanceMore: (n) => `${n} more ongoing event(s) — see report history`,
+  viewReportHistory: 'View report history',
+  navBlockedPending: 'Please complete your safety report before continuing.',
+  overlayCompleteTitle: 'Report complete',
+  overlayNeedHelpTitle: 'Help request sent',
+  overlayNeedHelpBody: 'Please wait for assistance. Help is on the way.',
+  overlayDone: 'Done',
+  overlayGotIt: 'Got it',
+  overlayAutoCloseCountdown: (seconds) => `Closing in ${seconds}s`,
+  emergencyContactToggle: 'Emergency contacts',
 };
 
