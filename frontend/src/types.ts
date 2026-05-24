@@ -16,7 +16,6 @@ export type NavKey =
   | 'member-home'
   | 'member-report-history'
   | 'team-dashboard-home'
-  | 'employee-event-detail'
   | 'supervisor-event-detail'
   | 'admin-dashboard'
   | 'admin-event-detail'

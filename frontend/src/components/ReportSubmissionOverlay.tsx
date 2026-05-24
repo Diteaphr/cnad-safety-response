@@ -14,11 +14,13 @@ export type ReportSubmissionSummary = {
 
 export function ReportSubmissionOverlay({
   variant,
+  mode = 'initial',
   eventTitle,
   submittedSummary,
   onDismiss,
 }: {
   variant: 'safe' | 'need_help';
+  mode?: 'initial' | 'revision';
   eventTitle?: string;
   submittedSummary?: ReportSubmissionSummary;
   onDismiss: () => void;
@@ -48,7 +50,7 @@ export function ReportSubmissionOverlay({
       });
     }, 1000);
     return () => window.clearInterval(tick);
-  }, [variant, eventTitle, dismiss]);
+  }, [variant, mode, eventTitle, dismiss]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -59,7 +61,19 @@ export function ReportSubmissionOverlay({
   }, [dismiss]);
 
   const isSafe = variant === 'safe';
-  const title = isSafe ? ec.overlayCompleteTitle : ec.overlayNeedHelpTitle;
+  const isRevision = mode === 'revision';
+  const title = isRevision
+    ? ec.overlayRevisionTitle
+    : isSafe
+      ? ec.overlayCompleteTitle
+      : ec.overlayNeedHelpTitle;
+  const body = isRevision
+    ? isSafe
+      ? ec.overlayRevisionSafeBody
+      : ec.overlayRevisionNeedHelpBody
+    : isSafe
+      ? ec.statusDetailSafe
+      : ec.overlayNeedHelpBody;
   const ctaLabel = isSafe ? ec.overlayDone : ec.overlayGotIt;
 
   const summaryRows: Array<{ label: string; value: string }> = [];
@@ -100,9 +114,7 @@ export function ReportSubmissionOverlay({
 
         {eventTitle ? <p className="report-submission-overlay-event">{eventTitle}</p> : null}
 
-        <p className="report-submission-overlay-body">
-          {isSafe ? ec.statusDetailSafe : ec.overlayNeedHelpBody}
-        </p>
+        <p className="report-submission-overlay-body">{body}</p>
 
         {summaryRows.length > 0 ? (
           <div className="report-submission-overlay-summary">
