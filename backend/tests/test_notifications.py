@@ -42,7 +42,7 @@ def test_notifications_appear_after_reminder(client, make_user, make_department,
     notifs = resp.json()["notifications"]
     assert len(notifs) == 1
     n = notifs[0]
-    assert n["channel"] == "fcm_reminder"
+    assert n["channel"].startswith("fcm_reminder")
     assert n["status"] == "sent"
     assert n["eventId"] == str(event.event_id)
     assert n["sentAt"] is not None

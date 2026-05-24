@@ -35,7 +35,12 @@ def _reminders_url(event_id) -> str:
 
 
 def _notifs_by_channel(notifs: list[dict]) -> dict[str, dict]:
-    return {n["channel"]: n for n in notifs}
+    import re
+    # Strip scan-window suffix from reminder channels (e.g. fcm_reminder_20260524_0315)
+    # so tests can assert by_channel["fcm_reminder"] regardless of when they run.
+    def _normalize(ch: str) -> str:
+        return re.sub(r"_\d{8}_\d{4}$", "", ch)
+    return {_normalize(n["channel"]): n for n in notifs}
 
 
 def _all_fail(messages):
