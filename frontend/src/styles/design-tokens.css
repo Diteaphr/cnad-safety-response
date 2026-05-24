@@ -71,7 +71,10 @@
   --admin-focus-ring: rgba(var(--palette-purple-midnight-orchid-rgb), 0.22);
   --admin-note-info-bg: rgba(var(--palette-purple-iris-mist-rgb), 0.35);
   --admin-note-info-text: var(--palette-purple-midnight-orchid);
-  --admin-mobile-header-bg: var(--admin-surface-content);
+  --admin-mobile-header-bg: var(--palette-purple-midnight-orchid);
+  --admin-mobile-header-text: #ffffff;
+  --member-mobile-header-bg: var(--member-nav-bg);
+  --member-mobile-header-text: #ffffff;
 
   /* Legacy names mapped for gradual migration inside styles.css */
   --shell-admin-bg: var(--admin-surface-app);

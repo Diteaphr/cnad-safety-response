@@ -147,7 +147,12 @@ function App() {
       setResponses(respRows);
       setEventTypeCatalog(typeRows.length > 0 ? typeRows.map((r) => ({ name: r.name })) : null);
     } catch (e) {
-      setCatalogError(e instanceof Error ? e.message : '無法載入資料');
+      const raw = e instanceof Error ? e.message : '無法載入資料';
+      const friendly =
+        raw === 'Not Found' || raw.includes('404')
+          ? '後端 API 無回應（請確認 CNAD 後端已啟動，且非 8000 上其他專案）。登入仍可嘗試。'
+          : raw;
+      setCatalogError(friendly);
     } finally {
       setCatalogLoaded(true);
     }
@@ -567,6 +572,65 @@ function App() {
     () => (profileSubordinateUserId ? users.find((u) => u.id === profileSubordinateUserId) ?? null : null),
     [profileSubordinateUserId],
   );
+
+  const mobileShell = useMemo((): { title: string; onBack?: () => void } => {
+    const { layoutNav: LN, layoutChrome: LC, profilePage: PP } = getStrings(locale);
+    switch (navKey) {
+      case 'member-home':
+        return { title: LC.mobileAppTitle };
+      case 'team-dashboard-home':
+        return { title: LN.teamReports };
+      case 'notifications':
+        return { title: LN.notifications };
+      case 'profile':
+        return { title: LN.accountSettings };
+      case 'admin-dashboard':
+        return { title: LC.adminSidebarTitle };
+      case 'user-management':
+        return { title: LN.adminUsers };
+      case 'employee-event-detail':
+        return {
+          title: selectedEmployeeEvent?.title ?? LC.mobileAppTitle,
+          onBack: () => {
+            setEmployeeEventOpenInEdit(false);
+            setNavKey('member-home');
+          },
+        };
+      case 'supervisor-event-detail':
+        return {
+          title: selectedSupervisorEvent?.title ?? LN.teamReports,
+          onBack: () =>
+            setNavKey(supervisorOpenedDetailFrom === 'team-dashboard-home' ? 'team-dashboard-home' : 'member-home'),
+        };
+      case 'admin-event-detail':
+        return {
+          title: selectedAdminEvent?.title ?? LC.adminSidebarTitle,
+          onBack: () => setNavKey('admin-dashboard'),
+        };
+      case 'profile-direct-reports-list':
+        return {
+          title: PP.directReports,
+          onBack: () => setNavKey('profile'),
+        };
+      case 'profile-direct-report-history':
+        return {
+          title: profileHistorySubordinate?.name ?? PP.directReports,
+          onBack: () =>
+            setNavKey(profileDirectReports.length > 1 ? 'profile-direct-reports-list' : 'profile'),
+        };
+      default:
+        return { title: LC.mobileAppTitle };
+    }
+  }, [
+    locale,
+    navKey,
+    selectedEmployeeEvent?.title,
+    selectedSupervisorEvent?.title,
+    selectedAdminEvent?.title,
+    supervisorOpenedDetailFrom,
+    profileHistorySubordinate?.name,
+    profileDirectReports.length,
+  ]);
 
   useEffect(() => {
     const profileFamily = ['profile', 'profile-direct-reports-list', 'profile-direct-report-history'];
@@ -1308,6 +1372,8 @@ function App() {
         onEnterAdminCenter={enterAdminCenter}
         onExitAdminCenter={exitAdminCenter}
         onLogout={logout}
+        mobileHeaderTitle={mobileShell.title}
+        onMobileBack={mobileShell.onBack}
       >
         {navKey === 'member-home' && session.surface === 'member' && (
           <MemberPriorityHomePage

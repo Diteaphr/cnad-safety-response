@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ChevronRight, Home, LayoutDashboard, Menu } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Menu } from 'lucide-react';
 import { useLocale } from '../locale/LocaleContext';
 import type { AppLocale } from '../locale/LocaleContext';
 import { getStrings } from '../locale/strings';
 import type { NavKey, AppSurface, UserCapabilities } from '../types';
 
-const NARROW_SIDEBAR_MEDIA = '(max-width: 980px)';
+const NARROW_SIDEBAR_MEDIA = '(max-width: 1024px)';
 
 function navItemsMember(locale: AppLocale, canViewTeam: boolean): Array<{ key: NavKey; label: string }> {
   const { layoutNav: L } = getStrings(locale);
@@ -37,6 +37,8 @@ export function Layout({
   onEnterAdminCenter,
   onExitAdminCenter,
   onLogout,
+  mobileHeaderTitle,
+  onMobileBack,
   children,
 }: {
   surface: AppSurface;
@@ -46,6 +48,10 @@ export function Layout({
   onEnterAdminCenter: () => void;
   onExitAdminCenter: () => void;
   onLogout: () => void;
+  /** 窄螢幕頂列中央標題文字 */
+  mobileHeaderTitle: string;
+  /** 子頁面返回 handler；有值時頂列左側顯示返回鍵，否則顯示 hamburger */
+  onMobileBack?: () => void;
   children: ReactNode;
 }) {
   const { locale } = useLocale();
@@ -115,13 +121,8 @@ export function Layout({
     surface === 'adminCenter' ? 'app-frame app-frame--admin-center' : 'app-frame app-frame--member';
   const mobileHeaderTone = surface === 'adminCenter' ? 'admin' : 'member';
 
-  const showSidebarAdminEntry =
-    surface === 'member' && caps.canManage && !isNarrowViewport;
-  const showSidebarStaffExit =
-    surface === 'adminCenter' && caps.hasStaffPortal && !isNarrowViewport;
-
-  const showMobileEnterAdmin = isNarrowViewport && surface === 'member' && caps.canManage;
-  const showMobileExitAdmin = isNarrowViewport && surface === 'adminCenter' && caps.hasStaffPortal;
+  const showSidebarAdminEntry = surface === 'member' && caps.canManage;
+  const showSidebarStaffExit = surface === 'adminCenter' && caps.hasStaffPortal;
 
   return (
     <div className={frameClass}>
@@ -131,47 +132,29 @@ export function Layout({
         </div>
       ) : null}
       <header className={`app-mobile-shell-header app-mobile-shell-header--${mobileHeaderTone}`}>
-        <button
-          type="button"
-          className="sidebar-hamburger-btn"
-          aria-expanded={sidebarDrawerOpen}
-          aria-controls="app-sidebar-drawer"
-          onClick={() => setSidebarDrawerOpen((open) => !open)}
-        >
-          <Menu size={20} strokeWidth={2.25} aria-hidden />
-          <span className="sr-only">Toggle menu</span>
-        </button>
-        <span className="app-mobile-shell-title">{mobileTitle}</span>
-        <div className="app-mobile-shell-trailing">
-          {showMobileEnterAdmin ? (
-            <button
-              type="button"
-              className="mobile-shell-switch-btn mobile-shell-switch-btn--to-admin"
-              aria-label={chrome.ariaMobileEnterAdmin}
-              onClick={() => {
-                setSidebarDrawerOpen(false);
-                onEnterAdminCenter();
-              }}
-            >
-              <LayoutDashboard size={18} strokeWidth={2.1} aria-hidden />
-              <span className="mobile-shell-switch-btn__label">{chrome.mobileEnterAdminCenter}</span>
-            </button>
-          ) : null}
-          {showMobileExitAdmin ? (
-            <button
-              type="button"
-              className="mobile-shell-switch-btn mobile-shell-switch-btn--to-staff"
-              aria-label={chrome.ariaMobileExitAdmin}
-              onClick={() => {
-                setSidebarDrawerOpen(false);
-                onExitAdminCenter();
-              }}
-            >
-              <Home size={18} strokeWidth={2.1} aria-hidden />
-              <span className="mobile-shell-switch-btn__label">{chrome.mobileExitAdminCenter}</span>
-            </button>
-          ) : null}
-        </div>
+        {onMobileBack ? (
+          <button
+            type="button"
+            className="sidebar-hamburger-btn"
+            onClick={onMobileBack}
+            aria-label="返回"
+          >
+            <ArrowLeft size={20} strokeWidth={2.25} aria-hidden />
+            <span className="sr-only">返回</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="sidebar-hamburger-btn"
+            aria-expanded={sidebarDrawerOpen}
+            aria-controls="app-sidebar-drawer"
+            onClick={() => setSidebarDrawerOpen((open) => !open)}
+          >
+            <Menu size={20} strokeWidth={2.25} aria-hidden />
+            <span className="sr-only">Toggle menu</span>
+          </button>
+        )}
+        <span className="app-mobile-shell-title">{mobileHeaderTitle}</span>
       </header>
 
       <main className="content">{children}</main>

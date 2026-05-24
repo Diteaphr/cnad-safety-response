@@ -5,7 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(({ mode }) => {
   // 只載入 CNAD_*（例如 CNAD_API_PROXY_TARGET）。env 檔請放在 frontend/（預設專案根即此）。
   const cnadEnv = loadEnv(mode, '.', 'CNAD_');
-  const proxyTarget = cnadEnv.CNAD_API_PROXY_TARGET || 'http://127.0.0.1:8000';
+  const proxyTarget = cnadEnv.CNAD_API_PROXY_TARGET || 'http://127.0.0.1:8001';
 
   return {
     plugins: [
@@ -52,7 +52,8 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       host: '0.0.0.0',
-      port: 3000,
+      port: 5173,
+      strictPort: true,
       // 開發時可走同源 `/api/*`，由此轉到本機 CNAD uvicorn。
       // 若要改後端監聽位址：frontend/.env.local 設 CNAD_API_PROXY_TARGET（勿結尾 `/`），見 .env.example。
       proxy: {
