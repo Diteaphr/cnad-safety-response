@@ -6,7 +6,6 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   ClipboardList,
   CloudUpload,
@@ -31,6 +30,8 @@ import {
   Wind,
 } from 'lucide-react';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { PageBackButton } from '../../components/PageBackButton';
+import { PageHeader } from '../../components/PageHeader';
 import { StatusBadge } from '../../components/StatusBadge';
 import { useLocale } from '../../locale/LocaleContext';
 import type { AppLocale } from '../../locale/LocaleContext';
@@ -613,15 +614,7 @@ export function MemberEventListPage({
 
   return (
     <section className="page-section employee-events-page">
-      <header className="employee-events-hero">
-        <div className="employee-events-hero-text">
-          <h2 className="employee-events-title">
-            <Activity className="employee-events-title-icon" aria-hidden />
-            Emergency Events
-          </h2>
-          <p className="employee-events-subtitle">{subtitleHero}</p>
-        </div>
-      </header>
+      <PageHeader title="Emergency Events" subtitle={subtitleHero} />
 
       <div className="employee-events-tabs pills-counted">
         <button
@@ -1080,9 +1073,6 @@ function EmployeeQuickReportPanel({
   const fullHero =
     layout === 'full' ? (
       <header className="employee-event-hero">
-        <button className="employee-event-back" type="button" onClick={requestBackNavigation} aria-label={ec.backToEventsAria}>
-          <ChevronLeft size={24} strokeWidth={2.25} aria-hidden />
-        </button>
         <div className="employee-event-hero-art" aria-hidden />
         <div className="employee-event-hero-body">
           <div className="employee-event-icon-ring">
@@ -1114,6 +1104,11 @@ function EmployeeQuickReportPanel({
 
   return (
     <>
+      {layout === 'full' && onBackToEvents ? (
+        <div className="employee-event-page-nav">
+          <PageBackButton onClick={requestBackNavigation} ariaLabel={ec.backToEventsAria} />
+        </div>
+      ) : null}
       {fullHero}
       {reportSubmitting ? (
         <p className="employee-submit-progress" aria-live="polite">
@@ -1762,8 +1757,20 @@ export function EmployeeHomePage({
 function MemberEmergencyContactsCollapsible() {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
+
+  const scrollExpandedIntoView = (el: HTMLDetailsElement) => {
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  };
+
   return (
-    <details className="member-emergency-collapsible">
+    <details
+      className="member-emergency-collapsible"
+      onToggle={(e) => {
+        if (e.currentTarget.open) scrollExpandedIntoView(e.currentTarget);
+      }}
+    >
       <summary className="member-emergency-collapsible-summary">
         <span className="member-emergency-collapsible-leading">
           <Phone size={16} strokeWidth={2} aria-hidden />
@@ -1879,10 +1886,7 @@ export function MemberReportHistoryPage({
 
   return (
     <section className="page-section employee-events-page member-report-history-page">
-      <button type="button" className="member-report-history-back member-priority-back-btn" onClick={onBack}>
-        <ChevronLeft size={18} strokeWidth={2.25} aria-hidden />
-        {ln.memberHome}
-      </button>
+      <PageBackButton onClick={onBack} ariaLabel={ln.backToMemberHome} />
       <MemberIdleHistoryList
         idleHistoryOngoing={idleHistoryOngoing}
         idleHistoryClosed={idleHistoryClosed}
@@ -1953,11 +1957,8 @@ export function MemberPriorityHomePage({
   const waitingOverflow = waitingNeedHelpRows.length - waitingVisible.length;
 
   if (priorityView.kind === 'idle') {
-    const fitOneScreen = waitingNeedHelpRows.length === 0;
     return (
-      <section
-        className={`page-section employee-events-page member-priority-home member-priority-home--idle${fitOneScreen ? ' member-priority-home--fit' : ''}`}
-      >
+      <section className="page-section employee-events-page member-priority-home member-priority-home--idle">
         {supervisorTeamNudge ? (
           <div className="supervisor-team-nudge-banner" role="status">
             <div className="supervisor-team-nudge-copy">
@@ -2027,11 +2028,9 @@ export function MemberPriorityHomePage({
     );
   }
 
-  const fitPending = priorityView.rows.length === 1;
-
   return (
     <section
-      className={`page-section employee-events-page member-priority-home member-priority-home--pending${fitPending ? ' member-priority-home--fit' : ''}`}
+      className="page-section employee-events-page member-priority-home member-priority-home--pending"
       aria-label={ec.priorityStackAria}
     >
       <div className="member-priority-stack">

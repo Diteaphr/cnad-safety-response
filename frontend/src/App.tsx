@@ -141,6 +141,7 @@ function App() {
   const adminDashEventIdRef = useRef('');
   const [adminDepartmentFilter, setAdminDepartmentFilter] = useState<string | null>(null);
   const [closingAdminEventId, setClosingAdminEventId] = useState<string | null>(null);
+  const [userMgmtSelectedDeptId, setUserMgmtSelectedDeptId] = useState<string | null>(null);
   const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
 
   const loadCatalogFromApi = useCallback(async () => {
@@ -610,8 +611,21 @@ function App() {
         return { title: LN.accountSettings };
       case 'admin-dashboard':
         return { title: LC.adminSidebarTitle };
-      case 'user-management':
+      case 'user-management': {
+        if (userMgmtSelectedDeptId) {
+          const deptTitle =
+            userMgmtSelectedDeptId === '__none__'
+              ? locale === 'zh-Hant'
+                ? '未分配部門'
+                : 'Unassigned'
+              : (departments.find((d) => d.id === userMgmtSelectedDeptId)?.name ?? LN.adminUsers);
+          return {
+            title: deptTitle,
+            onBack: () => setUserMgmtSelectedDeptId(null),
+          };
+        }
         return { title: LN.adminUsers };
+      }
       case 'employee-event-detail':
         return {
           title: selectedEmployeeEvent?.title ?? LC.mobileAppTitle,
@@ -655,7 +669,13 @@ function App() {
     profileHistorySubordinate?.name,
     profileDirectReports.length,
     employeeEventOpenedFrom,
+    userMgmtSelectedDeptId,
+    departments,
   ]);
+
+  useEffect(() => {
+    if (navKey !== 'user-management') setUserMgmtSelectedDeptId(null);
+  }, [navKey]);
 
   useEffect(() => {
     const profileFamily = ['profile', 'profile-direct-reports-list', 'profile-direct-report-history'];
@@ -1624,6 +1644,8 @@ function App() {
             showToast={showToast}
             offlineMockMode={useMockOfflineCatalog}
             onUserCreated={(u) => mergeUserIntoList(u)}
+            selectedDeptId={userMgmtSelectedDeptId}
+            onSelectedDeptIdChange={setUserMgmtSelectedDeptId}
           />
         )}
         {navKey === 'notifications' && <GlobalNotificationInboxPage rows={myNotifications} />}

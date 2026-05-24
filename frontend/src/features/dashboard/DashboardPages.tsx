@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { EmployeeTable } from '../../components/EmployeeTable';
 import { StatusBadge } from '../../components/StatusBadge';
 import { DashboardShellHeader } from '../../components/dashboard/DashboardShellHeader';
+import { PageBackButton } from '../../components/PageBackButton';
 import { ResponseDistributionBar } from '../../components/dashboard/ResponseDistributionBar';
 import type { DashboardStrings } from '../../locale/strings';
 import { getStrings } from '../../locale/strings';
@@ -489,9 +490,11 @@ export function SupervisorDashboardPage({
         </section>
       ) : (
         <div className="admin-dept-detail-wrap">
-          <button type="button" className="btn ghost btn-sm supervisor-dept-back" onClick={() => setSelectedDepartment(null)}>
-            ← {portalStrings.userMgmtBackToDepts}
-          </button>
+          <PageBackButton
+            onClick={() => setSelectedDepartment(null)}
+            ariaLabel={portalStrings.userMgmtBackToDepts}
+            className="supervisor-dept-back"
+          />
           <h3 className="dash-subsection-title admin-dept-scope-title">{selectedDepartment}</h3>
           {statsProgressHero}
           {kpiStrip}

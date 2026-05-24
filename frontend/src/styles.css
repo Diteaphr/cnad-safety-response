@@ -178,6 +178,7 @@ body {
   overflow-x: clip;
   --layout-pad-inline: clamp(16px, 3.8vw, 28px);
   --layout-content-max: 1180px;
+  --layout-page-max: 920px;
   /* Mobile shell metrics (0 on desktop; set in max-width: 1024px block). */
   --app-mobile-header-h: 0px;
   --offline-bar-h: 0px;
@@ -505,25 +506,10 @@ body {
   filter: blur(0.3px);
 }
 
-.employee-event-back {
-  position: absolute;
-  top: 14px;
-  left: max(14px, env(safe-area-inset-left, 14px));
-  z-index: 3;
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border: none;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  transition: background 0.15s ease;
-}
-.employee-event-back:hover {
-  background: rgba(255, 255, 255, 0.22);
+.employee-event-page-nav {
+  max-width: var(--layout-page-max);
+  margin: 0 auto;
+  padding: 12px clamp(16px, 3vw, 24px) 0;
 }
 
 .employee-event-hero-body {
@@ -601,7 +587,7 @@ body {
 }
 
 .employee-event-shell {
-  max-width: 1100px;
+  max-width: var(--layout-page-max);
   margin: 0 auto;
   padding: 0 16px 8px;
   display: grid;
@@ -1016,6 +1002,9 @@ body {
   display: grid;
   gap: 12px;
   min-width: 0;
+  width: 100%;
+  max-width: var(--layout-page-max);
+  margin-inline: auto;
 }
 .panel {
   background: #fff;
@@ -2015,11 +2004,16 @@ textarea { min-height: 90px; resize: vertical; }
     box-sizing: border-box;
     display: block;
     justify-self: stretch;
-    padding-left: max(12px, env(safe-area-inset-left));
-    padding-right: max(12px, env(safe-area-inset-right));
-    /* Reserve space for fixed mobile header on every page. */
     margin-top: var(--app-mobile-shell-top-offset);
+    padding:
+      14px max(14px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom, 0px))
+      max(14px, env(safe-area-inset-left));
+  }
+
+  .app-frame > .content:has(.employee-event-page) {
     padding-top: 0;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   }
 
   .page-section,
@@ -2031,6 +2025,17 @@ textarea { min-height: 90px; resize: vertical; }
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
+  }
+
+  /* Narrow viewports: hide duplicate page titles (mobile header shows them). */
+  .page-header,
+  .admin-event-center-header,
+  .dash-page-title-block,
+  .portal-notifications-inbox > .page-header,
+  .portal-user-mgmt > .page-header,
+  .employee-event-headline,
+  .admin-event-detail-title {
+    display: none;
   }
 
   .employee-events-page,
@@ -2244,11 +2249,6 @@ textarea { min-height: 90px; resize: vertical; }
     font-weight: 700;
   }
 
-  .content:not(:has(.employee-event-page)) {
-    padding: 14px max(14px, env(safe-area-inset-left))
-      max(16px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-right));
-  }
-
   .content .page-section > h2:first-child {
     margin-block: 0 8px;
   }
@@ -2264,12 +2264,6 @@ textarea { min-height: 90px; resize: vertical; }
   .dash-panel-elevated {
     padding: 14px max(12px, env(safe-area-inset-right, 0px)) 14px max(12px, env(safe-area-inset-left, 0px));
     border-radius: 12px;
-  }
-  /* 窄螢幕已有頂列返回鍵，隱藏頁內重複的返回按鈕 */
-  .employee-event-back,
-  .dash-shell-back,
-  .profile-settings-back {
-    display: none;
   }
 
   .dash-shell-header {
@@ -2309,11 +2303,7 @@ textarea { min-height: 90px; resize: vertical; }
     font-size: 0.76rem;
     line-height: 1.4;
   }
-  /* 底部導覽已移除；員工事件詳細頁維持全幅／底色，僅統一下緣安全區 */
-  .content:has(.employee-event-page) {
-    padding-top: 0;
-    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
-  }
+  /* 底部導覽已移除；員工事件詳細頁維持全幅／底色 */
   .employee-edit-sticky-bar {
     left: 0;
     right: 0;
@@ -2409,6 +2399,10 @@ textarea { min-height: 90px; resize: vertical; }
     overflow-y: auto;
   }
 
+  .app-frame > .content:has(.member-priority-home) {
+    padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  }
+
   .sidebar {
     width: auto;
     max-width: none;
@@ -2442,7 +2436,6 @@ textarea { min-height: 90px; resize: vertical; }
 /* ---------- Employee Emergency Events（首頁列表） ---------- */
 
 .employee-events-page {
-  max-width: 920px;
   margin: 0 auto;
 }
 
@@ -2901,13 +2894,8 @@ button.employee-events-card:hover .employee-events-card-inner {
 
 /* —— Profile & Settings（對齊 Employee Home：employee-events-*）—— */
 .profile-settings-page.employee-events-page {
-  max-width: 920px;
   margin: 0 auto;
   gap: 0;
-}
-
-.profile-settings-back {
-  margin-bottom: 14px;
 }
 
 .profile-settings-panel {
@@ -3521,24 +3509,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   margin-bottom: 12px;
 }
 
-.member-priority-back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: none;
-  background: #eef3fa;
-  border-radius: 10px;
-  font: inherit;
-  font-weight: 600;
-  color: #17385b;
-  cursor: pointer;
-}
-
-.member-priority-back-btn:hover {
-  background: #e2ebf6;
-}
-
 .member-priority-home--idle .member-priority-idle-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3897,7 +3867,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   overflow-x: clip;
   min-width: 0;
   width: 100%;
-  max-width: 100%;
 }
 
 .app-frame--admin-center .admin-dash-page.dash-board-surface {
@@ -3910,13 +3879,17 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   border-bottom-color: var(--admin-border-subtle);
 }
 
+.app-frame.app-frame--admin-center .admin-dash-page .page-content-back,
 .app-frame.app-frame--admin-center .admin-dash-page .dash-shell-back.dash-shell-back {
   border-color: rgba(var(--palette-purple-midnight-orchid-rgb), 0.5);
   background: var(--admin-cta-bg);
 }
 
+.app-frame.app-frame--admin-center .admin-dash-page .page-content-back:hover,
 .app-frame.app-frame--admin-center .admin-dash-page .dash-shell-back.dash-shell-back:hover {
   background: var(--admin-cta-bg-hover);
+  color: #fff;
+  border-color: rgba(var(--palette-purple-midnight-orchid-rgb), 0.65);
 }
 
 .app-frame.app-frame--admin-center .admin-dash-page .dash-event-overview {
@@ -4030,11 +4003,12 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   overflow: hidden;
 }
 
+.page-content-back,
 .dash-shell-back.dash-shell-back {
   width: 38px;
   height: 38px;
   padding: 0;
-  border-color: #0b3b8f;
+  border: 1px solid #0b3b8f;
   background: #0f4aa2;
   color: #fff;
   display: inline-flex;
@@ -4042,10 +4016,21 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   justify-content: center;
   border-radius: 10px;
   flex-shrink: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
+.page-content-back:hover,
 .dash-shell-back.dash-shell-back:hover {
   background: #0b3b8f;
+  color: #fff;
+  border-color: #0a3478;
+}
+
+.page-content-back:focus-visible,
+.dash-shell-back.dash-shell-back:focus-visible {
+  outline: 2px solid rgba(15, 74, 162, 0.45);
+  outline-offset: 2px;
 }
 
 .dash-shell-sync {
@@ -4486,6 +4471,13 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 
 .admin-event-center-sub {
   margin: 0;
+}
+
+.profile-settings-page .admin-event-center-title,
+.employee-events-page:not(.supervisor-event-center) .admin-event-center-title,
+.portal-notifications-inbox .admin-event-center-title,
+.portal-user-mgmt .admin-event-center-title {
+  color: var(--member-text);
 }
 
 .admin-event-center-toolbar {
@@ -6133,9 +6125,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
     grid-template-columns: 1fr;
   }
 }
-.user-mgmt-back {
-  margin-bottom: 10px;
-}
 .user-mgmt-dept-list {
   display: grid;
   gap: 6px;
@@ -6267,14 +6256,18 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   color: #fff;
 }
 
+.supervisor-event-detail-root .page-content-back,
 .supervisor-event-detail-root .dash-shell-back.dash-shell-back {
   border-color: rgba(var(--palette-blue-midnight-rgb), 0.28);
   background: #eff6ff;
   color: var(--member-nav-bg);
 }
 
+.supervisor-event-detail-root .page-content-back:hover,
 .supervisor-event-detail-root .dash-shell-back.dash-shell-back:hover {
   background: #dbeafe;
+  color: var(--member-nav-bg);
+  border-color: rgba(var(--palette-blue-midnight-rgb), 0.35);
 }
 
 .supervisor-event-detail-root .supervisor-dept-back {
@@ -6294,29 +6287,21 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   background: rgba(var(--palette-blue-baby-blue-rgb), 0.15);
 }
 
-/* Member home — status center & one-screen layout */
+/* Member home — status center layout (natural document flow; no viewport pinning) */
 .member-priority-home {
-  min-height: var(--app-content-available-h);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  gap: clamp(12px, 2.5vh, 20px);
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
 }
 
 .member-priority-home--idle {
   justify-content: flex-start;
-  gap: clamp(12px, 3vh, 24px);
-}
-
-.member-priority-home--idle.member-priority-home--fit {
-  justify-content: center;
 }
 
 .member-priority-home--pending {
   justify-content: flex-start;
-}
-
-.member-priority-home--fit {
-  overflow: hidden;
 }
 
 .member-idle-complete {
@@ -6388,7 +6373,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 
 .member-waiting-assistance {
   width: 100%;
-  max-width: 520px;
   margin: 0 auto;
 }
 
@@ -6411,12 +6395,17 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 }
 
 .member-emergency-collapsible {
-  margin-top: auto;
+  margin-top: clamp(8px, 2vh, 16px);
   width: 100%;
-  max-width: 520px;
   align-self: center;
+  flex-shrink: 0;
   border-top: 1px solid #e8eef5;
   padding-top: 8px;
+  scroll-margin-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+.member-emergency-collapsible[open] {
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 }
 
 .member-emergency-collapsible-summary {
@@ -6495,24 +6484,7 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 }
 
 .member-report-history-page {
-  max-width: 720px;
   margin-inline: auto;
-}
-
-.member-report-history-back {
-  margin-bottom: 12px;
-}
-
-@media (min-width: 1025px) {
-  .member-report-history-back {
-    display: inline-flex;
-  }
-}
-
-@media (max-width: 1024px) {
-  .member-report-history-back {
-    display: none;
-  }
 }
 
 .member-priority-home--pending .member-priority-stack {
@@ -6532,6 +6504,10 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 @media (max-width: 1024px) {
   .member-priority-home .employee-events-hero {
     display: none;
+  }
+
+  .app-frame > .content:has(.member-priority-home) {
+    padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -6713,5 +6689,14 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Narrow viewports: in-page back controls (Layout header owns back / menu). */
+@media (max-width: 1024px) {
+  .page-content-back,
+  .employee-event-page-nav,
+  .supervisor-dept-back {
+    display: none !important;
   }
 }
