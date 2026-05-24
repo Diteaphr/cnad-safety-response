@@ -139,13 +139,27 @@ def test_admin_create_user_basic(client, make_user):
     )
 
     assert resp.status_code == 200
-    user = resp.json()["user"]
+    body = resp.json()
+    user = body["user"]
     assert user["name"] == "New Emp"
     assert user["email"] == "newemp@test.com"
     assert "employee" in user["roles"]
     assert "password" not in user
     assert "password_hash" not in user
-    assert "temporaryPassword" not in resp.json()
+    # Policy: initial password is always employee number, even if password is supplied.
+    assert body["temporaryPassword"] == "EMP001"
+
+    login_with_emp_no = client.post(
+        "/api/auth/login",
+        json={"email": "newemp@test.com", "password": "EMP001"},
+    )
+    assert login_with_emp_no.status_code == 200
+
+    login_with_supplied = client.post(
+        "/api/auth/login",
+        json={"email": "newemp@test.com", "password": "pass1234"},
+    )
+    assert login_with_supplied.status_code == 401
 
 
 def test_admin_create_user_omitted_password_generates_temp(client, make_user):
