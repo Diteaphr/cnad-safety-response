@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ClipboardList } from 'lucide-react';
+import { PageBackButton } from '../components/PageBackButton';
+import { PageHeader } from '../components/PageHeader';
 import type { EventItem, SafetyResponse, SafetyStatus, User } from '../types';
 import { compareEventsByStartThenCreatedDesc } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
+import { useLocale } from '../locale/LocaleContext';
+import { getStrings } from '../locale/strings';
 
 export function DirectReportEventHistoryPage({
   subordinate,
@@ -15,6 +18,8 @@ export function DirectReportEventHistoryPage({
   responses: SafetyResponse[];
   onBack: () => void;
 }) {
+  const { locale } = useLocale();
+  const { profilePage: pp } = getStrings(locale);
   const [filter, setFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
 
   const rows = useMemo(() => {
@@ -48,23 +53,16 @@ export function DirectReportEventHistoryPage({
     </button>
   );
 
+  const subtitle =
+    locale === 'zh-Hant'
+      ? '顯示其部門相關事件回報；未回報顯示為未回應。'
+      : 'Event responses visible for their department; no submission shows as No Response.';
+
   return (
     <section className="page-section employee-events-page profile-settings-page">
-      <button type="button" className="btn ghost profile-settings-back" onClick={onBack}>
-        ← Back to Profile
-      </button>
+      <PageBackButton onClick={onBack} ariaLabel={pp.backToProfile} />
 
-      <header className="employee-events-hero">
-        <div className="employee-events-hero-text">
-          <h2 className="employee-events-title">
-            <ClipboardList className="employee-events-title-icon" aria-hidden />
-            {subordinate.name}
-          </h2>
-          <p className="employee-events-subtitle">
-            Event responses visible for their department; no submission shows as No Response.
-          </p>
-        </div>
-      </header>
+      <PageHeader title={subordinate.name} subtitle={subtitle} />
 
       <div className="employee-events-tabs pills-counted profile-settings-history-tabs">
         {tabBtn('all', 'All')}

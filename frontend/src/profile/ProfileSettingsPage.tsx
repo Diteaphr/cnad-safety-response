@@ -6,15 +6,15 @@ import {
   Globe,
   IdCard,
   Lock,
+  LogOut,
   Mail,
   Pencil,
-  Settings,
-  LogOut,
   Phone,
   UserRound,
   Users,
 } from 'lucide-react';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { PageHeader } from '../components/PageHeader';
 import { useLocale } from '../locale/LocaleContext';
 import type { AppLocale } from '../locale/LocaleContext';
 import { getStrings, type ProfilePageStrings } from '../locale/strings';
@@ -223,15 +223,7 @@ export function ProfileSettingsPage({
 
   return (
     <section className="page-section employee-events-page profile-settings-page">
-      <header className="employee-events-hero">
-        <div className="employee-events-hero-text">
-          <h2 className="employee-events-title">
-            <Settings className="employee-events-title-icon" aria-hidden />
-            {pp.pageTitle}
-          </h2>
-          <p className="employee-events-subtitle">{pp.pageSubtitle}</p>
-        </div>
-      </header>
+      <PageHeader title={pp.pageTitle} subtitle={pp.pageSubtitle} />
 
       <div className="employee-events-card-list">
         <article className="profile-settings-panel">

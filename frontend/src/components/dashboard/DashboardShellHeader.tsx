@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
+import { PageBackButton } from '../PageBackButton';
 
 /** Reusable supervisor/admin dashboard top bar — values driven by props. */
 export function DashboardShellHeader({
@@ -24,9 +25,7 @@ export function DashboardShellHeader({
     <header className="dash-shell-header">
       <div className="dash-shell-header-brand">
         {showBack ? (
-          <button type="button" className="dash-shell-back btn ghost" onClick={onBack} aria-label={backLabel} title={backLabel}>
-            <ArrowLeft size={18} aria-hidden />
-          </button>
+          <PageBackButton onClick={onBack} ariaLabel={backLabel} />
         ) : (
           <span className="dash-shell-brand-mark" aria-hidden />
         )}

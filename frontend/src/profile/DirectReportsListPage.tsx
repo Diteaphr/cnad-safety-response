@@ -1,4 +1,8 @@
-import { ChevronRight, Users } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
+import { PageBackButton } from '../components/PageBackButton';
+import { PageHeader } from '../components/PageHeader';
+import { useLocale } from '../locale/LocaleContext';
+import { getStrings } from '../locale/strings';
 import type { Department, User } from '../types';
 import { initialsFromName } from './utils';
 
@@ -13,25 +17,22 @@ export function DirectReportsListPage({
   onBack: () => void;
   onSelectSubordinate: (userId: string) => void;
 }) {
+  const { locale } = useLocale();
+  const { profilePage: pp } = getStrings(locale);
   const deptLabel = (id: string) => departments.find((d) => d.id === id)?.name ?? '';
 
   return (
     <section className="page-section employee-events-page profile-settings-page">
-      <button type="button" className="btn ghost profile-settings-back" onClick={onBack}>
-        ← Back to Profile
-      </button>
+      <PageBackButton onClick={onBack} ariaLabel={pp.backToProfile} />
 
-      <header className="employee-events-hero">
-        <div className="employee-events-hero-text">
-          <h2 className="employee-events-title">
-            <Users className="employee-events-title-icon" aria-hidden />
-            Direct Reports
-          </h2>
-          <p className="employee-events-subtitle">
-            {directReports.length} people reporting to you. Tap to view event reporting history.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title={pp.directReports}
+        subtitle={
+          locale === 'zh-Hant'
+            ? `您有 ${directReports.length} 位直屬部屬。點選以查看事件回報紀錄。`
+            : `${directReports.length} people reporting to you. Tap to view event reporting history.`
+        }
+      />
 
       <div className="employee-events-card-list">
         <article className="profile-settings-panel profile-settings-panel--flush">

@@ -141,6 +141,7 @@ export type ProfileStrings = {
 export type ProfilePageStrings = {
   pageTitle: string;
   pageSubtitle: string;
+  backToProfile: string;
   personalSummary: string;
   personalSummaryDesc: string;
   rolesSection: string;
@@ -315,6 +316,7 @@ export type AuthStrings = {
 
 export type LayoutNavStrings = {
   memberHome: string;
+  backToMemberHome: string;
   reportHistory: string;
   teamReports: string;
   notifications: string;
@@ -778,6 +780,7 @@ const profileEn: ProfileStrings = {
 const profilePageZh: ProfilePageStrings = {
   pageTitle: '個人資料與設定',
   pageSubtitle: '管理帳號、通知偏好與組織報告關係。',
+  backToProfile: '返回帳號與設定',
   personalSummary: '個人摘要',
   personalSummaryDesc: '聯絡方式與部門資訊。',
   rolesSection: '角色與報告關係',
@@ -848,6 +851,7 @@ const profilePageZh: ProfilePageStrings = {
 const profilePageEn: ProfilePageStrings = {
   pageTitle: 'Profile & Settings',
   pageSubtitle: 'Account, notification preferences, and reporting relationships.',
+  backToProfile: 'Back to profile & settings',
   personalSummary: 'Summary',
   personalSummaryDesc: 'Contact details and department.',
   rolesSection: 'Role & reporting',
@@ -947,19 +951,21 @@ const authEn: AuthStrings = {
 
 const layoutNavZh: LayoutNavStrings = {
   memberHome: '我的狀態',
+  backToMemberHome: '返回我的狀態',
   reportHistory: '歷史回報紀錄',
   teamReports: '團隊回報',
   notifications: '通知',
   accountSettings: '帳號與設定',
   adminOverview: '總覽',
   adminEvents: '事件管理',
-  adminUsers: '使用者',
+  adminUsers: '使用者與部門管理',
   adminNotifications: '通知',
   adminSystemSettings: '系統設定',
 };
 
 const layoutNavEn: LayoutNavStrings = {
   memberHome: 'My status',
+  backToMemberHome: 'Back to my status',
   reportHistory: 'Report history',
   teamReports: 'Team reports',
   notifications: 'Notifications',

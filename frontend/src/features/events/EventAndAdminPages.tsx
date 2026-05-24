@@ -1,4 +1,6 @@
 import { StatCard } from '../../components/StatCard';
+import { PageBackButton } from '../../components/PageBackButton';
+import { PageHeader } from '../../components/PageHeader';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -492,6 +494,8 @@ export function UserManagementPage({
   showToast,
   onUserCreated,
   offlineMockMode = false,
+  selectedDeptId,
+  onSelectedDeptIdChange,
 }: {
   users: User[];
   departments: Department[];
@@ -499,6 +503,8 @@ export function UserManagementPage({
   onUserCreated: (user: User) => void;
   /** Demo 靜態模式：建立使用者僅寫入前端 state。 */
   offlineMockMode?: boolean;
+  selectedDeptId: string | null;
+  onSelectedDeptIdChange: (deptId: string | null) => void;
 }) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
@@ -521,7 +527,6 @@ export function UserManagementPage({
     return map;
   }, [employees]);
 
-  const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
@@ -609,7 +614,7 @@ export function UserManagementPage({
 
   return (
     <section className="page-section portal-user-mgmt">
-      <h2>{p.userDeptManagement}</h2>
+      <PageHeader title={p.userDeptManagement} subtitle={p.userMgmtEmployeesByDeptDesc} />
       <div className="portal-user-mgmt-layout">
         <section className="panel portal-user-mgmt-add">
           <h3>{p.userMgmtAddAccount}</h3>
@@ -671,9 +676,10 @@ export function UserManagementPage({
         <section className="panel portal-user-mgmt-roster">
           {selectedDeptId ? (
             <>
-              <button type="button" className="btn ghost user-mgmt-back" onClick={() => setSelectedDeptId(null)}>
-                ← {p.userMgmtBackToDepts}
-              </button>
+              <PageBackButton
+                onClick={() => onSelectedDeptIdChange(null)}
+                ariaLabel={p.userMgmtBackToDepts}
+              />
               <h3>{p.userMgmtDeptRosterTitle(rosterTitle)}</h3>
               {rosterEmployees.length === 0 ? (
                 <p className="muted-text empty">{p.userMgmtNoEmployeesInDept}</p>
@@ -706,7 +712,7 @@ export function UserManagementPage({
                       key={dept.id}
                       className="user-mgmt-dept-row"
                       style={{ paddingLeft: 12 + depth * 14 }}
-                      onClick={() => setSelectedDeptId(dept.id)}
+                      onClick={() => onSelectedDeptIdChange(dept.id)}
                     >
                       <span className="user-mgmt-dept-name">{dept.name}</span>
                       <span className="user-mgmt-dept-meta">
@@ -717,7 +723,7 @@ export function UserManagementPage({
                   );
                 })}
                 {(employeesByDept.get('__none__')?.length ?? 0) > 0 ? (
-                  <button type="button" className="user-mgmt-dept-row" onClick={() => setSelectedDeptId('__none__')}>
+                  <button type="button" className="user-mgmt-dept-row" onClick={() => onSelectedDeptIdChange('__none__')}>
                     <span className="user-mgmt-dept-name">{locale === 'zh-Hant' ? '未分配部門' : 'Unassigned'}</span>
                     <span className="user-mgmt-dept-meta">
                       <span className="muted-text">
@@ -752,8 +758,7 @@ export function GlobalNotificationInboxPage({ rows }: { rows: PortalNotification
 
   return (
     <section className="page-section portal-notifications-inbox">
-      <h2>{p.notificationInboxTitle}</h2>
-      <p className="muted-text">{p.notificationInboxIntro}</p>
+      <PageHeader title={p.notificationInboxTitle} subtitle={p.notificationInboxIntro} />
       <div className="list" style={{ marginTop: 16 }}>
         {sorted.length === 0 ? (
           <p className="empty">{p.notificationInboxEmpty}</p>
@@ -803,9 +808,7 @@ export function NotificationPage({
 
   return (
     <section className="page-section portal-notifications">
-      <button className="btn ghost" onClick={onBackToEvents} type="button">
-        {p.backToEventList}
-      </button>
+      <PageBackButton onClick={onBackToEvents} ariaLabel={p.backToEventList} />
       <h2>{p.notificationReminderCenter}</h2>
       <section className="panel">
         <h3 className="section-title">{p.deliverySummary}</h3>
