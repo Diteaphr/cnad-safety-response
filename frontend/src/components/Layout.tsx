@@ -39,6 +39,8 @@ export function Layout({
   onLogout,
   mobileHeaderTitle,
   onMobileBack,
+  navLocked = false,
+  onBlockedNav,
   children,
 }: {
   surface: AppSurface;
@@ -52,6 +54,9 @@ export function Layout({
   mobileHeaderTitle: string;
   /** 子頁面返回 handler；有值時頂列左側顯示返回鍵，否則顯示 hamburger */
   onMobileBack?: () => void;
+  /** 有待回報時鎖定非首頁導覽 */
+  navLocked?: boolean;
+  onBlockedNav?: (target: NavKey) => void;
   children: ReactNode;
 }) {
   const { locale } = useLocale();
@@ -113,8 +118,21 @@ export function Layout({
   }, [sidebarDrawerOpen, isNarrowViewport]);
 
   const navigateFromSidebar = (key: NavKey) => {
+    if (navLocked && key !== 'member-home') {
+      onBlockedNav?.(key);
+      return;
+    }
     setSidebarDrawerOpen(false);
     onNavigate(key);
+  };
+
+  const tryEnterAdminCenter = () => {
+    if (navLocked) {
+      onBlockedNav?.('admin-dashboard');
+      return;
+    }
+    setSidebarDrawerOpen(false);
+    onEnterAdminCenter();
   };
 
   const frameClass =
@@ -169,16 +187,20 @@ export function Layout({
           <p className="muted">{sidebarSub}</p>
         </header>
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
-            <button
-              key={item.key}
-              className={currentNav === item.key ? 'nav-btn active' : 'nav-btn'}
-              onClick={() => navigateFromSidebar(item.key)}
-              type="button"
-            >
-              {item.label}
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const isLocked = navLocked && item.key !== 'member-home';
+            return (
+              <button
+                key={item.key}
+                className={`${currentNav === item.key ? 'nav-btn active' : 'nav-btn'}${isLocked ? ' nav-btn--locked' : ''}`}
+                onClick={() => navigateFromSidebar(item.key)}
+                type="button"
+                aria-disabled={isLocked || undefined}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="sidebar-footer">
@@ -187,11 +209,9 @@ export function Layout({
               <div className="sidebar-divider" aria-hidden />
               <button
                 type="button"
-                className="sidebar-link-btn"
-                onClick={() => {
-                  setSidebarDrawerOpen(false);
-                  onEnterAdminCenter();
-                }}
+                className={`sidebar-link-btn${navLocked ? ' sidebar-link-btn--locked' : ''}`}
+                onClick={tryEnterAdminCenter}
+                aria-disabled={navLocked || undefined}
               >
                 <span>{chrome.enterAdminCenter}</span>
                 <ChevronRight size={18} aria-hidden strokeWidth={2} />

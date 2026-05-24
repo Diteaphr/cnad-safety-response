@@ -3,7 +3,9 @@ import {
   Activity,
   AlertCircle,
   Archive,
+  ArrowRight,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -836,7 +838,6 @@ function EmployeeQuickReportPanel({
   const [discardPromptAfter, setDiscardPromptAfter] = useState<'back' | 'cancel' | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [omitStoredAttachment, setOmitStoredAttachment] = useState(false);
-  const [initialSuccessOverlayOpen, setInitialSuccessOverlayOpen] = useState(false);
 
   const MAX_COMMENT_LEN = 500;
   const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -912,7 +913,6 @@ function EmployeeQuickReportPanel({
     setWantToUpdate(true);
     setPendingSubmission(pendingInit);
     setSelectedNeedHelp(wasNeedHelp);
-    setInitialSuccessOverlayOpen(false);
   }, [openInEditMode, latestResponse?.id, selectedEvent?.id]);
 
   useEffect(() => {
@@ -940,22 +940,6 @@ function EmployeeQuickReportPanel({
     stackInitialReport,
   ]);
 
-
-  const prevLatestResponseIdRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    prevLatestResponseIdRef.current = undefined;
-    setInitialSuccessOverlayOpen(false);
-  }, [selectedEvent?.id]);
-
-  useEffect(() => {
-    const lid = latestResponse?.id;
-    if (!stackInitialReport || !lid) return;
-    if (prevLatestResponseIdRef.current !== lid) {
-      prevLatestResponseIdRef.current = lid;
-      setInitialSuccessOverlayOpen(true);
-    }
-  }, [stackInitialReport, latestResponse?.id]);
 
   useEffect(() => {
     if (latestResponse) setWantToUpdate(false);
@@ -1272,7 +1256,7 @@ function EmployeeQuickReportPanel({
                   </article>
                 </>
               ) : null}
-              {!showReportingControls && latestResponse && stackInitialReport && !wantToUpdate && !initialSuccessOverlayOpen ? (
+              {!showReportingControls && latestResponse && stackInitialReport && !wantToUpdate ? (
                 <div className="member-initial-report-done">
                   <CheckCircle2 size={36} strokeWidth={2} className="member-initial-report-done-ic" aria-hidden />
                   <div className="member-initial-report-done-copy">
@@ -1701,34 +1685,6 @@ function EmployeeQuickReportPanel({
             </footer>
           ) : null}
 
-          {stackInitialReport && latestResponse && initialSuccessOverlayOpen ? (
-            <div
-              className="member-report-success-overlay-backdrop"
-              role="presentation"
-              onClick={() => setInitialSuccessOverlayOpen(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setInitialSuccessOverlayOpen(false);
-              }}
-            >
-              <div
-                className="member-report-success-overlay-card"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="member-initial-success-title"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <CheckCircle2 size={52} strokeWidth={2} className="member-report-success-overlay-ic" aria-hidden />
-                <h3 id="member-initial-success-title">{selectedEvent.title}</h3>
-                <p className="member-report-success-overlay-status">
-                  {latestResponse.status === 'safe' ? ec.overlaySubmittedSafe : ec.overlaySubmittedNeedHelp}
-                </p>
-                <button type="button" className="btn primary btn-block" onClick={() => setInitialSuccessOverlayOpen(false)}>
-                  {ec.close}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
           <ConfirmModal
             open={discardPromptAfter !== null}
             title="Discard unsaved changes?"
@@ -1803,6 +1759,139 @@ export function EmployeeHomePage({
   );
 }
 
+function MemberEmergencyContactsCollapsible() {
+  const { locale } = useLocale();
+  const ec = getStrings(locale).employee;
+  return (
+    <details className="member-emergency-collapsible">
+      <summary className="member-emergency-collapsible-summary">
+        <span className="member-emergency-collapsible-leading">
+          <Phone size={16} strokeWidth={2} aria-hidden />
+          {ec.emergencyContactToggle}
+        </span>
+        <ChevronDown size={18} strokeWidth={2.25} className="member-emergency-collapsible-chevron" aria-hidden />
+      </summary>
+      <div className="member-emergency-collapsible-body">
+        <a className="member-emergency-link" href="tel:+886212345678">
+          <Headphones size={18} strokeWidth={2} aria-hidden />
+          <span>
+            <span className="member-emergency-link-title">Emergency Hotline</span>
+            <span className="member-emergency-link-num">+886 (2) 1234-5678</span>
+          </span>
+        </a>
+        <a className="member-emergency-link" href="tel:+886298765432">
+          <Users size={18} strokeWidth={2} aria-hidden />
+          <span>
+            <span className="member-emergency-link-title">HR Duty Line</span>
+            <span className="member-emergency-link-num">+886 (2) 9876-5432</span>
+          </span>
+        </a>
+      </div>
+    </details>
+  );
+}
+
+function MemberIdleHistoryList({
+  idleHistoryOngoing,
+  idleHistoryClosed,
+  onOpenEmployeeEvent,
+}: {
+  idleHistoryOngoing: MemberHomeRow[];
+  idleHistoryClosed: MemberHomeRow[];
+  onOpenEmployeeEvent: (eventId: string) => void;
+}) {
+  const { locale } = useLocale();
+  const ec = getStrings(locale).employee;
+
+  return (
+    <div className="member-idle-history">
+      <h3 className="section-title member-idle-history-title">{ec.sectionOngoingEvents}</h3>
+      {idleHistoryOngoing.length === 0 ? (
+        <p className="empty muted-text">{ec.idleNoOngoingSupplemented}</p>
+      ) : (
+        <ul className="member-idle-history-list">
+          {idleHistoryOngoing.map((row) => {
+            const lr = row.latest;
+            if (!lr) return null;
+            return (
+              <li key={row.event.id}>
+                <button
+                  type="button"
+                  className="member-idle-history-row member-idle-history-row--clickable"
+                  onClick={() => onOpenEmployeeEvent(row.event.id)}
+                >
+                  <div className="member-idle-history-row-main">
+                    <span className="member-idle-history-event-title">
+                      {stripRedundantStatusFromTitle(row.event.title)}
+                    </span>
+                    <span className="muted-text subtle">{row.event.type}</span>
+                  </div>
+                  <div className="member-idle-history-row-aside">
+                    <StatusBadge status={lr.status} />
+                    <ChevronRight size={18} aria-hidden />
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <h3 className="section-title member-idle-history-title member-idle-history-title--closed">
+        {ec.sectionClosedEvents}
+      </h3>
+      {idleHistoryClosed.length === 0 ? (
+        <p className="empty muted-text">{ec.idleNoClosedHistory}</p>
+      ) : (
+        <ul className="member-idle-history-list">
+          {idleHistoryClosed.map((row) => {
+            const lr = row.latest;
+            if (!lr) return null;
+            return (
+              <li key={row.event.id} className="member-idle-history-row member-idle-history-row--readonly">
+                <div className="member-idle-history-row-main">
+                  <span className="member-idle-history-event-title">{row.event.title}</span>
+                  <span className="muted-text subtle">{formatEmployeeCardTime(lr.updatedAt, locale)}</span>
+                </div>
+                <StatusBadge status={lr.status} />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function MemberReportHistoryPage({
+  idleHistoryOngoing,
+  idleHistoryClosed,
+  onOpenEmployeeEvent,
+  onBack,
+}: {
+  idleHistoryOngoing: MemberHomeRow[];
+  idleHistoryClosed: MemberHomeRow[];
+  onOpenEmployeeEvent: (eventId: string) => void;
+  onBack: () => void;
+}) {
+  const { locale } = useLocale();
+  const { layoutNav: ln } = getStrings(locale);
+
+  return (
+    <section className="page-section employee-events-page member-report-history-page">
+      <button type="button" className="member-report-history-back member-priority-back-btn" onClick={onBack}>
+        <ChevronLeft size={18} strokeWidth={2.25} aria-hidden />
+        {ln.memberHome}
+      </button>
+      <MemberIdleHistoryList
+        idleHistoryOngoing={idleHistoryOngoing}
+        idleHistoryClosed={idleHistoryClosed}
+        onOpenEmployeeEvent={onOpenEmployeeEvent}
+      />
+    </section>
+  );
+}
+
 export function MemberPriorityHomePage({
   priorityView,
   draftUserId,
@@ -1822,6 +1911,7 @@ export function MemberPriorityHomePage({
   supervisorTeamNudge,
   onDismissSupervisorNudge,
   onGoTeamDashboardFromNudge,
+  onNavigateHistory,
 }: {
   priorityView: { kind: 'personal_stack' | 'idle'; rows: MemberHomeRow[] };
   draftUserId: string | null;
@@ -1846,6 +1936,7 @@ export function MemberPriorityHomePage({
   supervisorTeamNudge: null | { pendingPct: number; eventTitle: string };
   onDismissSupervisorNudge: () => void;
   onGoTeamDashboardFromNudge: () => void;
+  onNavigateHistory: () => void;
 }) {
   const { locale } = useLocale();
   const { employee: ec, layoutNav } = getStrings(locale);
@@ -1857,9 +1948,16 @@ export function MemberPriorityHomePage({
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]
       : undefined;
 
+  const waitingNeedHelpRows = idleHistoryOngoing.filter((row) => row.latest?.status === 'need_help');
+  const waitingVisible = waitingNeedHelpRows.slice(0, 2);
+  const waitingOverflow = waitingNeedHelpRows.length - waitingVisible.length;
+
   if (priorityView.kind === 'idle') {
+    const fitOneScreen = waitingNeedHelpRows.length === 0;
     return (
-      <section className="page-section employee-events-page member-priority-home member-priority-home--idle">
+      <section
+        className={`page-section employee-events-page member-priority-home member-priority-home--idle${fitOneScreen ? ' member-priority-home--fit' : ''}`}
+      >
         {supervisorTeamNudge ? (
           <div className="supervisor-team-nudge-banner" role="status">
             <div className="supervisor-team-nudge-copy">
@@ -1876,142 +1974,66 @@ export function MemberPriorityHomePage({
             </div>
           </div>
         ) : null}
-        <header className="employee-events-hero">
-          <div className="employee-events-hero-text">
-            <h2 className="employee-events-title">
-              <Activity className="employee-events-title-icon" aria-hidden />
-              {ec.idleHeroTitle}
-            </h2>
-            <p className="employee-events-subtitle">{ec.idleHeroSubtitle}</p>
+
+        <div className="member-idle-complete">
+          <div className="member-idle-complete-icon-wrap" aria-hidden>
+            <span className="member-idle-complete-halo" />
+            <ShieldCheck className="member-idle-complete-icon" strokeWidth={1.65} />
           </div>
-        </header>
-
-        <div className="member-idle-history">
-          <h3 className="section-title member-idle-history-title">{ec.sectionOngoingEvents}</h3>
-          {idleHistoryOngoing.length === 0 ? (
-            <p className="empty muted-text">{ec.idleNoOngoingSupplemented}</p>
-          ) : (
-            <ul className="member-idle-history-list">
-              {idleHistoryOngoing.map((row) => {
-                const lr = row.latest;
-                if (!lr) return null;
-                return (
-                    <li key={row.event.id}>
-                      <button
-                        type="button"
-                        className="member-idle-history-row member-idle-history-row--clickable"
-                        onClick={() => onOpenEmployeeEvent(row.event.id)}
-                      >
-                        <div className="member-idle-history-row-main">
-                          <span className="member-idle-history-event-title">
-                            {stripRedundantStatusFromTitle(row.event.title)}
-                          </span>
-                          <span className="muted-text subtle">{row.event.type}</span>
-                        </div>
-                        <div className="member-idle-history-row-aside">
-                          <StatusBadge status={lr.status} />
-                          <ChevronRight size={18} aria-hidden />
-                        </div>
-                      </button>
-                    </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <h3 className="section-title member-idle-history-title member-idle-history-title--closed">{ec.sectionClosedEvents}</h3>
-          {idleHistoryClosed.length === 0 ? (
-            <p className="empty muted-text">{ec.idleNoClosedHistory}</p>
-          ) : (
-            <ul className="member-idle-history-list">
-              {idleHistoryClosed.map((row) => {
-                const lr = row.latest;
-                if (!lr) return null;
-                return (
-                  <li key={row.event.id} className="member-idle-history-row member-idle-history-row--readonly">
-                    <div className="member-idle-history-row-main">
-                      <span className="member-idle-history-event-title">{row.event.title}</span>
-                      <span className="muted-text subtle">{formatEmployeeCardTime(lr.updatedAt, locale)}</span>
-                    </div>
-                    <StatusBadge status={lr.status} />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <h2 className="member-idle-complete-title">{ec.reportCompleteTitle}</h2>
+          <p className="member-idle-complete-body">{ec.reportCompleteBody}</p>
+          <button type="button" className="member-idle-history-link" onClick={onNavigateHistory}>
+            {ec.viewReportHistory}
+            <ArrowRight size={15} strokeWidth={2.25} aria-hidden />
+          </button>
         </div>
 
-        <article className="event-detail-card event-detail-card--emergency member-priority-idle-emergency">
-          <div className="event-detail-card-head">
-            <span className="event-detail-card-icon">
-              <Phone size={22} strokeWidth={1.8} aria-hidden />
-            </span>
-            <h3>{ec.emergencyContactTitle}</h3>
+        {waitingVisible.length > 0 ? (
+          <div className="member-waiting-assistance">
+            <h3 className="member-waiting-assistance-title">{ec.waitingAssistanceTitle}</h3>
+            <p className="member-waiting-assistance-body muted-text">{ec.waitingAssistanceBody}</p>
+            <ul className="member-waiting-assistance-list">
+              {waitingVisible.map((row) => (
+                <li key={row.event.id}>
+                  <button
+                    type="button"
+                    className="member-idle-history-row member-idle-history-row--clickable"
+                    onClick={() => onOpenEmployeeEvent(row.event.id)}
+                  >
+                    <div className="member-idle-history-row-main">
+                      <span className="member-idle-history-event-title">
+                        {stripRedundantStatusFromTitle(row.event.title)}
+                      </span>
+                      <span className="muted-text subtle">{row.event.type}</span>
+                    </div>
+                    <div className="member-idle-history-row-aside">
+                      <StatusBadge status="need_help" />
+                      <ChevronRight size={18} aria-hidden />
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {waitingOverflow > 0 ? (
+              <button type="button" className="member-idle-history-link" onClick={onNavigateHistory}>
+                {ec.waitingAssistanceMore(waitingOverflow)}
+              </button>
+            ) : null}
           </div>
-          <div className="emergency-inline emergency-inline--desktop">
-            <a className="emergency-slot" href="tel:+886212345678">
-              <span className="emergency-slot-ic emergency-slot-ic--headset" aria-hidden>
-                <Headphones size={20} strokeWidth={2} />
-              </span>
-              <div>
-                <div className="emergency-slot-title">Emergency Hotline</div>
-                <div className="emergency-slot-num">+886 (2) 1234-5678</div>
-              </div>
-            </a>
-            <span className="emergency-vrule" aria-hidden />
-            <a className="emergency-slot" href="tel:+886298765432">
-              <span className="emergency-slot-ic emergency-slot-ic--people" aria-hidden>
-                <Users size={20} strokeWidth={2} />
-              </span>
-              <div>
-                <div className="emergency-slot-title">HR Duty Line</div>
-                <div className="emergency-slot-num">+886 (2) 9876-5432</div>
-              </div>
-            </a>
-          </div>
-          <div className="emergency-list emergency-list--narrow">
-            <a className="emergency-row" href="tel:+886212345678">
-              <span className="emergency-row-ic" aria-hidden>
-                <Headphones size={20} strokeWidth={2} />
-              </span>
-              <div className="emergency-row-text">
-                <div className="emergency-slot-title">Emergency Hotline</div>
-                <div className="emergency-slot-num">+886 (2) 1234-5678</div>
-              </div>
-              <span className="emergency-row-chevron" aria-hidden>
-                <ChevronRight size={20} strokeWidth={2} />
-              </span>
-            </a>
-            <a className="emergency-row" href="tel:+886298765432">
-              <span className="emergency-row-ic" aria-hidden>
-                <Users size={20} strokeWidth={2} />
-              </span>
-              <div className="emergency-row-text">
-                <div className="emergency-slot-title">HR Duty Line</div>
-                <div className="emergency-slot-num">+886 (2) 9876-5432</div>
-              </div>
-              <span className="emergency-row-chevron" aria-hidden>
-                <ChevronRight size={20} strokeWidth={2} />
-              </span>
-            </a>
-          </div>
-        </article>
+        ) : null}
+
+        <MemberEmergencyContactsCollapsible />
       </section>
     );
   }
 
-  return (
-    <section className="page-section employee-events-page member-priority-home" aria-label={ec.priorityStackAria}>
-      <header className="employee-events-hero">
-        <div className="employee-events-hero-text">
-          <h2 className="employee-events-title">
-            <ShieldCheck className="employee-events-title-icon" aria-hidden />
-            {ec.reportNowHeroTitle}
-          </h2>
-          <p className="employee-events-subtitle">{ec.reportNowHeroSubtitle}</p>
-        </div>
-      </header>
+  const fitPending = priorityView.rows.length === 1;
 
+  return (
+    <section
+      className={`page-section employee-events-page member-priority-home member-priority-home--pending${fitPending ? ' member-priority-home--fit' : ''}`}
+      aria-label={ec.priorityStackAria}
+    >
       <div className="member-priority-stack">
         {priorityView.rows.map((row) => {
           const lid = `priority-head-${row.event.id}`;

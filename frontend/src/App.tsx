@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
+import {
+  ReportSubmissionOverlay,
+  type ReportSubmissionSummary,
+} from './components/ReportSubmissionOverlay';
 import { Toast } from './components/Toast';
 import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
 import { DirectReportsListPage } from './profile/DirectReportsListPage';
@@ -16,6 +20,7 @@ import { createInitialEventForm } from './features/events/EventAndAdminPages';
 import {
   EmployeeHomePage,
   MemberPriorityHomePage,
+  MemberReportHistoryPage,
   type EmployeeReportFields,
   type MemberHomeRow,
 } from './features/member/memberScreens';
@@ -45,6 +50,7 @@ import {
 import { deriveUserCapabilities, initialSurfaceFromRoles } from './lib/portalSessionRoles';
 import { appendReminderAudit, loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
+import { stripRedundantStatusFromTitle } from './lib/adminEventDisplay';
 import { useLocale } from './locale/LocaleContext';
 import { getStrings } from './locale/strings';
 import type {
@@ -77,6 +83,7 @@ interface SessionState {
 const ADMIN_ONLY_NAV: NavKey[] = ['admin-dashboard', 'admin-event-detail', 'user-management'];
 const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
   'member-home',
+  'member-report-history',
   'team-dashboard-home',
   'employee-event-detail',
   'supervisor-event-detail',
@@ -104,6 +111,11 @@ function App() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [responses, setResponses] = useState<SafetyResponse[]>([]);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [submissionOverlay, setSubmissionOverlay] = useState<{
+    variant: 'safe' | 'need_help';
+    eventTitle: string;
+    submittedSummary?: ReportSubmissionSummary;
+  } | null>(null);
   const [profileSubordinateUserId, setProfileSubordinateUserId] = useState<string | null>(null);
 
   const [submittingReportEventId, setSubmittingReportEventId] = useState<string | null>(null);
@@ -286,6 +298,9 @@ function App() {
   const [searchText, setSearchText] = useState('');
   const [eventForm, setEventForm] = useState(createInitialEventForm);
   const [employeeEventOpenInEdit, setEmployeeEventOpenInEdit] = useState(false);
+  const [employeeEventOpenedFrom, setEmployeeEventOpenedFrom] = useState<'member-home' | 'member-report-history'>(
+    'member-home',
+  );
   const [supervisorDeptFilter, setSupervisorDeptFilter] = useState<string>('all');
 
   const employeeDeptId = session.user?.departmentId;
@@ -376,6 +391,9 @@ function App() {
     const pend = memberListRowsOngoing.filter((r) => !r.latest);
     return pend.length ? { kind: 'personal_stack', rows: pend } : { kind: 'idle', rows: [] };
   }, [memberListRowsOngoing]);
+
+  const hasPendingPersonalReports =
+    session.surface === 'member' && memberPriorityView.kind === 'personal_stack';
 
   const idlePersonalHistory = useMemo(() => {
     const uid = session.user?.id;
@@ -488,6 +506,7 @@ function App() {
   }, [hasDirectReports, employeeDeptId, employeeAccessibleEvents, subordinateUserIds, responses]);
 
   const layoutNavKey = useMemo((): NavKey => {
+    if (navKey === 'member-report-history') return 'member-home';
     if (navKey === 'employee-event-detail' || navKey === 'supervisor-event-detail') {
       if (navKey === 'supervisor-event-detail' && supervisorOpenedDetailFrom === 'team-dashboard-home') {
         return 'team-dashboard-home';
@@ -578,6 +597,11 @@ function App() {
     switch (navKey) {
       case 'member-home':
         return { title: LC.mobileAppTitle };
+      case 'member-report-history':
+        return {
+          title: LN.reportHistory,
+          onBack: () => setNavKey('member-home'),
+        };
       case 'team-dashboard-home':
         return { title: LN.teamReports };
       case 'notifications':
@@ -593,7 +617,7 @@ function App() {
           title: selectedEmployeeEvent?.title ?? LC.mobileAppTitle,
           onBack: () => {
             setEmployeeEventOpenInEdit(false);
-            setNavKey('member-home');
+            setNavKey(employeeEventOpenedFrom);
           },
         };
       case 'supervisor-event-detail':
@@ -630,6 +654,7 @@ function App() {
     supervisorOpenedDetailFrom,
     profileHistorySubordinate?.name,
     profileDirectReports.length,
+    employeeEventOpenedFrom,
   ]);
 
   useEffect(() => {
@@ -667,6 +692,22 @@ function App() {
       setNavKey('member-home');
     }
   }, [session.isLoggedIn, session.user, session.surface, session.caps.canViewTeam, navKey]);
+
+  useEffect(() => {
+    if (!hasPendingPersonalReports) return;
+    if (navKey === 'member-home') return;
+    setNavKey('member-home');
+  }, [hasPendingPersonalReports, navKey]);
+
+  useEffect(() => {
+    if (!session.isLoggedIn || !hasPendingPersonalReports) return undefined;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      setNavKey((nk) => (nk === 'member-home' ? nk : 'member-home'));
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [session.isLoggedIn, hasPendingPersonalReports]);
 
   const supervisorViewAligned =
     supervisorUi &&
@@ -894,6 +935,13 @@ function App() {
     window.setTimeout(() => setToast(null), 2200);
   }, []);
 
+  const handleBlockedNav = useCallback(
+    (_target: NavKey) => {
+      showToast({ tone: 'warning', message: getStrings(locale).employee.navBlockedPending });
+    },
+    [locale, showToast],
+  );
+
   const refreshOperationalData = useCallback(async () => {
     if (!session.isLoggedIn) return;
     if (useMockOfflineCatalog) {
@@ -1116,6 +1164,22 @@ function App() {
       .filter((r) => r.eventId === eventId && r.userId === uid)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
     const keepPriorAttach = !(meta?.omitStoredAttachment ?? false);
+
+    const maybeOpenSubmissionOverlay = (nextResponse: SafetyResponse) => {
+      if (prior) return;
+      setSubmissionOverlay({
+        variant: status,
+        eventTitle: stripRedundantStatusFromTitle(eventRow.title),
+        submittedSummary:
+          status === 'need_help'
+            ? {
+                location: nextResponse.location,
+                comment: nextResponse.comment,
+                attachmentName: nextResponse.attachmentName,
+              }
+            : undefined,
+      });
+    };
     if (useMockOfflineCatalog) {
       try {
         const rid =
@@ -1162,10 +1226,13 @@ function App() {
         clearEmployeeReportDraft(uid, eventId);
         setResponses(mergedResponses);
         lastSubmitMetaRef.current = null;
-        showToast({
-          tone: 'success',
-          message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}（Demo 本地）`,
-        });
+        maybeOpenSubmissionOverlay(nextResponse);
+        if (prior) {
+          showToast({
+            tone: 'success',
+            message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}（Demo 本地）`,
+          });
+        }
       } finally {
         setSubmittingReportEventId(null);
       }
@@ -1214,7 +1281,13 @@ function App() {
       clearEmployeeReportDraft(uid, eventId);
       setResponses(mergedResponses);
       lastSubmitMetaRef.current = null;
-      showToast({ tone: 'success', message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}` });
+      maybeOpenSubmissionOverlay(nextResponse);
+      if (prior) {
+        showToast({
+          tone: 'success',
+          message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}`,
+        });
+      }
       void refreshOperationalData();
     } catch (e) {
       const msg =
@@ -1289,7 +1362,11 @@ function App() {
     }
   };
 
-  const openEmployeeEvent = (eventId: string, editIfReported: boolean) => {
+  const openEmployeeEvent = (
+    eventId: string,
+    editIfReported: boolean,
+    from: 'member-home' | 'member-report-history' = 'member-home',
+  ) => {
     const uid = session.user?.id;
     const hasReport =
       !!uid &&
@@ -1299,6 +1376,7 @@ function App() {
           r.userId === uid &&
           (r.status === 'safe' || r.status === 'need_help'),
       );
+    setEmployeeEventOpenedFrom(from);
     setSelectedEmployeeEventId(eventId);
     setEmployeeEventOpenInEdit(editIfReported && hasReport);
     setNavKey('employee-event-detail');
@@ -1365,7 +1443,13 @@ function App() {
         surface={session.surface}
         caps={session.caps}
         currentNav={layoutNavKey}
+        navLocked={hasPendingPersonalReports}
+        onBlockedNav={handleBlockedNav}
         onNavigate={(key) => {
+          if (hasPendingPersonalReports && key !== 'member-home') {
+            handleBlockedNav(key);
+            return;
+          }
           if (key === 'member-home') setSupervisorOpenedDetailFrom('member-home');
           setNavKey(key);
         }}
@@ -1398,13 +1482,22 @@ function App() {
             }}
             idleHistoryOngoing={idlePersonalHistory.ongoing}
             idleHistoryClosed={idlePersonalHistory.closed}
-            onOpenEmployeeEvent={(eventId) => openEmployeeEvent(eventId, true)}
+            onOpenEmployeeEvent={(eventId) => openEmployeeEvent(eventId, true, 'member-home')}
+            onNavigateHistory={() => setNavKey('member-report-history')}
             supervisorTeamNudge={supervisorUi ? supervisorTeamNudge : null}
             onDismissSupervisorNudge={() => setSupervisorTeamNudge(null)}
             onGoTeamDashboardFromNudge={() => {
               setSupervisorTeamNudge(null);
               setNavKey('team-dashboard-home');
             }}
+          />
+        )}
+        {navKey === 'member-report-history' && session.surface === 'member' && (
+          <MemberReportHistoryPage
+            idleHistoryOngoing={idlePersonalHistory.ongoing}
+            idleHistoryClosed={idlePersonalHistory.closed}
+            onOpenEmployeeEvent={(eventId) => openEmployeeEvent(eventId, true, 'member-report-history')}
+            onBack={() => setNavKey('member-home')}
           />
         )}
         {navKey === 'team-dashboard-home' && supervisorUi && (
@@ -1448,7 +1541,7 @@ function App() {
             }}
             onBackToEvents={() => {
               setEmployeeEventOpenInEdit(false);
-              setNavKey('member-home');
+              setNavKey(employeeEventOpenedFrom);
             }}
             openInEditMode={employeeEventOpenInEdit}
           />
@@ -1584,6 +1677,14 @@ function App() {
       </Layout>
 
       <Toast toast={toast} />
+      {submissionOverlay ? (
+        <ReportSubmissionOverlay
+          variant={submissionOverlay.variant}
+          eventTitle={submissionOverlay.eventTitle}
+          submittedSummary={submissionOverlay.submittedSummary}
+          onDismiss={() => setSubmissionOverlay(null)}
+        />
+      ) : null}
     </>
   );
 }
