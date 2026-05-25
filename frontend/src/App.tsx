@@ -973,16 +973,21 @@ function App() {
     [locale, showToast],
   );
 
-  const refreshOperationalData = useCallback(async () => {
+  const refreshOperationalData = useCallback(async ({ skipResponses = false }: { skipResponses?: boolean } = {}) => {
     if (!session.isLoggedIn) return;
     if (useMockOfflineCatalog) {
       setDashboardUpdatedAt(Date.now());
       return;
     }
     try {
-      const [repFresh, evtFresh] = await Promise.all([getReports(), getEvents()]);
-      setResponses(repFresh);
-      setEvents(evtFresh);
+      if (skipResponses) {
+        const evtFresh = await getEvents();
+        setEvents(evtFresh);
+      } else {
+        const [repFresh, evtFresh] = await Promise.all([getReports(), getEvents()]);
+        setResponses(repFresh);
+        setEvents(evtFresh);
+      }
     } catch {
       /* retain cache */
     }
@@ -1329,26 +1334,10 @@ function App() {
           message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}`,
         });
       }
-      // Pub/Sub path: DB write is async, so the refresh above may return stale
-      // data (report not yet persisted). Re-apply the optimistic entry if the
-      // refresh didn't include a record at least as recent as ours.
-      void refreshOperationalData().then(() => {
-        setResponses((prev) => {
-          const alreadyPersisted = prev.some(
-            (r) =>
-              r.eventId === nextResponse.eventId &&
-              r.userId === nextResponse.userId &&
-              new Date(r.updatedAt) >= new Date(nextResponse.updatedAt),
-          );
-          if (alreadyPersisted) return prev;
-          return [
-            ...prev.filter(
-              (r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId),
-            ),
-            nextResponse,
-          ];
-        });
-      });
+      // Pub/Sub path: DB write is async so GET /api/reports would return stale
+      // data. Skip refreshing responses — the optimistic update above is the
+      // source of truth until the next full refresh or poll cycle.
+      void refreshOperationalData({ skipResponses: true });
     } catch (e) {
       const msg =
         e instanceof Error
