@@ -37,7 +37,7 @@ import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import { stripRedundantStatusFromTitle } from '../../lib/adminEventDisplay';
 import { loadEmployeeReportDraft, saveEmployeeReportDraft } from '../../lib/employeeReportDraft';
-import type { EventItem, SafetyResponse } from '../../types';
+import type { Department, EventItem, SafetyResponse } from '../../types';
 import { formatEmployeeCardTime, formatFileSize } from './memberFormat';
 import { ReportHistoryCard } from './ReportHistoryCard';
 import { ReportRevisionModal } from './ReportRevisionModal';
@@ -1720,7 +1720,7 @@ function MemberEmergencyContactsCollapsible() {
 function MemberIdleHistoryList({
   idleHistoryOngoing,
   idleHistoryClosed,
-  currentDepartment,
+  departments,
   onSubmitReport,
   onRetryReport,
   submittingEventId,
@@ -1730,7 +1730,7 @@ function MemberIdleHistoryList({
 }: {
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
-  currentDepartment: string;
+  departments: Department[];
   onSubmitReport: (
     eventId: string,
     status: 'safe' | 'need_help',
@@ -1777,7 +1777,7 @@ function MemberIdleHistoryList({
                   <ReportHistoryCard
                     event={row.event}
                     latest={lr}
-                    currentDepartment={currentDepartment}
+                    departments={departments}
                     editable
                     onEdit={() => setEditingRow(row)}
                   />
@@ -1799,7 +1799,7 @@ function MemberIdleHistoryList({
               if (!lr) return null;
               return (
                 <li key={row.event.id}>
-                  <ReportHistoryCard event={row.event} latest={lr} currentDepartment={currentDepartment} />
+                  <ReportHistoryCard event={row.event} latest={lr} departments={departments} />
                 </li>
               );
             })}
@@ -1811,6 +1811,7 @@ function MemberIdleHistoryList({
         open={editingRow !== null}
         event={editingRow?.event ?? null}
         latestResponse={editingRow?.latest ?? null}
+        departments={departments}
         reportSubmitting={modalSubmitting}
         submitErrorMessage={modalError}
         onDismissSubmitError={onDismissSubmitError}
@@ -1828,7 +1829,7 @@ function MemberIdleHistoryList({
 export function MemberReportHistoryPage({
   idleHistoryOngoing,
   idleHistoryClosed,
-  currentDepartment,
+  departments,
   onSubmitReport,
   onRetryReport,
   submittingEventId,
@@ -1839,7 +1840,7 @@ export function MemberReportHistoryPage({
 }: {
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
-  currentDepartment: string;
+  departments: Department[];
   onSubmitReport: (
     eventId: string,
     status: 'safe' | 'need_help',
@@ -1862,7 +1863,7 @@ export function MemberReportHistoryPage({
       <MemberIdleHistoryList
         idleHistoryOngoing={idleHistoryOngoing}
         idleHistoryClosed={idleHistoryClosed}
-        currentDepartment={currentDepartment}
+        departments={departments}
         onSubmitReport={onSubmitReport}
         onRetryReport={onRetryReport}
         submittingEventId={submittingEventId}
@@ -1889,6 +1890,7 @@ export function MemberPriorityHomePage({
   onDismissSubmitError,
   idleHistoryOngoing,
   idleHistoryClosed,
+  departments,
   supervisorTeamNudge,
   onDismissSupervisorNudge,
   onGoTeamDashboardFromNudge,
@@ -1913,6 +1915,7 @@ export function MemberPriorityHomePage({
   onDismissSubmitError: () => void;
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
+  departments: Department[];
   supervisorTeamNudge: null | { pendingPct: number; eventTitle: string };
   onDismissSupervisorNudge: () => void;
   onGoTeamDashboardFromNudge: () => void;
@@ -1993,7 +1996,7 @@ export function MemberPriorityHomePage({
                     <ReportHistoryCard
                       event={row.event}
                       latest={lr}
-                      currentDepartment={currentDepartment}
+                      departments={departments}
                       editable
                       onEdit={() => setEditingRow(row)}
                     />
@@ -2013,6 +2016,7 @@ export function MemberPriorityHomePage({
           open={editingRow !== null}
           event={editingRow?.event ?? null}
           latestResponse={editingRow?.latest ?? null}
+          departments={departments}
           reportSubmitting={modalSubmitting}
           submitErrorMessage={modalError}
           onDismissSubmitError={onDismissSubmitError}

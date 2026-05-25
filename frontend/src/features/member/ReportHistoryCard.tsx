@@ -1,29 +1,25 @@
 import { Check, LifeBuoy, Pencil } from 'lucide-react';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
-import { stripRedundantStatusFromTitle } from '../../lib/adminEventDisplay';
-import type { EventItem, SafetyResponse } from '../../types';
-import { formatEmployeeCardTime } from './memberFormat';
+import type { Department, EventItem, SafetyResponse } from '../../types';
+import { ReportHistoryEventInfo } from './ReportHistoryEventInfo';
 
 export function ReportHistoryCard({
   event,
   latest,
-  currentDepartment,
+  departments,
   editable = false,
   onEdit,
 }: {
   event: EventItem;
   latest: SafetyResponse;
-  currentDepartment: string;
+  departments: Department[];
   editable?: boolean;
   onEdit?: () => void;
 }) {
   const { locale } = useLocale();
-  const ec = getStrings(locale).employee;
+  const strings = getStrings(locale);
   const isSafe = latest.status === 'safe';
-  const deptLabel = event.cardDepartment ?? currentDepartment;
-  const eventTimeSource = event.startAt ?? event.createdAt;
-  const metaLine = [deptLabel, formatEmployeeCardTime(eventTimeSource, locale)].filter(Boolean).join(' · ');
 
   return (
     <div className="report-history-card">
@@ -35,22 +31,18 @@ export function ReportHistoryCard({
       </span>
 
       <div className="report-history-card-main">
-        <div className="report-history-card-title-row">
-          <span className="report-history-card-title">{stripRedundantStatusFromTitle(event.title)}</span>
-          <span className="report-history-card-type">{event.type}</span>
-        </div>
-        <span className="report-history-card-meta muted-text subtle">{metaLine}</span>
+        <ReportHistoryEventInfo event={event} departments={departments} />
       </div>
 
       {editable ? (
         <button
           type="button"
           className="report-history-edit-btn"
-          aria-label={ec.historyEditAria}
+          aria-label={strings.employee.historyEditAria}
           onClick={onEdit}
         >
           <Pencil size={16} strokeWidth={2} aria-hidden />
-          <span className="report-history-edit-label">{ec.historyEditLabel}</span>
+          <span className="report-history-edit-label">{strings.employee.historyEditLabel}</span>
         </button>
       ) : null}
     </div>
