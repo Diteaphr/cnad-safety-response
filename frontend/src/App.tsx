@@ -615,12 +615,14 @@ function App() {
         }
         return { title: LN.adminUsers };
       }
-      case 'supervisor-event-detail':
+      case 'supervisor-event-detail': {
+        const { dash } = getStrings(locale);
         return {
-          title: selectedSupervisorEvent?.title ?? LN.teamReports,
+          title: dash.supervisorEventDetailTitle,
           onBack: () =>
             setNavKey(supervisorOpenedDetailFrom === 'team-dashboard-home' ? 'team-dashboard-home' : 'member-home'),
         };
+      }
       case 'admin-event-detail':
         return {
           title: selectedAdminEvent?.title ?? LC.adminSidebarTitle,
@@ -748,6 +750,7 @@ function App() {
         updatedAt: latest?.updatedAt,
         note: latest?.comment,
         phone: u.phone,
+        email: u.email,
         locationLine: locLine,
       };
     });
@@ -845,6 +848,7 @@ function App() {
           updatedAt: t.reported_at ?? latest?.updatedAt,
           note: subNote ?? noteMerge ?? latest?.comment,
           phone: t.phone ?? uMeta?.phone,
+          email: uMeta?.email,
           locationLine: latest?.location,
           isSubTeamLead: Boolean(t.is_supervisor && t.sub_team_summary),
         };
@@ -1528,6 +1532,7 @@ function App() {
             onBackToEvents={() =>
               setNavKey(supervisorOpenedDetailFrom === 'team-dashboard-home' ? 'team-dashboard-home' : 'member-home')
             }
+            showToast={showToast}
           />
         )}
         {navKey === 'admin-dashboard' && adminUi && (

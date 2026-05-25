@@ -129,6 +129,24 @@ export type DashboardStrings = {
   adminCloseEventCancel: string;
   adminCloseEventConfirmAnyway: string;
   adminCloseEventConfirmOk: string;
+  /** Supervisor event detail page */
+  supervisorEventDetailTitle: string;
+  supervisorEventMetaEventName: string;
+  supervisorEventMetaCategory: string;
+  supervisorEventMetaViewScope: string;
+  supervisorEventMetaCreated: string;
+  supervisorEventMetaSynced: string;
+  supervisorViewScopeAll: (deptNames: string) => string;
+  supervisorPendingListBtn: string;
+  supervisorPendingListTitle: string;
+  supervisorHighPendingTag: string;
+  supervisorContactTitle: (name: string) => string;
+  supervisorContactHint: string;
+  supervisorContactCopy: string;
+  supervisorContactClose: string;
+  supervisorEmailLabel: string;
+  supervisorNoEmail: string;
+  supervisorContactNotes: string;
 };
 
 export type ProfileStrings = {
@@ -645,6 +663,23 @@ const dashZh: DashboardStrings = {
   adminCloseEventCancel: '取消',
   adminCloseEventConfirmAnyway: '仍要結束事件',
   adminCloseEventConfirmOk: '確認結束',
+  supervisorEventDetailTitle: '部門事件詳情',
+  supervisorEventMetaEventName: '事件名稱',
+  supervisorEventMetaCategory: '事件類別',
+  supervisorEventMetaViewScope: '部門資料',
+  supervisorEventMetaCreated: '建立時間',
+  supervisorEventMetaSynced: '上次同步',
+  supervisorViewScopeAll: (deptNames) => `全部轄下（${deptNames}）`,
+  supervisorPendingListBtn: '尚未回報名單',
+  supervisorPendingListTitle: '尚未回報人員',
+  supervisorHighPendingTag: '逾三成未回報',
+  supervisorContactTitle: (name) => `聯絡 ${name}`,
+  supervisorContactHint: '點選「複製」可將內容貼到郵件或訊息。',
+  supervisorContactCopy: '複製',
+  supervisorContactClose: '關閉',
+  supervisorEmailLabel: '電子郵件',
+  supervisorNoEmail: '無電子郵件',
+  supervisorContactNotes: '備註',
 };
 
 const dashEn: DashboardStrings = {
@@ -770,6 +805,23 @@ const dashEn: DashboardStrings = {
   adminCloseEventCancel: 'Cancel',
   adminCloseEventConfirmAnyway: 'Close anyway',
   adminCloseEventConfirmOk: 'Confirm close',
+  supervisorEventDetailTitle: 'Team event detail',
+  supervisorEventMetaEventName: 'Event',
+  supervisorEventMetaCategory: 'Category',
+  supervisorEventMetaViewScope: 'Department data',
+  supervisorEventMetaCreated: 'Created',
+  supervisorEventMetaSynced: 'Last synced',
+  supervisorViewScopeAll: (deptNames) => `All direct reports (${deptNames})`,
+  supervisorPendingListBtn: 'Pending list',
+  supervisorPendingListTitle: 'Not yet reported',
+  supervisorHighPendingTag: 'Over 30% pending',
+  supervisorContactTitle: (name) => `Contact ${name}`,
+  supervisorContactHint: 'Tap Copy to paste into email or chat.',
+  supervisorContactCopy: 'Copy',
+  supervisorContactClose: 'Close',
+  supervisorEmailLabel: 'Email',
+  supervisorNoEmail: 'No email on file',
+  supervisorContactNotes: 'Notes',
 };
 
 const profileZh: ProfileStrings = {
