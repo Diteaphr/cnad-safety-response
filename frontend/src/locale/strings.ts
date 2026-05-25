@@ -491,6 +491,7 @@ export type PortalStrings = {
   notificationInboxChannelLabel: string;
   notificationInboxStatusLabel: string;
   fabCreateEventAria: string;
+  userMgmtFabAddAccountAria: string;
   userMgmtAddAccount: string;
   userMgmtCreateSubmit: string;
   userMgmtNamePlaceholder: string;
@@ -510,6 +511,7 @@ export type PortalStrings = {
   addEventTypeCancel: string;
   userMgmtEmployeesByDept: string;
   userMgmtEmployeesByDeptDesc: string;
+  userMgmtEmployeeRosterNavTitle: string;
   userMgmtEmployeeCount: (n: number) => string;
   userMgmtDeptRosterTitle: (deptName: string) => string;
   userMgmtBackToDepts: string;
@@ -1265,6 +1267,7 @@ const portalZh: PortalStrings = {
   notificationInboxChannelLabel: '管道',
   notificationInboxStatusLabel: '狀態',
   fabCreateEventAria: '建立事件',
+  userMgmtFabAddAccountAria: '新增帳號',
   userMgmtAddAccount: '新增帳號',
   userMgmtCreateSubmit: '建立帳號',
   userMgmtNamePlaceholder: '姓名',
@@ -1284,6 +1287,7 @@ const portalZh: PortalStrings = {
   addEventTypeCancel: '取消',
   userMgmtEmployeesByDept: '員工（依部門）',
   userMgmtEmployeesByDeptDesc: '點選部門查看該部門員工名單。',
+  userMgmtEmployeeRosterNavTitle: '員工名單',
   userMgmtEmployeeCount: (n) => `${n} 人`,
   userMgmtDeptRosterTitle: (deptName) => `${deptName} · 員工名單`,
   userMgmtBackToDepts: '返回部門列表',
@@ -1392,6 +1396,7 @@ const portalEn: PortalStrings = {
   notificationInboxChannelLabel: 'Channel',
   notificationInboxStatusLabel: 'Status',
   fabCreateEventAria: 'Create event',
+  userMgmtFabAddAccountAria: 'Add account',
   userMgmtAddAccount: 'Add account',
   userMgmtCreateSubmit: 'Create account',
   userMgmtNamePlaceholder: 'Name',
@@ -1411,6 +1416,7 @@ const portalEn: PortalStrings = {
   addEventTypeCancel: 'Cancel',
   userMgmtEmployeesByDept: 'Employees by department',
   userMgmtEmployeesByDeptDesc: 'Tap a department to view its employee roster.',
+  userMgmtEmployeeRosterNavTitle: 'Employee roster',
   userMgmtEmployeeCount: (n) => `${n}`,
   userMgmtDeptRosterTitle: (deptName) => `${deptName} · Employees`,
   userMgmtBackToDepts: 'Back to departments',

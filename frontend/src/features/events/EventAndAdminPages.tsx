@@ -496,6 +496,7 @@ export function UserManagementPage({
   offlineMockMode = false,
   selectedDeptId,
   onSelectedDeptIdChange,
+  onAddModalOpenChange,
 }: {
   users: User[];
   departments: Department[];
@@ -505,6 +506,7 @@ export function UserManagementPage({
   offlineMockMode?: boolean;
   selectedDeptId: string | null;
   onSelectedDeptIdChange: (deptId: string | null) => void;
+  onAddModalOpenChange?: (open: boolean) => void;
 }) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
@@ -533,6 +535,33 @@ export function UserManagementPage({
   const [newEmployeeNo, setNewEmployeeNo] = useState('');
   const [newDeptId, setNewDeptId] = useState(deptList[0]?.id ?? '');
   const [creating, setCreating] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const creatingRef = useRef(false);
+
+  useEffect(() => {
+    creatingRef.current = creating;
+  }, [creating]);
+
+  const setAddModalOpenSynced = (open: boolean) => {
+    setAddModalOpen(open);
+    onAddModalOpenChange?.(open);
+  };
+
+  useEffect(() => {
+    if (!addModalOpen) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !creatingRef.current) setAddModalOpenSynced(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [addModalOpen]);
+
+  const resetNewUserForm = () => {
+    setNewName('');
+    setNewEmail('');
+    setNewPhone('');
+    setNewEmployeeNo('');
+  };
 
   const submitNewUser = async () => {
     const name = newName.trim();
@@ -573,19 +602,15 @@ export function UserManagementPage({
           pushEnabled: true,
         };
         onUserCreated(newUser);
-        setNewName('');
-        setNewEmail('');
-        setNewPhone('');
-        setNewEmployeeNo('');
+        resetNewUserForm();
+        setAddModalOpenSynced(false);
         showToast({ tone: 'success', message: 'Demo：已加入本機使用者清單。' });
         return;
       }
       const out = await adminCreateUserApi({ name, email, phone, employeeNo, departmentId: newDeptId });
       onUserCreated(out.user);
-      setNewName('');
-      setNewEmail('');
-      setNewPhone('');
-      setNewEmployeeNo('');
+      resetNewUserForm();
+      setAddModalOpenSynced(false);
       if (out.temporaryPassword) {
         showToast({ tone: 'success', message: p.userMgmtTempPassword(out.temporaryPassword) });
       } else {
@@ -598,6 +623,21 @@ export function UserManagementPage({
     }
   };
 
+  const addAccountFormProps = {
+    p,
+    flatDepts,
+    creating,
+    newName,
+    setNewName,
+    newEmail,
+    setNewEmail,
+    newPhone,
+    setNewPhone,
+    newEmployeeNo,
+    setNewEmployeeNo,
+    newDeptId,
+    setNewDeptId,
+  };
 
   const rosterTitle =
     selectedDeptId === '__none__'
@@ -618,60 +658,16 @@ export function UserManagementPage({
       <div className="portal-user-mgmt-layout">
         <section className="panel portal-user-mgmt-add">
           <h3>{p.userMgmtAddAccount}</h3>
-          <div className="event-form" style={{ marginTop: 12 }}>
-            <label className="event-form-field">
-              <span className="event-form-field-label">{p.userMgmtNamePlaceholder}</span>
-              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={p.userMgmtNamePlaceholder} disabled={creating} />
-            </label>
-            <label className="event-form-field">
-              <span className="event-form-field-label">{p.userMgmtEmailPlaceholder}</span>
-              <input
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder={p.userMgmtEmailPlaceholder}
-                disabled={creating}
-                autoComplete="off"
-              />
-            </label>
-            <label className="event-form-field">
-              <span className="event-form-field-label">{p.userMgmtPhoneLabel}</span>
-              <input
-                type="tel"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                placeholder={p.userMgmtPhonePlaceholder}
-                disabled={creating}
-                autoComplete="off"
-                inputMode="tel"
-              />
-            </label>
-            <label className="event-form-field">
-              <span className="event-form-field-label">{p.userMgmtEmployeeNoLabel}</span>
-              <input
-                value={newEmployeeNo}
-                onChange={(e) => setNewEmployeeNo(e.target.value)}
-                placeholder={p.userMgmtEmployeeNoPlaceholder}
-                disabled={creating}
-                autoComplete="off"
-              />
-            </label>
-            <div className="event-form-field admin-notify-scope-field">
-              <span className="event-form-field-label">{p.userMgmtDeptLabel}</span>
-              <div className="admin-notify-scope-panel">
-                <AdminDeptHierarchyList
-                  mode="single"
-                  flatDepts={flatDepts}
-                  selectedId={newDeptId}
-                  onSelectId={setNewDeptId}
-                  hint={p.userMgmtDeptPickHint}
-                />
-              </div>
-            </div>
-            <button type="button" className="btn primary" disabled={creating || deptList.length === 0} onClick={() => void submitNewUser()}>
-              {creating ? '…' : p.userMgmtCreateSubmit}
-            </button>
-          </div>
+          <UserMgmtAddAccountForm {...addAccountFormProps} />
+          <button
+            type="button"
+            className="btn primary"
+            style={{ marginTop: 12 }}
+            disabled={creating || deptList.length === 0}
+            onClick={() => void submitNewUser()}
+          >
+            {creating ? '…' : p.userMgmtCreateSubmit}
+          </button>
         </section>
         <section className="panel portal-user-mgmt-roster">
           {selectedDeptId ? (
@@ -680,7 +676,7 @@ export function UserManagementPage({
                 onClick={() => onSelectedDeptIdChange(null)}
                 ariaLabel={p.userMgmtBackToDepts}
               />
-              <h3>{p.userMgmtDeptRosterTitle(rosterTitle)}</h3>
+              <h3>{rosterTitle}</h3>
               {rosterEmployees.length === 0 ? (
                 <p className="muted-text empty">{p.userMgmtNoEmployeesInDept}</p>
               ) : (
@@ -701,7 +697,19 @@ export function UserManagementPage({
             </>
           ) : (
             <>
-              <h3>{p.userMgmtEmployeesByDept}</h3>
+              <div className="user-mgmt-roster-head">
+                <h3>{p.userMgmtEmployeesByDept}</h3>
+                <button
+                  type="button"
+                  className="user-mgmt-add-trigger"
+                  onClick={() => setAddModalOpenSynced(true)}
+                  aria-label={p.userMgmtFabAddAccountAria}
+                  aria-haspopup="dialog"
+                >
+                  <Plus size={18} strokeWidth={2.4} aria-hidden />
+                  <span>{p.userMgmtAddAccount}</span>
+                </button>
+              </div>
               <p className="muted-text small">{p.userMgmtEmployeesByDeptDesc}</p>
               <div className="user-mgmt-dept-list">
                 {flatDepts.map(({ dept, depth }) => {
@@ -738,7 +746,132 @@ export function UserManagementPage({
           )}
         </section>
       </div>
+      {addModalOpen ? (
+        <div
+          className="modal-backdrop user-mgmt-add-backdrop"
+          role="presentation"
+          onClick={() => !creating && setAddModalOpenSynced(false)}
+        >
+          <div
+            className="modal user-mgmt-add-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="user-mgmt-add-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="user-mgmt-add-title">{p.userMgmtAddAccount}</h3>
+            <UserMgmtAddAccountForm {...addAccountFormProps} />
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                disabled={creating}
+                onClick={() => setAddModalOpenSynced(false)}
+              >
+                {p.adminCreateModalCancel}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={creating || deptList.length === 0}
+                onClick={() => void submitNewUser()}
+              >
+                {creating ? '…' : p.userMgmtCreateSubmit}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function UserMgmtAddAccountForm({
+  p,
+  flatDepts,
+  creating,
+  newName,
+  setNewName,
+  newEmail,
+  setNewEmail,
+  newPhone,
+  setNewPhone,
+  newEmployeeNo,
+  setNewEmployeeNo,
+  newDeptId,
+  setNewDeptId,
+}: {
+  p: ReturnType<typeof getStrings>['portal'];
+  flatDepts: { dept: Department; depth: number }[];
+  creating: boolean;
+  newName: string;
+  setNewName: (v: string) => void;
+  newEmail: string;
+  setNewEmail: (v: string) => void;
+  newPhone: string;
+  setNewPhone: (v: string) => void;
+  newEmployeeNo: string;
+  setNewEmployeeNo: (v: string) => void;
+  newDeptId: string;
+  setNewDeptId: (v: string) => void;
+}) {
+  return (
+    <div className="event-form user-mgmt-add-form" style={{ marginTop: 12 }}>
+      <label className="event-form-field">
+        <span className="event-form-field-label">{p.userMgmtNamePlaceholder}</span>
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder={p.userMgmtNamePlaceholder}
+          disabled={creating}
+        />
+      </label>
+      <label className="event-form-field">
+        <span className="event-form-field-label">{p.userMgmtEmailPlaceholder}</span>
+        <input
+          type="email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          placeholder={p.userMgmtEmailPlaceholder}
+          disabled={creating}
+          autoComplete="off"
+        />
+      </label>
+      <label className="event-form-field">
+        <span className="event-form-field-label">{p.userMgmtPhoneLabel}</span>
+        <input
+          type="tel"
+          value={newPhone}
+          onChange={(e) => setNewPhone(e.target.value)}
+          placeholder={p.userMgmtPhonePlaceholder}
+          disabled={creating}
+          autoComplete="off"
+          inputMode="tel"
+        />
+      </label>
+      <label className="event-form-field">
+        <span className="event-form-field-label">{p.userMgmtEmployeeNoLabel}</span>
+        <input
+          value={newEmployeeNo}
+          onChange={(e) => setNewEmployeeNo(e.target.value)}
+          placeholder={p.userMgmtEmployeeNoPlaceholder}
+          disabled={creating}
+          autoComplete="off"
+        />
+      </label>
+      <div className="event-form-field admin-notify-scope-field">
+        <span className="event-form-field-label">{p.userMgmtDeptLabel}</span>
+        <div className="admin-notify-scope-panel">
+          <AdminDeptHierarchyList
+            mode="single"
+            flatDepts={flatDepts}
+            selectedId={newDeptId}
+            onSelectId={setNewDeptId}
+            hint={p.userMgmtDeptPickHint}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
