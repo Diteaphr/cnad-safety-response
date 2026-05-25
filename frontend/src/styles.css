@@ -6313,11 +6313,12 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 
 .supervisor-event-center-toolbar {
   align-items: center;
+  margin-bottom: 0px;
 }
 
 .supervisor-event-center-search-expanded {
-  margin-top: -8px;
-  margin-bottom: 16px;
+  margin-top: -4px;
+  margin-bottom: 0px;
 }
 
 .supervisor-event-center .admin-event-center-progress-ring {
