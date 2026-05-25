@@ -413,5 +413,3 @@ export function FirstLoginWizard({
   );
 }
 
-/** @deprecated Use FirstLoginWizard */
-export const SetupGuideWizard = FirstLoginWizard;

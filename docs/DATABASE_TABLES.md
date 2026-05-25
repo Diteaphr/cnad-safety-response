@@ -178,6 +178,6 @@
 ## 維護與種子資料
 
 - Schema 變更：見 `backend/alembic/versions/`。
-- 開發用 Demo 資料：`backend/app/seeding/`（與前端 **Demo 靜態 mock** 無關；前端 mock 在 `frontend/src/mockData.ts`）。
+- 開發用 Demo 資料：`backend/app/seeding/`；前端 Demo 登入走 API `/api/demo-accounts`（見 `frontend/src/api.ts`）。
 
 若你擴充表格，建議同步更新本檔與 `docs/architecture.md`（若架構文件有提到 persistence）。
