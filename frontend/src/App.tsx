@@ -1456,6 +1456,7 @@ function App() {
             }}
             idleHistoryOngoing={idlePersonalHistory.ongoing}
             idleHistoryClosed={idlePersonalHistory.closed}
+            departments={departments}
             onNavigateHistory={() => setNavKey('member-report-history')}
             supervisorTeamNudge={supervisorUi ? supervisorTeamNudge : null}
             onDismissSupervisorNudge={() => setSupervisorTeamNudge(null)}
@@ -1469,7 +1470,7 @@ function App() {
           <MemberReportHistoryPage
             idleHistoryOngoing={idlePersonalHistory.ongoing}
             idleHistoryClosed={idlePersonalHistory.closed}
-            currentDepartment={currentDepartment}
+            departments={departments}
             onSubmitReport={submitEmployeeStatus}
             onRetryReport={() => {
               const p = lastSubmitMetaRef.current;

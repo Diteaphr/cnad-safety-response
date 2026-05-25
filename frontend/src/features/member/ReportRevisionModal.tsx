@@ -13,10 +13,10 @@ import {
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
-import { stripRedundantStatusFromTitle } from '../../lib/adminEventDisplay';
-import type { EventItem, SafetyResponse } from '../../types';
+import type { Department, EventItem, SafetyResponse } from '../../types';
 import type { EmployeeReportFields } from './memberScreens';
 import { formatFileSize } from './memberFormat';
+import { ReportHistoryEventInfo } from './ReportHistoryEventInfo';
 
 type DraftBaseline = {
   comment: string;
@@ -29,6 +29,7 @@ export function ReportRevisionModal({
   open,
   event,
   latestResponse,
+  departments,
   reportSubmitting,
   submitErrorMessage,
   onDismissSubmitError,
@@ -39,6 +40,7 @@ export function ReportRevisionModal({
   open: boolean;
   event: EventItem | null;
   latestResponse: SafetyResponse | null;
+  departments: Department[];
   reportSubmitting: boolean;
   submitErrorMessage: string | null;
   onDismissSubmitError: () => void;
@@ -146,12 +148,15 @@ export function ReportRevisionModal({
           onClick={(e) => e.stopPropagation()}
         >
           <header className="report-revision-modal-head">
-            <div>
-              <h3 id="report-revision-modal-title">{stripRedundantStatusFromTitle(event.title)}</h3>
-              <p className="muted-text subtle">{event.type}</p>
+            <div className="report-revision-modal-head-main">
+              <ReportHistoryEventInfo
+                event={event}
+                departments={departments}
+                titleId="report-revision-modal-title"
+              />
             </div>
             <button type="button" className="report-revision-modal-close" aria-label={ec.close} onClick={requestClose}>
-              <X size={20} strokeWidth={2.25} aria-hidden />
+              <X size={18} strokeWidth={2.25} aria-hidden />
             </button>
           </header>
 
@@ -194,7 +199,7 @@ export function ReportRevisionModal({
               </label>
               <div className="input-with-leading-icon">
                 <span className="input-leading-ic" aria-hidden>
-                  <MapPin size={19} strokeWidth={2} color="#3d5f85" />
+                  <MapPin size={16} strokeWidth={2} color="#3d5f85" />
                 </span>
                 <input
                   id={`rev-loc-${fieldId}`}
@@ -210,7 +215,7 @@ export function ReportRevisionModal({
               </label>
               <div className="textarea-with-leading-icon">
                 <span className="input-leading-ic textarea-leading" aria-hidden>
-                  <MessageSquare size={19} strokeWidth={2} color="#3d5f85" />
+                  <MessageSquare size={16} strokeWidth={2} color="#3d5f85" />
                 </span>
                 <textarea
                   id={`rev-comment-${fieldId}`}
@@ -229,7 +234,7 @@ export function ReportRevisionModal({
             <article className="event-detail-card report-revision-attach-card">
               <div className="event-detail-card-head">
                 <span className="event-detail-card-icon">
-                  <Paperclip size={22} strokeWidth={1.75} aria-hidden />
+                  <Paperclip size={18} strokeWidth={1.75} aria-hidden />
                 </span>
                 <h3>
                   {ec.attachTitle}{' '}
@@ -284,7 +289,7 @@ export function ReportRevisionModal({
                 }}
               >
                 <span className="employee-drop-ic" aria-hidden>
-                  <CloudUpload size={46} strokeWidth={1.45} color="#1e5494" />
+                  <CloudUpload size={34} strokeWidth={1.45} color="#1e5494" />
                 </span>
                 <span className="employee-drop-title">{ec.dropTitle}</span>
                 <span className="employee-drop-hint">{ec.dropHint}</span>
