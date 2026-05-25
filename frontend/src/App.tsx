@@ -140,6 +140,7 @@ function App() {
   const [adminDepartmentFilter, setAdminDepartmentFilter] = useState('all');
   const [closingAdminEventId, setClosingAdminEventId] = useState<string | null>(null);
   const [userMgmtSelectedDeptId, setUserMgmtSelectedDeptId] = useState<string | null>(null);
+  const [userMgmtAddModalOpen, setUserMgmtAddModalOpen] = useState(false);
   const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
 
   const loadCatalogFromApi = useCallback(async () => {
@@ -603,15 +604,16 @@ function App() {
       case 'admin-dashboard':
         return { title: LC.adminSidebarTitle };
       case 'user-management': {
-        if (userMgmtSelectedDeptId) {
-          const deptTitle =
-            userMgmtSelectedDeptId === '__none__'
-              ? locale === 'zh-Hant'
-                ? '未分配部門'
-                : 'Unassigned'
-              : (departments.find((d) => d.id === userMgmtSelectedDeptId)?.name ?? LN.adminUsers);
+        const { portal: PP } = getStrings(locale);
+        if (userMgmtAddModalOpen) {
           return {
-            title: deptTitle,
+            title: PP.userMgmtAddAccount,
+            onBack: () => setUserMgmtAddModalOpen(false),
+          };
+        }
+        if (userMgmtSelectedDeptId) {
+          return {
+            title: PP.userMgmtEmployeeRosterNavTitle,
             onBack: () => setUserMgmtSelectedDeptId(null),
           };
         }
@@ -655,11 +657,15 @@ function App() {
     profileHistorySubordinate?.name,
     profileDirectReports.length,
     userMgmtSelectedDeptId,
+    userMgmtAddModalOpen,
     departments,
   ]);
 
   useEffect(() => {
-    if (navKey !== 'user-management') setUserMgmtSelectedDeptId(null);
+    if (navKey !== 'user-management') {
+      setUserMgmtSelectedDeptId(null);
+      setUserMgmtAddModalOpen(false);
+    }
   }, [navKey]);
 
   useEffect(() => {
@@ -1624,6 +1630,7 @@ function App() {
             onUserCreated={(u) => mergeUserIntoList(u)}
             selectedDeptId={userMgmtSelectedDeptId}
             onSelectedDeptIdChange={setUserMgmtSelectedDeptId}
+            onAddModalOpenChange={setUserMgmtAddModalOpen}
           />
         )}
         {navKey === 'notifications' && <GlobalNotificationInboxPage rows={myNotifications} />}
