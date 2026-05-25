@@ -46,7 +46,7 @@ ET_OTHER = uuid.UUID("d0000001-0000-4000-8000-000000000004")
 # ---------------------------------------------------------------------------
 U_ADMIN = user_key(1)
 
-# Departments 1..10（兩條深階層；見 seed_demo 樹狀說明）
+# Departments 1..10（較扁平的半導體公司職能樹；見 seed_demo 樹狀說明）
 D1 = dept_key(1)
 D2 = dept_key(2)
 D3 = dept_key(3)
@@ -67,7 +67,7 @@ E5 = event_key(5)
 E6 = event_key(6)
 
 # ---------------------------------------------------------------------------
-# Back-compat names (tests / demo / older docs)
+# Legacy aliases kept for older tests / docs / demo labels.
 # ---------------------------------------------------------------------------
 U_01 = user_key(2)
 U_02 = user_key(3)
@@ -78,13 +78,13 @@ U_06 = user_key(8)
 U_07 = user_key(9)
 U_08 = user_key(1)
 
-D_OPS = D1
+D_OPS = D2
 D_RD = D3
-D_HR = D4
-D_FAC = D5
+D_HR = D8
+D_FAC = D9
 D_PLANT_A = D2
-D_LINE1 = D5
-D_LINE2 = D8
+D_LINE1 = D2
+D_LINE2 = D4
 
 E_001 = E1
 E_002 = E2

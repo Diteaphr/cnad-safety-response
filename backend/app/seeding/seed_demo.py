@@ -47,20 +47,20 @@ def clear_demo_tables_keep_roles(db: Session) -> None:
 
 
 def insert_demo_entities(db: Session) -> None:
-    """1 管理員、50 員工、多層階層部門、5 進行中事件、1 已完成事件，與合理回報資料。
+    """1 管理員、50 員工、較扁平的半導體公司部門樹、5 進行中事件、1 已完成事件。
 
-    部門樹（「上級部下級、下級再部下級」）::
+    部門樹（大多兩層、少數三層）::
 
-        總公司(1)
-        ├── 營運中心(2)
-        │   └── 研發部(3)
-        │       └── 軟體發展組(6)
-        │           └── 後端技術課(7)
-        │               └── 基礎設施小組(8)
-        └── 事業拓展部(4)
-            └── 客戶服務單位(5)
-                └── 前線客服課(9)
-                    └── 夜班應變中心(10)
+        總管理處(1)
+        ├── 晶圓製造處(2)
+        │   └── 先進封裝處(4)
+        ├── 製程與模組研發處(3)
+        ├── 品質與可靠性處(5)
+        ├── 資訊技術與資料工程處(6)
+        ├── 材料管理與供應鏈處(7)
+        │   └── 客戶工程與技術支援處(10)
+        ├── 人力資源與訓練處(8)
+        └── 環安衛與設施處(9)
     """
     role_employee = _role_id(db, "employee")
     role_supervisor = _role_id(db, "supervisor")
@@ -68,18 +68,18 @@ def insert_demo_entities(db: Session) -> None:
 
     pw = hash_password("password")
 
-    # --- Departments（兩條深鏈；先插入上層再下層，parent 已存在）---
+    # --- Departments（參考晶圓代工公司常見職能，保留少數次層單位）---
     for did, name, parent_n in (
-        (1, "總公司", None),
-        (2, "營運中心", 1),
-        (3, "研發部", 2),
-        (4, "事業拓展部", 1),
-        (5, "客戶服務單位", 4),
-        (6, "軟體發展組", 3),
-        (7, "後端技術課", 6),
-        (8, "基礎設施小組", 7),
-        (9, "前線客服課", 5),
-        (10, "夜班應變中心", 9),
+        (1, "總管理處", None),
+        (2, "晶圓製造處", 1),
+        (3, "製程與模組研發處", 1),
+        (4, "先進封裝處", 2),
+        (5, "品質與可靠性處", 1),
+        (6, "資訊技術與資料工程處", 1),
+        (7, "材料管理與供應鏈處", 1),
+        (8, "人力資源與訓練處", 1),
+        (9, "環安衛與設施處", 1),
+        (10, "客戶工程與技術支援處", 7),
     ):
         db.merge(
             Department(
@@ -91,8 +91,7 @@ def insert_demo_entities(db: Session) -> None:
         )
 
     # --- Users 1 = admin ; 2–51 = employee_1 … employee_50 ---
-    # 2–6：各部門主管（employee + supervisor）；4 號另具 admin 供 multi demo
-    # 7–51：一般員工
+    # 2 號保留純 employee demo persona；3/5/6/11–15 為主管；4 號為 multi-role demo
     def _email(uid: int) -> str:
         if uid == 1:
             return "admin@test.com"
@@ -108,32 +107,26 @@ def insert_demo_entities(db: Session) -> None:
             return "系統管理員"
         return f"員工 {uid - 1}"
 
-    # primary department：主管對應所屬層級；一般員工輪派至葉部門 5,7,8,9,10
+    # primary department：大多落在一級部門，少量落在二級部門，避免假資料過度工整。
     def _primary_dept(uid: int) -> int:
-        if uid == 1:
-            return 1
-        if uid == 2:
-            return 1
-        if uid == 3:
-            return 2
-        if uid == 4:
-            return 3
-        if uid == 5:
-            return 4
-        if uid == 6:
-            return 5
-        if uid == 11:
-            return 6
-        if uid == 12:
-            return 7
-        if uid == 13:
-            return 8
-        if uid == 14:
-            return 9
-        if uid == 15:
-            return 10
-        leaf_cycle = (5, 7, 8, 9, 10)
-        return leaf_cycle[(uid - 7) % len(leaf_cycle)]
+        primary_map = {
+            1: 1,   # admin / 總管理處
+            2: 3,   # employee demo → 研發
+            3: 3,   # supervisor demo → 研發主管
+            4: 6,   # multi demo → IT/資料
+            5: 2,   # 製造主管
+            6: 8,   # HR 主管
+            11: 7,  # 供應鏈主管
+            12: 9,  # EHS/設施主管
+            13: 10, # 客戶工程主管
+            14: 4,  # 封裝主管
+            15: 5,  # 品質主管
+        }
+        if uid in primary_map:
+            return primary_map[uid]
+
+        weighted_cycle = (2, 2, 3, 3, 5, 6, 6, 7, 7, 8, 9, 10, 4)
+        return weighted_cycle[(uid - 7) % len(weighted_cycle)]
 
     for uid in range(1, 52):
         db.merge(
@@ -161,25 +154,25 @@ def insert_demo_entities(db: Session) -> None:
             roles = [role_admin]
         elif uid == 4:
             roles = [role_employee, role_supervisor, role_admin]
-        elif uid in (2, 3, 5, 6, 11, 12, 13, 14, 15):
+        elif uid in (3, 5, 6, 11, 12, 13, 14, 15):
             roles = [role_employee, role_supervisor]
         else:
             roles = [role_employee]
         for rid in roles:
             db.merge(UserRole(user_id=ids.user_key(uid), role_id=rid))
 
-    # 各部門主管（users 2–6 管 1–5 層；11–15 管深層下屬部門 6–10）
+    # 各部門主管：總管理處由 admin 持有；一級單位與少數二級單位各有主管。
     for did, head_uid in (
-        (1, 2),
-        (2, 3),
-        (3, 4),
-        (4, 5),
-        (5, 6),
-        (6, 11),
-        (7, 12),
-        (8, 13),
-        (9, 14),
-        (10, 15),
+        (1, 1),
+        (2, 5),
+        (3, 3),
+        (4, 14),
+        (5, 15),
+        (6, 4),
+        (7, 11),
+        (8, 6),
+        (9, 12),
+        (10, 13),
     ):
         row = db.get(Department, ids.dept_key(did))
         if row is not None:
