@@ -35,15 +35,19 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import verify_pubsub_oidc
 from app.core.database import get_db
+from app.schemas.response import SafetyResponseCreate
 from app.services.notification_dispatch import (
     dispatch_activation_notifications,
     dispatch_single_user_notification,
     dispatch_supervisor_alert,
 )
+from app.services.safety_response_service import SafetyResponseService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/internal", tags=["internal"])
+
+_response_svc = SafetyResponseService()
 
 
 @router.post("/notifications/dispatch")
@@ -114,6 +118,31 @@ def dispatch_notifications(
         logger.info(
             "Pub/Sub dispatch: supervisor_alert event=%s employee=%s",
             event_id, employee_user_id,
+        )
+
+    # ── Report write: employee report buffered via Pub/Sub → write to DB here
+    elif kind == "report":
+        try:
+            event_id = uuid.UUID(payload["event_id"])
+            user_id = uuid.UUID(payload["user_id"])
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400, detail="Missing or invalid event_id/user_id"
+            ) from exc
+
+        _response_svc.submit_response(
+            db,
+            event_id=event_id,
+            user_id=user_id,
+            payload=SafetyResponseCreate(
+                status=payload.get("status", ""),
+                comment=payload.get("comment"),
+                location=payload.get("location"),
+            ),
+        )
+        logger.info(
+            "Pub/Sub dispatch: report event=%s user=%s status=%s",
+            event_id, user_id, payload.get("status"),
         )
 
     else:

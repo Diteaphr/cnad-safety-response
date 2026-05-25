@@ -359,11 +359,25 @@ class PortalService:
             uid = uuid.UUID(payload.userId)
         except ValueError as e:
             raise HTTPException(status_code=400, detail="Invalid uuid") from e
-        user = self._users.get_by_id(db, uid)
-        if user is None:
+        if self._users.get_by_id(db, uid) is None:
             raise HTTPException(status_code=404, detail="User not found")
         if self._events.get_by_id(db, eid) is None:
             raise HTTPException(status_code=404, detail="Event not found")
+
+        if settings.use_gcp and settings.pubsub_report_topic:
+            # Async path: publish to Pub/Sub; consumer writes to DB.
+            from app.services.integrations.pubsub_placeholder import publish_report_event
+            publish_report_event({
+                "kind": "report",
+                "event_id": str(eid),
+                "user_id": str(uid),
+                "status": payload.status,
+                "comment": payload.comment,
+                "location": payload.location,
+            })
+            return {"status": "accepted", "message": "Report queued for processing."}
+
+        # Sync path: dev / Pub/Sub not configured — write directly.
         body = SafetyResponseCreate(
             status=payload.status,
             comment=payload.comment,
