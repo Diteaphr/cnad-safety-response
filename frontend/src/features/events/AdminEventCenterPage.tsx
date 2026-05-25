@@ -183,7 +183,6 @@ export function AdminEventCenterPage({
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all');
   const [searchText, setSearchText] = useState('');
   const [searchExpanded, setSearchExpanded] = useState(false);
-  const isSupervisor = variant === 'supervisor';
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [tipVisible, setTipVisible] = useState(true);
@@ -262,7 +261,7 @@ export function AdminEventCenterPage({
   };
 
   return (
-    <section className={`page-section admin-event-center${variant === 'supervisor' ? ' supervisor-event-center' : ''}`}>
+    <section className="page-section admin-event-center supervisor-event-center">
       {variant === 'admin' && createModalOpen && adminQuickCreate ? (
         <div
           className="modal-backdrop admin-create-event-backdrop"
@@ -320,7 +319,7 @@ export function AdminEventCenterPage({
         </div>
       </header>
 
-      <div className={`admin-event-center-toolbar${isSupervisor ? ' supervisor-event-center-toolbar' : ''}`}>
+      <div className="admin-event-center-toolbar supervisor-event-center-toolbar">
         <div className="event-filter-chips admin-event-center-tabs" role="tablist" aria-label={p.eventFilterLabel}>
           {(
             [
@@ -339,42 +338,27 @@ export function AdminEventCenterPage({
             </button>
           ))}
         </div>
-        {isSupervisor ? (
-          <>
-            <label className="sv-roster-search sv-roster-search--desktop supervisor-event-center-search">
-              <Search className="sv-roster-search-icon" size={18} aria-hidden />
-              <input
-                type="search"
-                placeholder={p.adminEventCenterSearchPlaceholder}
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                aria-label={p.adminEventCenterSearchPlaceholder}
-              />
-            </label>
-            <button
-              type="button"
-              className="sv-roster-search-toggle sv-roster-search--mobile supervisor-event-center-search-toggle"
-              aria-label={p.adminEventCenterSearchPlaceholder}
-              aria-expanded={searchExpanded}
-              onClick={() => setSearchExpanded((open) => !open)}
-            >
-              <Search size={20} aria-hidden />
-            </button>
-          </>
-        ) : (
-          <div className="admin-event-center-toolbar-right">
-            <input
-              type="search"
-              className="admin-event-center-search"
-              placeholder={p.adminEventCenterSearchPlaceholder}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              aria-label={p.adminEventCenterSearchPlaceholder}
-            />
-          </div>
-        )}
+        <label className="sv-roster-search sv-roster-search--desktop supervisor-event-center-search">
+          <Search className="sv-roster-search-icon" size={18} aria-hidden />
+          <input
+            type="search"
+            placeholder={p.adminEventCenterSearchPlaceholder}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            aria-label={p.adminEventCenterSearchPlaceholder}
+          />
+        </label>
+        <button
+          type="button"
+          className="sv-roster-search-toggle sv-roster-search--mobile supervisor-event-center-search-toggle"
+          aria-label={p.adminEventCenterSearchPlaceholder}
+          aria-expanded={searchExpanded}
+          onClick={() => setSearchExpanded((open) => !open)}
+        >
+          <Search size={20} aria-hidden />
+        </button>
       </div>
-      {isSupervisor && searchExpanded ? (
+      {searchExpanded ? (
         <label className="sv-roster-search sv-roster-search--mobile-expanded supervisor-event-center-search-expanded">
           <Search className="sv-roster-search-icon" size={18} aria-hidden />
           <input
@@ -404,95 +388,16 @@ export function AdminEventCenterPage({
               <div className="admin-event-center-tbody" role="presentation">
                 {pageRows.map((row) => {
                   const { event, total, safe, needHelp, pending, responseRate, reported } = row;
-                  const progressTone = responseRate >= 70 ? 'is-high' : 'is-mid';
-                  const barWidth = total > 0 ? Math.min(100, responseRate) : 0;
                   const scopeTime = `${formatEventImpactScope(event, departments, p)} · ${formatEventStart(event.startAt, locale)}`;
                   const titleDisplay = stripRedundantStatusFromTitle(event.title);
                   const typeLabel = formatAdminEventTypeLabel(event.type, p);
                   const createdLine = formatEmployeeCardTime(event.startAt ?? event.createdAt, locale);
                   const isClosed = event.status === 'closed';
 
-                  if (isSupervisor) {
-                    return (
-                      <div
-                        key={event.id}
-                        className="admin-event-center-row admin-event-center-row--supervisor"
-                        role="row"
-                        tabIndex={0}
-                        onClick={onRowClick(event.id)}
-                        onKeyDown={onRowKeyDown(event.id)}
-                        aria-label={event.title}
-                      >
-                        <div className="admin-event-center-card-head">
-                          <div className="admin-event-center-cell admin-event-center-cell--event">
-                            <SupervisorMobileProgressRing
-                              safe={safe}
-                              needHelp={needHelp}
-                              pending={pending}
-                              responseRate={responseRate}
-                            />
-                            <div className={`admin-event-center-type-icon admin-event-center-type-icon--${event.type} admin-event-center-type-icon--wide`}>
-                              <TypeIcon type={event.type} />
-                            </div>
-                            <div className="admin-event-center-event-text">
-                              <div className="admin-event-center-event-title-row">
-                                <strong className="admin-event-center-event-title">{titleDisplay}</strong>
-                                <span className="muted-text small admin-event-center-event-type-inline">{typeLabel}</span>
-                              </div>
-                              <span className="muted-text small admin-event-center-event-sub admin-event-center-event-sub--mobile-time">
-                                {createdLine}
-                              </span>
-                              <span className="muted-text small admin-event-center-event-type admin-event-center-event-type--wide">
-                                {typeLabel}
-                              </span>
-                              <strong className="admin-event-center-event-title admin-event-center-event-title--wide">
-                                {titleDisplay}
-                              </strong>
-                              <span className="muted-text small admin-event-center-event-sub admin-event-center-event-sub--wide">
-                                {scopeTime}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="admin-event-center-cell admin-event-center-cell--status">
-                            <span
-                              className={`admin-event-center-status-pill admin-event-center-status-pill--${isClosed ? 'closed' : 'active'}`}
-                            >
-                              {isClosed ? dash.closed : dash.ongoing}
-                            </span>
-                          </div>
-                          <div className="admin-event-center-cell admin-event-center-cell--chev" aria-hidden>
-                            <ChevronRight className="admin-event-center-chevron" size={20} />
-                          </div>
-                        </div>
-                        <div className="admin-event-center-cell admin-event-center-cell--progress">
-                          <div className="admin-event-center-progress-head">
-                            <span className="admin-event-center-pct">{responseRate}%</span>
-                          </div>
-                          <SupervisorStackedProgressBar safe={safe} needHelp={needHelp} pending={pending} />
-                          <span className="muted-text small admin-event-center-reported-line">
-                            {p.adminEventCenterReportedOfTotal(reported, total)}
-                          </span>
-                        </div>
-                        <div className="admin-event-center-cell admin-event-center-cell--stats">
-                          <ul className="admin-event-center-stat-dots">
-                            <li>
-                              <span className="admin-event-center-dot admin-event-center-dot--safe" />
-                              {statusBadge.safe} {safe}
-                            </li>
-                            <li>
-                              <span className="admin-event-center-dot admin-event-center-dot--help" />
-                              {statusBadge.needHelp} {needHelp}
-                            </li>
-                          </ul>
-                        </div>
-                      </div>
-                    );
-                  }
-
                   return (
                     <div
                       key={event.id}
-                      className="admin-event-center-row"
+                      className="admin-event-center-row admin-event-center-row--supervisor"
                       role="row"
                       tabIndex={0}
                       onClick={onRowClick(event.id)}
@@ -501,13 +406,32 @@ export function AdminEventCenterPage({
                     >
                       <div className="admin-event-center-card-head">
                         <div className="admin-event-center-cell admin-event-center-cell--event">
-                          <div className={`admin-event-center-type-icon admin-event-center-type-icon--${event.type}`}>
+                          <SupervisorMobileProgressRing
+                            safe={safe}
+                            needHelp={needHelp}
+                            pending={pending}
+                            responseRate={responseRate}
+                          />
+                          <div className={`admin-event-center-type-icon admin-event-center-type-icon--${event.type} admin-event-center-type-icon--wide`}>
                             <TypeIcon type={event.type} />
                           </div>
                           <div className="admin-event-center-event-text">
-                            <span className="muted-text small admin-event-center-event-type">{typeLabel}</span>
-                            <strong className="admin-event-center-event-title">{titleDisplay}</strong>
-                            <span className="muted-text small admin-event-center-event-sub">{scopeTime}</span>
+                            <div className="admin-event-center-event-title-row">
+                              <strong className="admin-event-center-event-title">{titleDisplay}</strong>
+                              <span className="muted-text small admin-event-center-event-type-inline">{typeLabel}</span>
+                            </div>
+                            <span className="muted-text small admin-event-center-event-sub admin-event-center-event-sub--mobile-time">
+                              {createdLine}
+                            </span>
+                            <span className="muted-text small admin-event-center-event-type admin-event-center-event-type--wide">
+                              {typeLabel}
+                            </span>
+                            <strong className="admin-event-center-event-title admin-event-center-event-title--wide">
+                              {titleDisplay}
+                            </strong>
+                            <span className="muted-text small admin-event-center-event-sub admin-event-center-event-sub--wide">
+                              {scopeTime}
+                            </span>
                           </div>
                         </div>
                         <div className="admin-event-center-cell admin-event-center-cell--status">
@@ -525,9 +449,7 @@ export function AdminEventCenterPage({
                         <div className="admin-event-center-progress-head">
                           <span className="admin-event-center-pct">{responseRate}%</span>
                         </div>
-                        <div className={`admin-event-center-progress-track ${progressTone}`}>
-                          <div className="admin-event-center-progress-fill" style={{ width: `${barWidth}%` }} />
-                        </div>
+                        <SupervisorStackedProgressBar safe={safe} needHelp={needHelp} pending={pending} />
                         <span className="muted-text small admin-event-center-reported-line">
                           {p.adminEventCenterReportedOfTotal(reported, total)}
                         </span>
@@ -541,10 +463,6 @@ export function AdminEventCenterPage({
                           <li>
                             <span className="admin-event-center-dot admin-event-center-dot--help" />
                             {statusBadge.needHelp} {needHelp}
-                          </li>
-                          <li>
-                            <span className="admin-event-center-dot admin-event-center-dot--pending" />
-                            {statusBadge.pending} {pending}
                           </li>
                         </ul>
                       </div>
