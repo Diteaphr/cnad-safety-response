@@ -56,6 +56,15 @@ def _is_employee(user: User) -> bool:
     return any(ur.role.role_name == "employee" for ur in user.user_roles)
 
 
+def _has_real_fcm_token(user: User) -> bool:
+    """Return True only if the user has a real FCM token (not the UUID fallback).
+
+    A None fcm_token means the user has never opened the PWA — their phone
+    number is likely test data, so SMS fallback should be skipped too.
+    """
+    return bool(user.fcm_token)
+
+
 def _employees_targeted_by_event(db: Session, event_id: uuid.UUID) -> list[User]:
     """Return employees in scope for this event.
 
@@ -333,13 +342,13 @@ def dispatch_reminders(
                 body=f"請盡快回報您的安全狀態：{event.title}",
                 data={"event_id": str(event_id)},
             ),
-            fallback_channel=f"sms_reminder_{scan_window}" if user.phone else None,
+            fallback_channel=f"sms_reminder_{scan_window}" if (user.phone and _has_real_fcm_token(user)) else None,
             fallback_send_fn=(
                 lambda u=user: send_twilio_sms_mock(
                     to_e164=u.phone,
                     body=f"【安全確認提醒】{event.title} 請回報您的安全狀態。",
                 )
-            ) if user.phone else None,
+            ) if (user.phone and _has_real_fcm_token(user)) else None,
         )
         sent += 1
 

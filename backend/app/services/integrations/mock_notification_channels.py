@@ -180,8 +180,27 @@ def send_fcm_batch(messages: list[dict[str, Any]]) -> list[bool]:
 # ---------------------------------------------------------------------------
 
 def send_twilio_sms_mock(*, to_e164: str, body: str) -> bool:
-    logger.info("[MOCK Twilio SMS] to=%s body=%r", to_e164, body[:200])
-    return True
+    import os
+    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+    from_number = os.environ.get("TWILIO_FROM_NUMBER")
+
+    if not all([account_sid, auth_token, from_number]):
+        logger.info("[MOCK Twilio SMS] to=%s body=%r", to_e164, body[:200])
+        return True
+
+    try:
+        from twilio.rest import Client
+        Client(account_sid, auth_token).messages.create(
+            to=to_e164,
+            from_=from_number,
+            body=body,
+        )
+        logger.info("[Twilio SMS] sent to=%s", to_e164)
+        return True
+    except Exception as e:
+        logger.error("[Twilio SMS] failed to=%s error=%s", to_e164, e)
+        return False
 
 
 # ---------------------------------------------------------------------------
