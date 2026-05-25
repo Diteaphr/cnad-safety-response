@@ -375,7 +375,23 @@ class PortalService:
                 "comment": payload.comment,
                 "location": payload.location,
             })
-            return {"status": "accepted", "message": "Report queued for processing."}
+            # Return same shape as sync path so frontend doesn't break.
+            # id/updatedAt are placeholders — real values written by the Pub/Sub consumer.
+            return {
+                "status": "accepted",
+                "message": "Report queued for processing.",
+                "data": {
+                    "id": str(uuid.uuid4()),
+                    "eventId": str(eid),
+                    "userId": str(uid),
+                    "status": payload.status,
+                    "location": payload.location,
+                    "comment": payload.comment,
+                    "attachmentName": None,
+                    "attachmentSizeBytes": None,
+                    "updatedAt": datetime.now(timezone.utc).isoformat(),
+                },
+            }
 
         # Sync path: dev / Pub/Sub not configured — write directly.
         body = SafetyResponseCreate(
