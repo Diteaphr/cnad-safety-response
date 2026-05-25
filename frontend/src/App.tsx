@@ -1329,7 +1329,26 @@ function App() {
           message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}`,
         });
       }
-      void refreshOperationalData();
+      // Pub/Sub path: DB write is async, so the refresh above may return stale
+      // data (report not yet persisted). Re-apply the optimistic entry if the
+      // refresh didn't include a record at least as recent as ours.
+      void refreshOperationalData().then(() => {
+        setResponses((prev) => {
+          const alreadyPersisted = prev.some(
+            (r) =>
+              r.eventId === nextResponse.eventId &&
+              r.userId === nextResponse.userId &&
+              new Date(r.updatedAt) >= new Date(nextResponse.updatedAt),
+          );
+          if (alreadyPersisted) return prev;
+          return [
+            ...prev.filter(
+              (r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId),
+            ),
+            nextResponse,
+          ];
+        });
+      });
     } catch (e) {
       const msg =
         e instanceof Error
