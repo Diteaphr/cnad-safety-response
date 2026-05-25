@@ -67,6 +67,8 @@ export type DashboardStrings = {
   /** Event overview card secondary timestamp line */
   asOf: string;
   employeeTableFootnote: (shown: number, total: number) => string;
+  /** Supervisor roster — shown count vs scope total (excludes pending from list) */
+  supervisorRosterFootnote: (shown: number, total: number) => string;
   /** Explains the stacked bar under 回報分布 */
   distributionHint: string;
   /** Shorter hint when verbose copy is hidden (admin detail compact strip). */
@@ -80,6 +82,7 @@ export type DashboardStrings = {
     pctNeed: number,
     pctPending: number,
   ) => string;
+  distributionCaptionReported: (safe: number, needHelp: number, pctSafe: number, pctNeed: number) => string;
   /** Admin event detail — tabs */
   tabOverview: string;
   tabTracking: string;
@@ -129,6 +132,30 @@ export type DashboardStrings = {
   adminCloseEventCancel: string;
   adminCloseEventConfirmAnyway: string;
   adminCloseEventConfirmOk: string;
+  /** Supervisor event detail page */
+  supervisorEventDetailTitle: string;
+  supervisorEventMetaEventName: string;
+  supervisorEventMetaCategory: string;
+  supervisorEventMetaViewScope: string;
+  supervisorEventMetaCreated: string;
+  supervisorEventMetaSynced: string;
+  supervisorEventScopeLabel: string;
+  supervisorYourDeptLabel: string;
+  supervisorViewingScopeLabel: string;
+  supervisorViewScopeAll: (deptNames: string) => string;
+  supervisorSearchToggleLabel: string;
+  supervisorPendingListBtn: string;
+  supervisorPendingListTitle: string;
+  supervisorPendingListNote: string;
+  supervisorRosterNoReportedEmployees: string;
+  supervisorHighPendingTag: string;
+  supervisorContactTitle: (name: string) => string;
+  supervisorContactHint: string;
+  supervisorContactCopy: string;
+  supervisorContactClose: string;
+  supervisorEmailLabel: string;
+  supervisorNoEmail: string;
+  supervisorContactNotes: string;
 };
 
 export type ProfileStrings = {
@@ -593,11 +620,13 @@ const dashZh: DashboardStrings = {
   legendPending: '未回報',
   asOf: '資料時間',
   employeeTableFootnote: (shown, total) => `顯示 ${shown} / ${total} 位`,
+  supervisorRosterFootnote: (shown, total) => `顯示 ${shown} / ${total} 位（不含未回報員工）`,
   distributionHint:
     '色塊長度＝各狀態人數占「總人數」的比例；下方列出人數與百分比（與上方圓餅右側數字一致）。',
   distributionCompactHint: '下方為各狀態人數與占比。',
   distributionCaption: (sf, nh, pd, ps, pn, pp) =>
     `平安 ${sf} 人（${ps}%）、需協助 ${nh} 人（${pn}%）、未回報 ${pd} 人（${pp}%）。`,
+  distributionCaptionReported: (sf, nh, ps, pn) => `平安 ${sf} 人（${ps}%）、需協助 ${nh} 人（${pn}%）。`,
   tabOverview: '統計總覽',
   tabTracking: '追蹤中心',
   tabDepartments: '部門狀況',
@@ -645,6 +674,29 @@ const dashZh: DashboardStrings = {
   adminCloseEventCancel: '取消',
   adminCloseEventConfirmAnyway: '仍要結束事件',
   adminCloseEventConfirmOk: '確認結束',
+  supervisorEventDetailTitle: '部門事件詳情',
+  supervisorEventMetaEventName: '事件名稱',
+  supervisorEventMetaCategory: '事件類別',
+  supervisorEventMetaViewScope: '部門資料',
+  supervisorEventMetaCreated: '建立時間',
+  supervisorEventMetaSynced: '上次同步',
+  supervisorEventScopeLabel: '事件範圍',
+  supervisorYourDeptLabel: '您的部門',
+  supervisorViewingScopeLabel: '目前查看',
+  supervisorViewScopeAll: (deptNames) => `全部轄下（${deptNames}）`,
+  supervisorSearchToggleLabel: '搜尋同仁',
+  supervisorPendingListBtn: '尚未回報名單',
+  supervisorPendingListTitle: '尚未回報人員',
+  supervisorPendingListNote: '系統會依提醒規則自動通知未回報員工',
+  supervisorRosterNoReportedEmployees: '目前沒有已回報的員工',
+  supervisorHighPendingTag: '逾三成未回報',
+  supervisorContactTitle: (name) => `聯絡 ${name}`,
+  supervisorContactHint: '點選「複製」可將內容貼到郵件或訊息。',
+  supervisorContactCopy: '複製',
+  supervisorContactClose: '關閉',
+  supervisorEmailLabel: '電子郵件',
+  supervisorNoEmail: '無電子郵件',
+  supervisorContactNotes: '備註',
 };
 
 const dashEn: DashboardStrings = {
@@ -718,11 +770,13 @@ const dashEn: DashboardStrings = {
   legendPending: 'No response',
   asOf: 'As of',
   employeeTableFootnote: (shown, total) => `Showing ${shown} of ${total} employees`,
+  supervisorRosterFootnote: (shown, total) => `Showing ${shown} of ${total} employees (excluding employees who have not reported)`,
   distributionHint:
     'Bar length is each status count as a share of total people in scope; numbers below match the KPI column.',
   distributionCompactHint: 'Counts and percentages by status are listed below.',
   distributionCaption: (sf, nh, pd, ps, pn, pp) =>
     `Safe ${sf} (${ps}%), need help ${nh} (${pn}%), no response ${pd} (${pp}%).`,
+  distributionCaptionReported: (sf, nh, ps, pn) => `Safe ${sf} (${ps}%), need help ${nh} (${pn}%).`,
   tabOverview: 'Stats overview',
   tabTracking: 'Tracking center',
   tabDepartments: 'Departments',
@@ -770,6 +824,29 @@ const dashEn: DashboardStrings = {
   adminCloseEventCancel: 'Cancel',
   adminCloseEventConfirmAnyway: 'Close anyway',
   adminCloseEventConfirmOk: 'Confirm close',
+  supervisorEventDetailTitle: 'Team event detail',
+  supervisorEventMetaEventName: 'Event',
+  supervisorEventMetaCategory: 'Category',
+  supervisorEventMetaViewScope: 'Department data',
+  supervisorEventMetaCreated: 'Created',
+  supervisorEventMetaSynced: 'Last synced',
+  supervisorEventScopeLabel: 'Event scope',
+  supervisorYourDeptLabel: 'Your department',
+  supervisorViewingScopeLabel: 'Viewing',
+  supervisorViewScopeAll: (deptNames) => `All direct reports (${deptNames})`,
+  supervisorSearchToggleLabel: 'Search employees',
+  supervisorPendingListBtn: 'Pending list',
+  supervisorPendingListTitle: 'Not yet reported',
+  supervisorPendingListNote: 'The system automatically notifies employees who have not reported, per reminder rules.',
+  supervisorRosterNoReportedEmployees: 'No employees have reported yet',
+  supervisorHighPendingTag: 'Over 30% pending',
+  supervisorContactTitle: (name) => `Contact ${name}`,
+  supervisorContactHint: 'Tap Copy to paste into email or chat.',
+  supervisorContactCopy: 'Copy',
+  supervisorContactClose: 'Close',
+  supervisorEmailLabel: 'Email',
+  supervisorNoEmail: 'No email on file',
+  supervisorContactNotes: 'Notes',
 };
 
 const profileZh: ProfileStrings = {

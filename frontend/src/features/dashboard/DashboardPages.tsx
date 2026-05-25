@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
-import { EmployeeTable } from '../../components/EmployeeTable';
+import { ChevronRight, Search } from 'lucide-react';
 import { StatusBadge } from '../../components/StatusBadge';
 import { DashboardShellHeader } from '../../components/dashboard/DashboardShellHeader';
-import { PageBackButton } from '../../components/PageBackButton';
 import { ResponseDistributionBar } from '../../components/dashboard/ResponseDistributionBar';
 import type { DashboardStrings } from '../../locale/strings';
 import { getStrings } from '../../locale/strings';
@@ -13,7 +11,10 @@ import {
   formatEventImpactScope,
   stripRedundantStatusFromTitle,
 } from '../../lib/adminEventDisplay';
-import type { Department, EventItem } from '../../types';
+import { formatEmployeeCardTime } from '../member/memberFormat';
+import { SupervisorEmployeeCardList } from './SupervisorEmployeeCardList';
+import { SupervisorReportInsightCard } from './SupervisorReportInsightCard';
+import type { Department, EventItem, ToastState } from '../../types';
 
 function formatSynced(strings: DashboardStrings, ts: number | null, locale: string): string | null {
   if (ts === null) return null;
@@ -28,6 +29,7 @@ type AdminPersonRow = {
   status: 'safe' | 'need_help' | 'pending';
   note?: string;
   phone?: string;
+  email?: string;
   updatedAt?: string;
   locationLine?: string;
 };
@@ -183,350 +185,143 @@ export function SupervisorDashboardPage({
   setFilter,
   searchText,
   setSearchText,
-  onSendReminder,
-  onExport,
   onBackToEvents,
   contactedMap,
   onToggleContacted,
   pendingRatioHigh,
   dashMismatchHint,
   dashboardFreshAt,
-  hideBulkTeamActions = false,
   showDepartmentTabs = false,
   departmentFilter = 'all',
   setDepartmentFilter,
   departmentOptions = [],
+  supervisorOwnDepartment = '—',
+  showToast,
 }: {
   event: EventItem | null;
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
   rows: AdminPersonRow[];
   departments: Department[];
-  filter: 'all' | 'safe' | 'need_help' | 'pending';
-  setFilter: (value: 'all' | 'safe' | 'need_help' | 'pending') => void;
+  filter: 'all' | 'safe' | 'need_help';
+  setFilter: (value: 'all' | 'safe' | 'need_help') => void;
   searchText: string;
   setSearchText: (value: string) => void;
-  onSendReminder: () => void;
-  onExport: () => void;
   onBackToEvents: () => void;
   contactedMap: Record<string, boolean>;
   onToggleContacted: (userId: string) => void;
   pendingRatioHigh: boolean;
   dashMismatchHint: string | null;
   dashboardFreshAt: number | null;
-  hideBulkTeamActions?: boolean;
   showDepartmentTabs?: boolean;
   departmentFilter?: string;
   setDepartmentFilter?: (value: string) => void;
   departmentOptions?: string[];
+  supervisorOwnDepartment?: string;
+  showToast: (t: ToastState) => void;
 }) {
   const { locale } = useLocale();
   const { dash, portal: portalStrings } = getStrings(locale);
-  const [detailTab, setDetailTab] = useState<'overview' | 'tracking' | 'departments'>('overview');
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [pendingListOpen, setPendingListOpen] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
 
   const filtered = rows
-    .filter((row) => (filter === 'all' ? true : row.status === filter))
+    .filter((row) => {
+      if (filter === 'all') return row.status === 'safe' || row.status === 'need_help';
+      return row.status === filter;
+    })
     .filter((row) => row.name.toLowerCase().includes(searchText.toLowerCase()))
     .sort((a, b) => (a.status === 'need_help' ? -1 : 1) - (b.status === 'need_help' ? -1 : 1));
-  const urgentRows = rows.filter((row) => row.status === 'need_help');
-  const urgentUncontacted = urgentRows.filter((row) => !contactedMap[row.id]);
   const pendingRows = rows.filter((row) => row.status === 'pending');
   const tableRows = filtered;
+  const rosterEmptyMessage = filter === 'all' ? dash.supervisorRosterNoReportedEmployees : undefined;
 
   const eventTitle = event ? stripRedundantStatusFromTitle(event.title) : '—';
   const typeDisplay = event ? formatAdminEventTypeLabel(event.type, portalStrings) : '—';
-  const impactScopeLabel = event ? formatEventImpactScope(event, deptList, portalStrings) : '—';
+  const eventImpactScope = event ? formatEventImpactScope(event, deptList, portalStrings) : '—';
   const updatedLine = dashboardFreshAt
     ? new Date(dashboardFreshAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')
     : null;
+  const createdSource = event?.startAt ?? event?.createdAt ?? null;
+  const createdLine = formatEmployeeCardTime(createdSource, locale);
+  const syncedLine = updatedLine ?? '—';
+  const showScopeBar = showDepartmentTabs && departmentOptions.length > 1;
+  const scopedDepartment = departmentFilter === 'all' ? null : departmentFilter;
 
-  const deptAggSorted = useMemo((): DeptAgg[] => {
-    const names = new Set(rows.map((r) => r.department).filter((d) => d && d !== '-'));
-    const copy = [...names].map((department) => {
-      const dr = rows.filter((r) => r.department === department);
-      return {
-        department,
-        safe: dr.filter((r) => r.status === 'safe').length,
-        need_help: dr.filter((r) => r.status === 'need_help').length,
-        pending: dr.filter((r) => r.status === 'pending').length,
-      };
-    });
-    copy.sort((a, b) => {
-      if (b.need_help !== a.need_help) return b.need_help - a.need_help;
-      if (b.pending !== a.pending) return b.pending - a.pending;
-      return adminDeptResponseRate(a) - adminDeptResponseRate(b);
-    });
-    return copy;
-  }, [rows]);
-
-  const overviewDeptRows = useMemo(() => {
-    if (!selectedDepartment) return deptAggSorted;
-    return deptAggSorted.filter((r) => r.department === selectedDepartment);
-  }, [deptAggSorted, selectedDepartment]);
-
-  const personnelSorted = useMemo(() => {
-    const copy = [...rows];
-    copy.sort((a, b) => {
-      const rank = (s: AdminPersonRow['status']) => (s === 'need_help' ? 0 : s === 'pending' ? 1 : 2);
-      const d = rank(a.status) - rank(b.status);
-      return d !== 0 ? d : a.name.localeCompare(b.name);
-    });
-    return copy;
-  }, [rows]);
-
-  const tabIds = {
-    overview: 'supervisor-tab-panel-overview',
-    tracking: 'supervisor-tab-panel-tracking',
-    departments: 'supervisor-tab-panel-departments',
-  } as const;
-
-  const filterTabs: Array<{ key: typeof filter; label: string }> = [
+  type StatusFilter = typeof filter;
+  const filterTabs: Array<{ key: StatusFilter; label: string }> = [
     { key: 'all', label: dash.filterAll },
     { key: 'need_help', label: dash.filterNeedHelp },
-    { key: 'pending', label: dash.filterPending },
     { key: 'safe', label: dash.filterSafe },
   ];
 
   const rosterToolbar = (
-    <div className="dash-toolbar toolbar">
-      <div className="tabs">
-        {filterTabs.map(({ key, label }) => (
-          <button key={key} className={filter === key ? 'pill active' : 'pill'} onClick={() => setFilter(key)} type="button">
-            {label}
-          </button>
-        ))}
-      </div>
-      <input placeholder={dash.searchPlaceholder} value={searchText} onChange={(e) => setSearchText(e.target.value)} />
-    </div>
-  );
-
-  const progressTone = stats.responseRate >= 70 ? 'is-high' : 'is-mid';
-  const progressBarWidth = stats.total > 0 ? Math.min(100, stats.responseRate) : 0;
-
-  const statsProgressHero = (
-    <div className="dash-panel-elevated admin-event-detail-progress-card">
-      <div className="admin-event-center-progress-head admin-event-detail-progress-head">
-        <span className="admin-event-detail-progress-rate">{dash.adminDetailReportRateLine(stats.responseRate)}</span>
-      </div>
-      <p className="muted-text admin-event-detail-progress-sub">
-        {dash.adminDetailCompletedRatio(stats.safe + stats.needHelp, stats.total)}
-      </p>
-      <div className={`admin-event-center-progress-track ${progressTone}`}>
-        <div className="admin-event-center-progress-fill" style={{ width: `${progressBarWidth}%` }} />
-      </div>
-    </div>
-  );
-
-  const kpiStrip = (
-    <div className="admin-kpi-strip" aria-label={dash.globalOverview}>
-      <div className="admin-kpi-card admin-kpi-card--danger">
-        <span className="admin-kpi-card-label">{dash.kpiNeedHelp}</span>
-        <strong className="admin-kpi-card-value">{stats.needHelp}</strong>
-      </div>
-      <div className="admin-kpi-card admin-kpi-card--warning">
-        <span className="admin-kpi-card-label">{dash.kpiNoResponse}</span>
-        <strong className="admin-kpi-card-value">{stats.pending}</strong>
-      </div>
-      <div className="admin-kpi-card admin-kpi-card--safe">
-        <span className="admin-kpi-card-label">{dash.kpiSafe}</span>
-        <strong className="admin-kpi-card-value">{stats.safe}</strong>
-      </div>
-      <div className="admin-kpi-card admin-kpi-card--neutral">
-        <span className="admin-kpi-card-label">{dash.kpiTotal}</span>
-        <strong className="admin-kpi-card-value">{stats.total}</strong>
-      </div>
-    </div>
-  );
-
-  const rosterBlock = (
     <>
-      {rosterToolbar}
-      <section className="dash-panel-elevated">
-        <h3 className="dash-subsection-title">{dash.detailedList}</h3>
-        <p className="muted-text dash-table-foot">{dash.employeeTableFootnote(tableRows.length, rows.length)}</p>
-        {tableRows.length === 0 ? <p className="empty">{dash.noRows}</p> : <EmployeeTable rows={tableRows} />}
-      </section>
+      <div className="sv-roster-toolbar">
+        <div className="sv-roster-filters tabs">
+          {filterTabs.map(({ key, label }) => (
+            <button key={key} className={filter === key ? 'pill active' : 'pill'} onClick={() => setFilter(key)} type="button">
+              {label}
+            </button>
+          ))}
+        </div>
+        <label className="sv-roster-search sv-roster-search--desktop">
+          <Search className="sv-roster-search-icon" size={18} aria-hidden />
+          <input
+            type="search"
+            placeholder={dash.searchPlaceholder}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            aria-label={dash.searchPlaceholder}
+          />
+        </label>
+        <button
+          type="button"
+          className="sv-roster-search-toggle sv-roster-search--mobile"
+          aria-label={dash.supervisorSearchToggleLabel}
+          aria-expanded={searchExpanded}
+          onClick={() => setSearchExpanded((open) => !open)}
+        >
+          <Search size={20} aria-hidden />
+        </button>
+      </div>
+      {searchExpanded ? (
+        <label className="sv-roster-search sv-roster-search--mobile-expanded">
+          <Search className="sv-roster-search-icon" size={18} aria-hidden />
+          <input
+            type="search"
+            placeholder={dash.searchPlaceholder}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            aria-label={dash.searchPlaceholder}
+            autoFocus
+          />
+        </label>
+      ) : null}
     </>
   );
 
-  const overviewTab = (
-    <div id={tabIds.overview} role="tabpanel" aria-labelledby="supervisor-tab-trigger-overview">
-      {statsProgressHero}
-      {kpiStrip}
-      <div className="dash-panel-elevated dash-dist-panel admin-event-detail-dist-panel">
-        <h3 className="dash-subsection-title">{dash.distribution}</h3>
-        <ResponseDistributionBar compact strings={dash} safe={stats.safe} needHelp={stats.needHelp} pending={stats.pending} />
-      </div>
-      {showDepartmentTabs ? (
-        <section className="dash-panel-elevated admin-dept-status-section">
-          <h3 className="dash-subsection-title">{dash.adminDeptReportStatusTitle}</h3>
-          {overviewDeptRows.length === 0 ? (
-            <p className="empty">{dash.noRows}</p>
-          ) : (
-            <AdminDeptStatusList
-              rows={overviewDeptRows}
-              dash={dash}
-              onViewDepartment={(department) => {
-                setSelectedDepartment(department);
-                setDetailTab('departments');
-              }}
-            />
-          )}
-        </section>
-      ) : (
-        rosterBlock
-      )}
-    </div>
+  const statsReportSummary = (
+    <SupervisorReportInsightCard
+      stats={stats}
+      dash={dash}
+      pendingRatioHigh={pendingRatioHigh}
+      onOpenPendingList={() => setPendingListOpen(true)}
+    />
   );
 
-  const trackingTab = (
-    <div id={tabIds.tracking} role="tabpanel" aria-labelledby="supervisor-tab-trigger-tracking">
-      <div className="admin-tracking-layout">
-        <div className="admin-tracking-lists">
-          <section className="dash-panel-elevated">
-            <h3 className="dash-subsection-title">
-              {dash.trackingNeedHelpSection}（{urgentRows.length}）
-            </h3>
-            <p className="muted-text small">{dash.trackingNeedHelpIntro}</p>
-            {urgentRows.length === 0 ? (
-              <p className="empty">{dash.noRows}</p>
-            ) : (
-              urgentRows.map((row) => {
-                const reached = contactedMap[row.id] ?? false;
-                const tel = row.phone?.replace(/\s/g, '') ?? '';
-                return (
-                  <article key={row.id} className="list-item dash-need-row-slim dash-admin-tracking-card">
-                    <div className="dash-need-slim-main">
-                      <strong className="dash-need-slim-name">{row.name}</strong>
-                      <span className="muted-text dash-need-slim-dept">{row.department}</span>
-                      <span className="dash-need-slim-phone">
-                        {dash.phoneLabel}：
-                        {row.phone ? (
-                          <a href={tel ? `tel:${tel}` : undefined}>{row.phone}</a>
-                        ) : (
-                          <span className="muted-text">{dash.noPhone}</span>
-                        )}
-                      </span>
-                      {row.note || row.locationLine ? (
-                        <span className="muted-text small">{[row.locationLine, row.note].filter(Boolean).join(' · ')}</span>
-                      ) : null}
-                    </div>
-                    <div className="admin-tracking-card-aside">
-                      <StatusBadge status="need_help" />
-                      <button
-                        type="button"
-                        className={`btn ghost btn-sm supervisor-contact-flag${reached ? ' is-reached' : ''}`}
-                        onClick={() => onToggleContacted(row.id)}
-                      >
-                        {reached ? dash.contacted : dash.markContacted}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })
-            )}
-            {urgentUncontacted.length > 5 ? (
-              <p className="supervisor-many-alert" role="alert">
-                {dash.manyUncontacted(urgentUncontacted.length)}
-              </p>
-            ) : null}
-          </section>
-          <section className="dash-panel-elevated">
-            <h3 className="dash-subsection-title">
-              {dash.trackingPendingSection}（{pendingRows.length}）
-            </h3>
-            <p className="muted-text small">{dash.trackingPendingIntro}</p>
-            {pendingRows.length === 0 ? (
-              <p className="empty">{dash.trackingPendingEmptyTitle}</p>
-            ) : (
-              pendingRows.map((row) => (
-                <article key={row.id} className="list-item dash-admin-tracking-card admin-tracking-pending-card">
-                  <div>
-                    <strong>{row.name}</strong>
-                    <p className="muted-text">{row.department}</p>
-                  </div>
-                  <StatusBadge status="pending" />
-                </article>
-              ))
-            )}
-            <div className="row-actions">
-              {!hideBulkTeamActions ? (
-                <>
-                  <button className="btn warning" onClick={onSendReminder} type="button">
-                    {dash.sendReminder}
-                  </button>
-                  <button className="btn ghost" onClick={onExport} type="button">
-                    {dash.export}
-                  </button>
-                </>
-              ) : (
-                <p className="muted-text small">{dash.teamActionsNote}</p>
-              )}
-            </div>
-          </section>
-        </div>
-      </div>
-      {showDepartmentTabs ? rosterBlock : null}
-    </div>
-  );
-
-  const departmentsTab = (
-    <div id={tabIds.departments} role="tabpanel" aria-labelledby="supervisor-tab-trigger-departments">
-      {!selectedDepartment ? (
-        <section className="dash-panel-elevated admin-dept-list-shell">
-          <header className="admin-dept-tab-heading">
-            <h3 className="dash-subsection-title">{dash.adminDeptSituationHeading}</h3>
-            <p className="muted-text small">{dash.adminDeptSituationSortHint}</p>
-          </header>
-          {deptAggSorted.length === 0 ? (
-            <p className="empty">{dash.noRows}</p>
-          ) : (
-            <AdminDeptStatusList
-              rows={deptAggSorted}
-              dash={dash}
-              onViewDepartment={(department) => setSelectedDepartment(department)}
-            />
-          )}
-        </section>
-      ) : (
-        <div className="admin-dept-detail-wrap">
-          <PageBackButton
-            onClick={() => setSelectedDepartment(null)}
-            ariaLabel={portalStrings.userMgmtBackToDepts}
-            className="supervisor-dept-back"
-          />
-          <h3 className="dash-subsection-title admin-dept-scope-title">{selectedDepartment}</h3>
-          {statsProgressHero}
-          {kpiStrip}
-          <section className="dash-panel-elevated">
-            <h3 className="dash-subsection-title">{dash.adminDeptPersonnelHeading}</h3>
-            {personnelSorted.filter((r) => r.department === selectedDepartment).length === 0 ? (
-              <p className="empty">{dash.noRows}</p>
-            ) : (
-              personnelSorted
-                .filter((r) => r.department === selectedDepartment)
-                .map((row) => (
-                  <div className="list-item admin-dept-person-row" key={row.id}>
-                    <div>
-                      <strong>{row.name}</strong>
-                      <p className="muted-text small">
-                        {row.status === 'pending'
-                          ? dash.filterPending
-                          : row.status === 'need_help'
-                            ? dash.filterNeedHelp
-                            : dash.filterSafe}
-                      </p>
-                    </div>
-                    <StatusBadge
-                      status={row.status === 'need_help' ? 'need_help' : row.status === 'pending' ? 'pending' : 'safe'}
-                    />
-                  </div>
-                ))
-            )}
-          </section>
-        </div>
-      )}
-    </div>
+  const rosterBlock = (
+    <section className="dash-panel-elevated sv-roster-panel">
+      {rosterToolbar}
+      <p className="sv-roster-footnote">{dash.supervisorRosterFootnote(tableRows.length, rows.length)}</p>
+      <SupervisorEmployeeCardList
+        rows={tableRows}
+        dash={dash}
+        showToast={showToast}
+        contactedMap={contactedMap}
+        onToggleContacted={onToggleContacted}
+        emptyMessage={rosterEmptyMessage}
+      />
+    </section>
   );
 
   if (!event) {
@@ -554,108 +349,104 @@ export function SupervisorDashboardPage({
         syncOk
       />
 
-      <article className="dash-panel-elevated admin-event-header-card">
-        <div className="admin-event-header-top">
-          <div className="admin-event-header-main admin-event-detail-header-main">
-            <p className="muted-text admin-event-type-line admin-event-detail-desktop-only">
-              {typeDisplay} · {impactScopeLabel}
-              {updatedLine ? (
-                <>
-                  {' '}
-                  · {dash.asOf} {updatedLine}
-                </>
-              ) : null}
-            </p>
-            <div className="admin-event-title-row admin-event-detail-title-cluster">
-              <h1 className="admin-event-detail-title">{eventTitle}</h1>
-              <span
-                className={`admin-event-center-status-pill admin-event-detail-status-desktop admin-event-detail-desktop-only admin-event-center-status-pill--${event.status === 'closed' ? 'closed' : 'active'}`}
-              >
-                {event.status === 'closed' ? dash.closed : dash.ongoing}
-              </span>
-            </div>
-          </div>
+      <article className="dash-panel-elevated sv-event-hero">
+        <div className="sv-event-hero-head">
+          <h1 className="sv-event-hero-title">{eventTitle}</h1>
+          <span
+            className={`admin-event-center-status-pill sv-event-hero-pill admin-event-center-status-pill--${event.status === 'closed' ? 'closed' : 'active'}`}
+          >
+            {event.status === 'closed' ? dash.closed : dash.ongoing}
+          </span>
         </div>
+        <p className="sv-event-hero-lead">
+          {typeDisplay}
+          <span className="sv-event-hero-dot" aria-hidden>
+            {' '}
+            ·{' '}
+          </span>
+          {dash.supervisorEventScopeLabel}：{eventImpactScope}
+        </p>
+        <p className="sv-event-hero-context">
+          {dash.supervisorYourDeptLabel}：{supervisorOwnDepartment}
+        </p>
+        <p className="sv-event-hero-meta">
+          {createdLine}
+          <span className="sv-event-hero-dot" aria-hidden>
+            {' '}
+            ·{' '}
+          </span>
+          {dash.lastSynced} {syncedLine}
+        </p>
       </article>
 
       {dashMismatchHint ? <p className="dash-scope-hint muted-text">{dashMismatchHint}</p> : null}
-      {pendingRatioHigh ? (
-        <p className="supervisor-priority-alert" role="status">
-          {dash.highPendingWarn}
-        </p>
-      ) : null}
 
-      <div className="admin-event-detail-tabs admin-event-center-toolbar supervisor-event-detail-tabs" role="tablist">
-        <button
-          id="supervisor-tab-trigger-overview"
-          type="button"
-          role="tab"
-          aria-selected={detailTab === 'overview'}
-          aria-controls={tabIds.overview}
-          className={`event-filter-chip${detailTab === 'overview' ? ' is-active' : ''}`}
-          onClick={() => setDetailTab('overview')}
-        >
-          <span className="admin-tab-label-long">{dash.tabOverview}</span>
-          <span className="admin-tab-label-short">{dash.tabOverviewShort}</span>
-        </button>
-        <button
-          id="supervisor-tab-trigger-tracking"
-          type="button"
-          role="tab"
-          aria-selected={detailTab === 'tracking'}
-          aria-controls={tabIds.tracking}
-          className={`event-filter-chip${detailTab === 'tracking' ? ' is-active' : ''}`}
-          onClick={() => setDetailTab('tracking')}
-        >
-          <span className="admin-tab-label-long">{dash.tabTracking}</span>
-          <span className="admin-tab-label-short">{dash.tabTrackingShort}</span>
-        </button>
-        {showDepartmentTabs ? (
-          <button
-            id="supervisor-tab-trigger-departments"
-            type="button"
-            role="tab"
-            aria-selected={detailTab === 'departments'}
-            aria-controls={tabIds.departments}
-            className={`event-filter-chip${detailTab === 'departments' ? ' is-active' : ''}`}
-            onClick={() => setDetailTab('departments')}
-          >
-            <span className="admin-tab-label-long">{dash.tabDepartments}</span>
-            <span className="admin-tab-label-short">{dash.tabDepartmentsShort}</span>
-          </button>
-        ) : null}
-      </div>
-
-      {showDepartmentTabs && departmentOptions.length > 1 ? (
+      {showScopeBar ? (
         <div className="dash-panel-elevated admin-event-detail-scope-bar supervisor-event-detail-scope-bar">
-          <p className="admin-event-detail-scope-heading">{dash.adminScopeCurrentRangeHeading}</p>
-          <div className="supervisor-dept-filter-row event-filter-chips" role="group" aria-label={portalStrings.userMgmtDeptLabel}>
-            <button
-              type="button"
-              className={`event-filter-chip${departmentFilter === 'all' ? ' is-active' : ''}`}
-              onClick={() => setDepartmentFilter?.('all')}
-            >
-              {portalStrings.supervisorDeptFilterAll}
-            </button>
-            {departmentOptions.map((dept) => (
-              <button
-                key={dept}
-                type="button"
-                className={`event-filter-chip${departmentFilter === dept ? ' is-active' : ''}`}
-                onClick={() => setDepartmentFilter?.(dept)}
+          <div className="admin-event-detail-scope-bar-inner">
+            <p className="admin-event-detail-scope-heading">{dash.adminScopeCurrentRangeHeading}</p>
+            <div className="admin-event-detail-scope-row">
+              <select
+                className={`admin-scope-select admin-event-detail-scope-select supervisor-event-detail-scope-select${scopedDepartment ? ' admin-event-detail-scope-select--filled' : ' admin-event-detail-scope-select--idle'}`}
+                aria-label={dash.adminScopeCurrentRangeHeading}
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter?.(e.target.value)}
               >
-                {dept}
-              </button>
-            ))}
+                <option value="all">{portalStrings.supervisorDeptFilterAll}</option>
+                {[...departmentOptions]
+                  .sort((a, b) => a.localeCompare(b))
+                  .map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+              </select>
+            </div>
           </div>
+          {scopedDepartment ? (
+            <p className="muted-text small admin-scope-employees-hint">
+              <span className="admin-scope-hint-long">{dash.adminScopeEmployeesOnlyHint(scopedDepartment)}</span>
+              <span className="admin-scope-hint-short">{dash.adminScopeEmployeesOnlyHintShort}</span>
+            </p>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="admin-detail-tab-panels">
-        {detailTab === 'overview' ? overviewTab : null}
-        {detailTab === 'tracking' ? trackingTab : null}
-        {showDepartmentTabs && detailTab === 'departments' ? departmentsTab : null}
+      <div className="supervisor-event-detail-body">
+        {statsReportSummary}
+        {rosterBlock}
       </div>
+
+      {pendingListOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPendingListOpen(false);
+          }}
+        >
+          <div className="modal sv-pending-list-modal" role="dialog" aria-modal="true" aria-labelledby="sv-pending-list-title">
+            <h3 id="sv-pending-list-title">{dash.supervisorPendingListTitle}</h3>
+            <p className="muted-text small sv-pending-list-note">{dash.supervisorPendingListNote}</p>
+            {pendingRows.length === 0 ? (
+              <p className="empty">{dash.noRows}</p>
+            ) : (
+              <SupervisorEmployeeCardList
+                rows={pendingRows}
+                dash={dash}
+                showToast={showToast}
+                contactedMap={contactedMap}
+                onToggleContacted={onToggleContacted}
+              />
+            )}
+            <div className="modal-actions">
+              <button type="button" className="btn primary" onClick={() => setPendingListOpen(false)}>
+                {dash.supervisorContactClose}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

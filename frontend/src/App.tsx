@@ -292,7 +292,7 @@ function App() {
     return () => navigator.serviceWorker?.removeEventListener('message', handler);
   }, [session.isLoggedIn]);
 
-  const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
+  const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help'>('all');
   const [searchText, setSearchText] = useState('');
   const [eventForm, setEventForm] = useState(createInitialEventForm);
   const [supervisorDeptFilter, setSupervisorDeptFilter] = useState<string>('all');
@@ -615,12 +615,14 @@ function App() {
         }
         return { title: LN.adminUsers };
       }
-      case 'supervisor-event-detail':
+      case 'supervisor-event-detail': {
+        const { dash } = getStrings(locale);
         return {
-          title: selectedSupervisorEvent?.title ?? LN.teamReports,
+          title: dash.supervisorEventDetailTitle,
           onBack: () =>
             setNavKey(supervisorOpenedDetailFrom === 'team-dashboard-home' ? 'team-dashboard-home' : 'member-home'),
         };
+      }
       case 'admin-event-detail':
         return {
           title: selectedAdminEvent?.title ?? LC.adminSidebarTitle,
@@ -748,6 +750,7 @@ function App() {
         updatedAt: latest?.updatedAt,
         note: latest?.comment,
         phone: u.phone,
+        email: u.email,
         locationLine: locLine,
       };
     });
@@ -845,6 +848,7 @@ function App() {
           updatedAt: t.reported_at ?? latest?.updatedAt,
           note: subNote ?? noteMerge ?? latest?.comment,
           phone: t.phone ?? uMeta?.phone,
+          email: uMeta?.email,
           locationLine: latest?.location,
           isSubTeamLead: Boolean(t.is_supervisor && t.sub_team_summary),
         };
@@ -1007,6 +1011,7 @@ function App() {
   useEffect(() => {
     if (!session.isLoggedIn || useMockOfflineCatalog) return;
     if (!supervisorUi || !selectedSupervisorEventId) return;
+    setSupervisorDashboard(null);
     let cancelled = false;
     void (async () => {
       try {
@@ -1024,6 +1029,7 @@ function App() {
   useEffect(() => {
     if (!session.isLoggedIn || useMockOfflineCatalog) return;
     if (!adminUi || !selectedAdminEventId) return;
+    setAdminDashboard(null);
     let cancelled = false;
     void (async () => {
       try {
@@ -1510,6 +1516,7 @@ function App() {
             departmentFilter={supervisorDeptFilter}
             setDepartmentFilter={setSupervisorDeptFilter}
             departmentOptions={supervisorDepartmentOptions}
+            supervisorOwnDepartment={currentDepartment}
             filter={supervisorFilter}
             setFilter={setSupervisorFilter}
             searchText={searchText}
@@ -1519,15 +1526,10 @@ function App() {
             pendingRatioHigh={pendingRatioHigh}
             dashMismatchHint={supervisorDashMismatchHint}
             dashboardFreshAt={dashboardUpdatedAt}
-            onSendReminder={() => {
-              const eid = selectedSupervisorEvent?.id;
-              if (eid) void dispatchRemindersForEvent(eid);
-            }}
-            onExport={() => showToast({ tone: 'info', message: 'Report exported and email queued.' })}
-            hideBulkTeamActions
             onBackToEvents={() =>
               setNavKey(supervisorOpenedDetailFrom === 'team-dashboard-home' ? 'team-dashboard-home' : 'member-home')
             }
+            showToast={showToast}
           />
         )}
         {navKey === 'admin-dashboard' && adminUi && (
