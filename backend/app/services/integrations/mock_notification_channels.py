@@ -61,6 +61,12 @@ def _ensure_firebase() -> bool:
 # FCM — 單筆
 # ---------------------------------------------------------------------------
 
+_UUID_RE = __import__("re").compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    __import__("re").IGNORECASE,
+)
+
+
 def send_fcm(
     *,
     device_token: str,
@@ -68,6 +74,10 @@ def send_fcm(
     body: str,
     data: Optional[dict[str, Any]] = None,
 ) -> bool:
+    if _UUID_RE.match(device_token or ""):
+        logger.debug("[FCM] skipped — UUID fallback token, user has not installed PWA")
+        return False
+
     if not _ensure_firebase():
         logger.info(
             "[MOCK FCM] token=%s... title=%r body=%r data=%s",
