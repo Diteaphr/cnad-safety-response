@@ -292,7 +292,7 @@ function App() {
     return () => navigator.serviceWorker?.removeEventListener('message', handler);
   }, [session.isLoggedIn]);
 
-  const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
+  const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help'>('all');
   const [searchText, setSearchText] = useState('');
   const [eventForm, setEventForm] = useState(createInitialEventForm);
   const [supervisorDeptFilter, setSupervisorDeptFilter] = useState<string>('all');

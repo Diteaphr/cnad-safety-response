@@ -46,6 +46,7 @@ export function SupervisorReportInsightCard({
         needHelp={stats.needHelp}
         pending={stats.pending}
         showStackedBar
+        hidePending
       />
     </article>
   );

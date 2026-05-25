@@ -202,8 +202,8 @@ export function SupervisorDashboardPage({
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
   rows: AdminPersonRow[];
   departments: Department[];
-  filter: 'all' | 'safe' | 'need_help' | 'pending';
-  setFilter: (value: 'all' | 'safe' | 'need_help' | 'pending') => void;
+  filter: 'all' | 'safe' | 'need_help';
+  setFilter: (value: 'all' | 'safe' | 'need_help') => void;
   searchText: string;
   setSearchText: (value: string) => void;
   onBackToEvents: () => void;
@@ -225,11 +225,15 @@ export function SupervisorDashboardPage({
   const [searchExpanded, setSearchExpanded] = useState(false);
 
   const filtered = rows
-    .filter((row) => (filter === 'all' ? true : row.status === filter))
+    .filter((row) => {
+      if (filter === 'all') return row.status === 'safe' || row.status === 'need_help';
+      return row.status === filter;
+    })
     .filter((row) => row.name.toLowerCase().includes(searchText.toLowerCase()))
     .sort((a, b) => (a.status === 'need_help' ? -1 : 1) - (b.status === 'need_help' ? -1 : 1));
   const pendingRows = rows.filter((row) => row.status === 'pending');
   const tableRows = filtered;
+  const rosterEmptyMessage = filter === 'all' ? dash.supervisorRosterNoReportedEmployees : undefined;
 
   const eventTitle = event ? stripRedundantStatusFromTitle(event.title) : '—';
   const typeDisplay = event ? formatAdminEventTypeLabel(event.type, portalStrings) : '—';
@@ -247,7 +251,6 @@ export function SupervisorDashboardPage({
   const filterTabs: Array<{ key: StatusFilter; label: string }> = [
     { key: 'all', label: dash.filterAll },
     { key: 'need_help', label: dash.filterNeedHelp },
-    { key: 'pending', label: dash.filterPending },
     { key: 'safe', label: dash.filterSafe },
   ];
 
@@ -307,19 +310,18 @@ export function SupervisorDashboardPage({
   );
 
   const rosterBlock = (
-    <>
+    <section className="dash-panel-elevated sv-roster-panel">
       {rosterToolbar}
-      <section className="dash-panel-elevated sv-roster-panel">
-        <p className="sv-roster-footnote">{dash.employeeTableFootnote(tableRows.length, rows.length)}</p>
-        <SupervisorEmployeeCardList
-          rows={tableRows}
-          dash={dash}
-          showToast={showToast}
-          contactedMap={contactedMap}
-          onToggleContacted={onToggleContacted}
-        />
-      </section>
-    </>
+      <p className="sv-roster-footnote">{dash.supervisorRosterFootnote(tableRows.length, rows.length)}</p>
+      <SupervisorEmployeeCardList
+        rows={tableRows}
+        dash={dash}
+        showToast={showToast}
+        contactedMap={contactedMap}
+        onToggleContacted={onToggleContacted}
+        emptyMessage={rosterEmptyMessage}
+      />
+    </section>
   );
 
   if (!event) {
@@ -425,17 +427,17 @@ export function SupervisorDashboardPage({
         >
           <div className="modal sv-pending-list-modal" role="dialog" aria-modal="true" aria-labelledby="sv-pending-list-title">
             <h3 id="sv-pending-list-title">{dash.supervisorPendingListTitle}</h3>
+            <p className="muted-text small sv-pending-list-note">{dash.supervisorPendingListNote}</p>
             {pendingRows.length === 0 ? (
               <p className="empty">{dash.noRows}</p>
             ) : (
-              <ul className="sv-pending-list">
-                {pendingRows.map((row) => (
-                  <li key={row.id}>
-                    <strong>{row.name}</strong>
-                    <span className="muted-text">{row.department}</span>
-                  </li>
-                ))}
-              </ul>
+              <SupervisorEmployeeCardList
+                rows={pendingRows}
+                dash={dash}
+                showToast={showToast}
+                contactedMap={contactedMap}
+                onToggleContacted={onToggleContacted}
+              />
             )}
             <div className="modal-actions">
               <button type="button" className="btn primary" onClick={() => setPendingListOpen(false)}>

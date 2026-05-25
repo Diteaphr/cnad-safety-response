@@ -29,17 +29,19 @@ export function SupervisorEmployeeCardList({
   showToast,
   contactedMap,
   onToggleContacted,
+  emptyMessage,
 }: {
   rows: SupervisorEmployeeRow[];
   dash: DashboardStrings;
   showToast: (t: ToastState) => void;
   contactedMap: Record<string, boolean>;
   onToggleContacted: (userId: string) => void;
+  emptyMessage?: string;
 }) {
   const [contactRow, setContactRow] = useState<SupervisorEmployeeRow | null>(null);
 
   if (rows.length === 0) {
-    return <p className="empty">{dash.noRows}</p>;
+    return <p className="empty">{emptyMessage ?? dash.noRows}</p>;
   }
 
   return (
