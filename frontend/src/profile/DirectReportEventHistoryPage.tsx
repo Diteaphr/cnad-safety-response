@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { PageBackButton } from '../components/PageBackButton';
 import { PageHeader } from '../components/PageHeader';
-import type { EventItem, SafetyResponse, SafetyStatus, User } from '../types';
-import { compareEventsByStartThenCreatedDesc } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
+import { formatProfileHistoryTime } from '../features/member/memberFormat';
 import { useLocale } from '../locale/LocaleContext';
 import { getStrings } from '../locale/strings';
+import type { EventItem, SafetyResponse, SafetyStatus, User } from '../types';
+import { compareEventsByStartThenCreatedDesc } from '../types';
 
 export function DirectReportEventHistoryPage({
   subordinate,
@@ -21,6 +22,13 @@ export function DirectReportEventHistoryPage({
   const { locale } = useLocale();
   const { profilePage: pp } = getStrings(locale);
   const [filter, setFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');
+
+  const filterLabels: Record<typeof filter, string> = {
+    all: pp.historyFilterAll,
+    safe: pp.historyFilterSafe,
+    need_help: pp.historyFilterNeedHelp,
+    pending: pp.historyFilterPending,
+  };
 
   const rows = useMemo(() => {
     const list = events
@@ -42,51 +50,54 @@ export function DirectReportEventHistoryPage({
 
   const filtered = rows.filter((row) => (filter === 'all' ? true : row.status === filter));
 
-  const tabBtn = (key: typeof filter, label: string) => (
+  const tabBtn = (key: typeof filter) => (
     <button
       key={key}
       type="button"
-      className={`employee-events-tab pill ${filter === key ? 'active' : ''}`}
+      className={`profile-history-filter pill ${filter === key ? 'active' : ''}`}
       onClick={() => setFilter(key)}
     >
-      {label}
+      {filterLabels[key]}
     </button>
   );
 
-  const subtitle =
-    locale === 'zh-Hant'
-      ? '顯示其部門相關事件回報；未回報顯示為未回應。'
-      : 'Event responses visible for their department; no submission shows as No Response.';
-
   return (
-    <section className="page-section employee-events-page profile-settings-page">
+    <section className="page-section employee-events-page profile-settings-page profile-subordinate-history-page">
       <PageBackButton onClick={onBack} ariaLabel={pp.backToProfile} />
 
-      <PageHeader title={subordinate.name} subtitle={subtitle} />
+      <PageHeader title={subordinate.name} subtitle={pp.historySubtitle} />
 
-      <div className="employee-events-tabs pills-counted profile-settings-history-tabs">
-        {tabBtn('all', 'All')}
-        {tabBtn('safe', 'Safe')}
-        {tabBtn('need_help', 'Need Help')}
-        {tabBtn('pending', 'No Response')}
+      <div className="profile-history-filters" role="tablist" aria-label={pp.historyFilterAll}>
+        {tabBtn('all')}
+        {tabBtn('safe')}
+        {tabBtn('need_help')}
+        {tabBtn('pending')}
       </div>
 
       <div className="employee-events-card-list profile-settings-history-stack">
         {filtered.length === 0 ? (
-          <div className="empty employee-events-empty">Nothing matches this filter.</div>
+          <div className="empty employee-events-empty">{pp.historyEmptyFilter}</div>
         ) : (
           filtered.map((row) => (
             <article className="profile-settings-history-card" key={row.event.id}>
               <div className="profile-settings-history-card-main">
-                <strong>{row.event.title}</strong>
-                <p>
-                  {row.event.startAt != null && row.event.startAt !== ''
-                    ? new Date(row.event.startAt).toLocaleString()
-                    : '—'}
-                  {row.updatedAt ? ` · Updated ${new Date(row.updatedAt).toLocaleString()}` : ''}
-                </p>
+                <strong className="profile-settings-history-card-title">{row.event.title}</strong>
+                <dl className="profile-settings-history-card-dates">
+                  <div className="profile-settings-history-date-row">
+                    <dt>{pp.historyStartedAt}</dt>
+                    <dd>{formatProfileHistoryTime(row.event.startAt, locale)}</dd>
+                  </div>
+                  {row.updatedAt ? (
+                    <div className="profile-settings-history-date-row">
+                      <dt>{pp.historyUpdatedAt}</dt>
+                      <dd>{formatProfileHistoryTime(row.updatedAt, locale)}</dd>
+                    </div>
+                  ) : null}
+                </dl>
               </div>
-              <StatusBadge status={row.status} />
+              <div className="profile-settings-history-card-status">
+                <StatusBadge status={row.status} />
+              </div>
             </article>
           ))
         )}

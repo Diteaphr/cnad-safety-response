@@ -48,6 +48,8 @@ export interface User {
   /** 後端：缺少電話等必填聯絡資料時為 true，需先完成引導頁 */
   needsProfileCompletion?: boolean;
   mustChangePassword?: boolean;
+  /** 首次登入：完成語言／主畫面／推播引導後為 true */
+  setupGuideCompleted?: boolean;
 }
 
 export interface Department {

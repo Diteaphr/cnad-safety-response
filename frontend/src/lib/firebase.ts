@@ -1,27 +1,53 @@
-import { initializeApp } from 'firebase/app';
-import { getMessaging, getToken, deleteToken, onMessage } from 'firebase/messaging';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { deleteToken, getMessaging, getToken, onMessage, type Messaging } from 'firebase/messaging';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID as string | undefined,
 };
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
 
-const app = initializeApp(firebaseConfig);
-const messaging = getMessaging(app);
+let app: FirebaseApp | null = null;
+let messaging: Messaging | null = null;
 
-/** 向使用者要通知權限，並取得 FCM device token。未設定 VAPID 或使用者拒絕時回傳 null。 */
+/** True when build-time env includes the minimum Firebase web app fields. */
+export function isFirebaseConfigured(): boolean {
+  return Boolean(
+    firebaseConfig.apiKey?.trim() &&
+      firebaseConfig.projectId?.trim() &&
+      firebaseConfig.appId?.trim() &&
+      firebaseConfig.messagingSenderId?.trim(),
+  );
+}
+
+function getMessagingInstance(): Messaging | null {
+  if (!isFirebaseConfigured()) return null;
+  if (!app) {
+    app = initializeApp({
+      apiKey: firebaseConfig.apiKey!,
+      authDomain: firebaseConfig.authDomain,
+      projectId: firebaseConfig.projectId!,
+      storageBucket: firebaseConfig.storageBucket,
+      messagingSenderId: firebaseConfig.messagingSenderId!,
+      appId: firebaseConfig.appId!,
+    });
+    messaging = getMessaging(app);
+  }
+  return messaging;
+}
+
+/** 向使用者要通知權限，並取得 FCM device token。未設定 Firebase/VAPID 或使用者拒絕時回傳 null。 */
 export async function requestFcmToken(): Promise<string | null> {
-  if (!VAPID_KEY) return null;
+  if (!isFirebaseConfigured() || !VAPID_KEY?.trim()) return null;
+  const messagingInstance = getMessagingInstance();
+  if (!messagingInstance) return null;
+
   try {
-    // Register SW before asking permission. This lets the SW controller
-    // change settle BEFORE iOS processes the permission grant — preventing
-    // the hard-reload that iOS triggers when both happen simultaneously.
     await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     const swReg = await navigator.serviceWorker.ready;
     console.log('[FCM] SW scope:', swReg.scope, 'state:', (swReg.active ?? swReg.installing ?? swReg.waiting)?.state);
@@ -32,15 +58,13 @@ export async function requestFcmToken(): Promise<string | null> {
       return null;
     }
 
-    // Delete old FCM token
     try {
-      await deleteToken(messaging);
+      await deleteToken(messagingInstance);
       console.log('[FCM] old token deleted');
     } catch (e) {
       console.warn('[FCM] deleteToken failed (may be ok if no prior token):', e);
     }
 
-    // Force-unsubscribe any existing push subscription so FCM creates a fresh one
     try {
       const existingSub = await swReg.pushManager.getSubscription();
       if (existingSub) {
@@ -53,7 +77,10 @@ export async function requestFcmToken(): Promise<string | null> {
       console.warn('[FCM] unsubscribe failed:', e);
     }
 
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+    const token = await getToken(messagingInstance, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: swReg,
+    });
     console.log('[FCM] new token prefix:', token?.slice(0, 12));
     return token || null;
   } catch (err) {
@@ -62,7 +89,9 @@ export async function requestFcmToken(): Promise<string | null> {
   }
 }
 
-/** 前景訊息處理（App 開著時）。 */
-export function onForegroundMessage(handler: (payload: unknown) => void) {
-  return onMessage(messaging, handler);
+/** 前景訊息處理（App 開著時）。未設定 Firebase 時回傳 no-op unsubscribe。 */
+export function onForegroundMessage(handler: (payload: unknown) => void): () => void {
+  const messagingInstance = getMessagingInstance();
+  if (!messagingInstance) return () => {};
+  return onMessage(messagingInstance, handler);
 }

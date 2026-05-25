@@ -3291,9 +3291,37 @@ button.employee-events-card:hover .employee-events-card-inner {
   font-size: 0.82rem !important;
 }
 
-.profile-settings-history-tabs {
+.profile-history-filters {
+  display: flex;
   flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 14px;
+}
+
+.profile-history-filter.pill {
+  border: 1px solid #d5e2f2;
+  background: #fff;
+  color: #475569;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  text-transform: none;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.profile-history-filter.pill.active {
+  background: var(--member-nav-bg);
+  color: #fff;
+  border-color: var(--member-nav-bg);
 }
 
 .profile-settings-history-stack {
@@ -3301,11 +3329,11 @@ button.employee-events-card:hover .employee-events-card-inner {
 }
 
 .profile-settings-history-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px;
+  gap: 12px 14px;
+  padding: 14px 16px;
   background: #fff;
   border: 1px solid #e5edf5;
   border-radius: 14px;
@@ -3314,18 +3342,74 @@ button.employee-events-card:hover .employee-events-card-inner {
 
 .profile-settings-history-card-main {
   min-width: 0;
+  grid-column: 1;
 }
 
-.profile-settings-history-card-main strong {
+.profile-settings-history-card-status {
+  grid-column: 2;
+  grid-row: 1;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.profile-settings-history-card-title {
   display: block;
-  font-size: 1rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.35;
   color: var(--member-text);
 }
 
-.profile-settings-history-card-main p {
-  margin: 6px 0 0;
-  font-size: 0.84rem;
+.profile-settings-history-card-dates {
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-settings-history-date-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.profile-settings-history-date-row dt {
+  margin: 0;
+  font-weight: 600;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.profile-settings-history-date-row dd {
+  margin: 0;
   color: #64748b;
+  word-break: break-word;
+}
+
+.profile-settings-history-card-status .status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.75rem;
+  padding: 6px 10px;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+@media (max-width: 380px) {
+  .profile-settings-history-card-status .status-badge {
+    min-width: 4.5rem;
+    padding: 6px 8px;
+    font-size: 0.74rem;
+  }
 }
 
 @media (max-width: 560px) {
@@ -7802,4 +7886,340 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   .supervisor-dept-back {
     display: none !important;
   }
+}
+
+/* First-login wizard (3 steps, horizontal slide, no panel scroll) */
+.setup-guide-shell {
+  padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  background: var(--member-surface-app);
+}
+
+.setup-guide-card {
+  width: min(440px, 100%);
+  background: var(--member-surface-elevated);
+  border: 1px solid var(--member-border-subtle);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px var(--member-shadow-soft);
+  padding: 22px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.setup-guide-step-meta {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--member-text-soft);
+}
+
+.setup-guide-top-alert {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(192, 57, 43, 0.4);
+  background: rgba(192, 57, 43, 0.1);
+}
+
+.setup-guide-top-alert p {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #8b2e2e;
+}
+
+.setup-guide-viewport {
+  overflow: hidden;
+  width: 100%;
+}
+
+.setup-guide-track {
+  display: flex;
+  width: 100%;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.setup-guide-panel {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.setup-guide-panel h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--member-text);
+}
+
+.setup-guide-lead {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.setup-guide-hint {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.setup-guide-basic-card {
+  margin-top: 8px;
+}
+
+.setup-guide-basic-part {
+  padding: 2px 0;
+}
+
+.setup-guide-basic-part .profile-settings-pref-field {
+  margin: 0;
+}
+
+.setup-guide-basic-part--split {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e5edf5;
+}
+
+.setup-guide-part-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1e293b;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+}
+
+.setup-guide-part-desc {
+  margin: 0 0 16px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.setup-guide-push-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5edf5;
+  background: #f8fafc;
+}
+
+.setup-guide-push-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.setup-guide-push-row-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #475569;
+  line-height: 1.3;
+}
+
+.setup-guide-push-row-desc {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.setup-guide-steps-list {
+  margin: 0 0 16px;
+  padding-left: 1.5rem;
+  list-style-type: decimal;
+  list-style-position: outside;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--member-text);
+}
+
+.setup-guide-steps-list > li {
+  display: list-item;
+  padding-left: 0.2rem;
+}
+
+.setup-guide-steps-list > li::marker {
+  font-weight: 800;
+  color: #334155;
+}
+
+.setup-guide-steps-list > li + li {
+  margin-top: 10px;
+}
+
+.setup-guide-step-body {
+  display: inline;
+  line-height: 1.55;
+}
+
+.setup-guide-share-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 8px;
+  background: #007aff;
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.setup-guide-share-chip svg {
+  flex-shrink: 0;
+}
+
+.setup-guide-ios-sheet {
+  border-radius: 12px;
+  background: #f2f2f7;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.setup-guide-ios-sheet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.setup-guide-ios-sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 0.84rem;
+  color: #1c1c1e;
+}
+
+.setup-guide-ios-sheet-row:last-child {
+  border-bottom: none;
+}
+
+.setup-guide-ios-sheet-row.is-target {
+  background: rgba(28, 43, 72, 0.1);
+  font-weight: 700;
+  color: var(--member-nav-bg);
+}
+
+.setup-guide-ios-sheet-icon {
+  color: #636366;
+  display: flex;
+}
+
+.setup-guide-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.setup-guide-check-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.setup-guide-check-box {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 6px;
+  border: 2px solid var(--member-border-subtle);
+  background: #fff;
+  display: grid;
+  place-items: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.setup-guide-check-input:focus-visible + .setup-guide-check-box {
+  outline: 2px solid var(--member-nav-bg);
+  outline-offset: 2px;
+}
+
+.setup-guide-check-input:checked + .setup-guide-check-box {
+  border-color: var(--member-nav-bg);
+  background: var(--member-nav-bg);
+}
+
+.setup-guide-check-input:checked + .setup-guide-check-box::after {
+  content: '';
+  width: 6px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-top: -2px;
+}
+
+.setup-guide-check-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--member-text);
+}
+
+.setup-guide-required {
+  color: #c0392b;
+  margin-right: 2px;
+  font-weight: 800;
+}
+
+.setup-guide-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.setup-guide-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  transition: background 0.2s ease;
+}
+
+.setup-guide-dot.is-active {
+  background: var(--member-nav-bg);
+  transform: scale(1.15);
+}
+
+.setup-guide-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.setup-guide-actions-spacer {
+  width: 4.5rem;
+}
+
+.setup-guide-actions .btn.primary {
+  min-width: 8rem;
 }

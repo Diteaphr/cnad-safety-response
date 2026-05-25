@@ -214,3 +214,25 @@ def test_must_change_password_always_set_on_admin_create(client, make_user):
     login = client.post("/api/auth/login", json={"email": "new@test.com", "password": "EMP2024099"})
     profile = client.get("/api/users/me", headers={"Authorization": f"Bearer {login.json()['access_token']}"})
     assert profile.json()["mustChangePassword"] is True
+    assert profile.json()["setupGuideCompleted"] is False
+
+
+def test_setup_guide_completed_via_profile_update(client, make_user):
+    user = make_user(email="guide@test.com", role="employee", password="password123")
+    headers = auth_headers(user)
+    profile = client.get("/api/users/me", headers=headers)
+    assert profile.json()["setupGuideCompleted"] is False
+
+    resp = client.put(
+        "/api/users/me",
+        json={
+            "name": user.name,
+            "phone": user.phone,
+            "pushEnabled": True,
+            "setupGuideCompleted": True,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["setupGuideCompleted"] is True
+    assert resp.json()["pushEnabled"] is True

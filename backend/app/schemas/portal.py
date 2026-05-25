@@ -135,6 +135,7 @@ class ProfileUpdateIn(BaseModel):
     push_emergency_enabled: Optional[bool] = Field(default=None, alias="pushEmergencyEnabled")
     push_reminder_enabled: Optional[bool] = Field(default=None, alias="pushReminderEnabled")
     push_escalation_enabled: Optional[bool] = Field(default=None, alias="pushEscalationEnabled")
+    setup_guide_completed: Optional[bool] = Field(default=None, alias="setupGuideCompleted")
 
 
 class AdminUserCreateIn(BaseModel):

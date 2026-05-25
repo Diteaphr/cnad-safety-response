@@ -436,9 +436,10 @@ export function ProfileSettingsPage({
               {toggleRow(pushMaster, (next) => {
                 if (next) {
                   void (async () => {
-                    const { requestFcmToken } = await import('../lib/firebase');
-                    const token = await requestFcmToken();
-                    if (token) await updateFcmTokenApi(token);
+                    const { registerPushTokenIfConfigured } = await import(
+                      '../lib/enablePushNotifications'
+                    );
+                    await registerPushTokenIfConfigured();
                     await persistNotificationPrefs({ pushEnabled: true });
                   })();
                 } else {

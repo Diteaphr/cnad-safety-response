@@ -235,6 +235,51 @@ export type ProfilePageStrings = {
   forcePasswordMismatch: string;
   forcePasswordSuccess: string;
   forcePasswordError: string;
+  historySubtitle: string;
+  historyFilterAll: string;
+  historyFilterSafe: string;
+  historyFilterNeedHelp: string;
+  historyFilterPending: string;
+  historyStartedAt: string;
+  historyUpdatedAt: string;
+  historyEmptyFilter: string;
+};
+
+export type SetupGuideStrings = {
+  stepIndicator: (current: number, total: number) => string;
+  stepPasswordTitle: string;
+  stepSettingsTitle: string;
+  stepSettingsSubtitle: string;
+  languageSectionLabel: string;
+  languageZhLabel: string;
+  languageEnLabel: string;
+  stepHomeTitle: string;
+  stepHomeSubtitle: string;
+  stepHomeStep1Before: string;
+  stepHomeStep1ShareLabel: string;
+  stepHomeStep1After: string;
+  stepHomeStep2: string;
+  stepHomeCheckbox: string;
+  iosShareSheetAddHome: string;
+  iosShareSheetReadingList: string;
+  iosShareSheetBookmark: string;
+  iosShareSheetFavorites: string;
+  iosShareSheetQuickNote: string;
+  iosShareSheetFindOnPage: string;
+  stepPushMaster: string;
+  stepPushMasterDesc: string;
+  notificationsIntroTitle: string;
+  notificationsIntroDesc: string;
+  pushBlockedTitle: string;
+  pushBlockedBody: string;
+  pushDeniedHint: string;
+  pushEnableFailedHint: string;
+  homeRequiredAlert: string;
+  back: string;
+  next: string;
+  finish: string;
+  setupComplete: string;
+  setupError: string;
 };
 
 export type EmployeeReportStrings = {
@@ -518,6 +563,7 @@ export function getStrings(locale: AppLocale): {
   dash: DashboardStrings;
   profile: ProfileStrings;
   profilePage: ProfilePageStrings;
+  setupGuide: SetupGuideStrings;
   layoutNav: LayoutNavStrings;
   layoutChrome: LayoutChromeStrings;
   employee: EmployeeReportStrings;
@@ -530,6 +576,7 @@ export function getStrings(locale: AppLocale): {
         dash: dashEn,
         profile: profileEn,
         profilePage: profilePageEn,
+        setupGuide: setupGuideEn,
         layoutNav: layoutNavEn,
         layoutChrome: layoutChromeEn,
         employee: employeeEn,
@@ -541,6 +588,7 @@ export function getStrings(locale: AppLocale): {
         dash: dashZh,
         profile: profileZh,
         profilePage: profilePageZh,
+        setupGuide: setupGuideZh,
         layoutNav: layoutNavZh,
         layoutChrome: layoutChromeZh,
         employee: employeeZh,
@@ -938,6 +986,51 @@ const profilePageZh: ProfilePageStrings = {
   forcePasswordMismatch: '兩次輸入的新密碼不一致。',
   forcePasswordSuccess: '密碼已更新。',
   forcePasswordError: '無法變更密碼，請確認目前密碼是否正確。',
+  historySubtitle: '顯示其部門相關事件回報；未回報顯示為未回應。',
+  historyFilterAll: '全部',
+  historyFilterSafe: '平安',
+  historyFilterNeedHelp: '需要協助',
+  historyFilterPending: '未回報',
+  historyStartedAt: '開始',
+  historyUpdatedAt: '更新',
+  historyEmptyFilter: '此篩選條件下沒有紀錄。',
+};
+
+const setupGuideZh: SetupGuideStrings = {
+  stepIndicator: (current, total) => `步驟 ${current} / ${total}`,
+  stepPasswordTitle: '設定新密碼',
+  stepSettingsTitle: '基本設定',
+  stepSettingsSubtitle: '請選擇語言並開啟推播，以便接收緊急通報。',
+  languageSectionLabel: '顯示語言',
+  languageZhLabel: '繁體中文',
+  languageEnLabel: 'English',
+  stepHomeTitle: '加入主畫面',
+  stepHomeSubtitle: '在 iPhone 的 Safari 完成以下步驟，可更快開啟本系統。',
+  stepHomeStep1Before: '點選下方工具列的',
+  stepHomeStep1ShareLabel: '分享',
+  stepHomeStep1After: '按鈕',
+  stepHomeStep2: '在選單中點選「加入主畫面」',
+  stepHomeCheckbox: '我已將此網頁加入主畫面（必選）',
+  iosShareSheetAddHome: '加入主畫面',
+  iosShareSheetReadingList: '加入閱讀列表',
+  iosShareSheetBookmark: '加入書籤',
+  iosShareSheetFavorites: '加入喜好項目',
+  iosShareSheetQuickNote: '加入快速備忘錄',
+  iosShareSheetFindOnPage: '在網頁中尋找',
+  stepPushMaster: '推播總開關',
+  stepPushMasterDesc: '接收重要警訊與系統更新。',
+  notificationsIntroTitle: '推播通知',
+  notificationsIntroDesc: '請開啟下方開關並允許瀏覽器通知，才能進入下一步。',
+  pushBlockedTitle: '請開啟推播通知',
+  pushBlockedBody: '請先開啟推播總開關並允許瀏覽器通知，才能進入下一步。',
+  pushDeniedHint: '通知已遭拒絕，請至「設定 → Safari → 通知」允許後再開啟開關。',
+  pushEnableFailedHint: '無法啟用推播，請再試一次並在提示中選擇「允許」。',
+  homeRequiredAlert: '請勾選「我已將此網頁加入主畫面」後才能進入系統。',
+  back: '上一步',
+  next: '下一步',
+  finish: '進入系統',
+  setupComplete: '設定完成，歡迎使用。',
+  setupError: '無法完成設定，請稍後再試。',
 };
 
 const profilePageEn: ProfilePageStrings = {
@@ -1011,6 +1104,51 @@ const profilePageEn: ProfilePageStrings = {
   forcePasswordMismatch: 'New passwords do not match.',
   forcePasswordSuccess: 'Password updated.',
   forcePasswordError: 'Could not change password. Check your current password.',
+  historySubtitle: 'Event responses for their department; no submission shows as No Response.',
+  historyFilterAll: 'All',
+  historyFilterSafe: 'Safe',
+  historyFilterNeedHelp: 'Need help',
+  historyFilterPending: 'No response',
+  historyStartedAt: 'Started',
+  historyUpdatedAt: 'Updated',
+  historyEmptyFilter: 'No records match this filter.',
+};
+
+const setupGuideEn: SetupGuideStrings = {
+  stepIndicator: (current, total) => `Step ${current} of ${total}`,
+  stepPasswordTitle: 'Set a new password',
+  stepSettingsTitle: 'Basic settings',
+  stepSettingsSubtitle: 'Choose your language and turn on push notifications for emergency alerts.',
+  languageSectionLabel: 'Display language',
+  languageZhLabel: '繁體中文',
+  languageEnLabel: 'English',
+  stepHomeTitle: 'Add to Home Screen',
+  stepHomeSubtitle: 'In Safari on your iPhone, follow these steps for quick access.',
+  stepHomeStep1Before: 'Tap the',
+  stepHomeStep1ShareLabel: 'Share',
+  stepHomeStep1After: 'button in the toolbar',
+  stepHomeStep2: 'Tap “Add to Home Screen” in the menu',
+  stepHomeCheckbox: 'I have added this app to my Home Screen (required)',
+  iosShareSheetAddHome: 'Add to Home Screen',
+  iosShareSheetReadingList: 'Add to Reading List',
+  iosShareSheetBookmark: 'Add Bookmark',
+  iosShareSheetFavorites: 'Add to Favorites',
+  iosShareSheetQuickNote: 'Add to Quick Note',
+  iosShareSheetFindOnPage: 'Find on Page',
+  stepPushMaster: 'Push master switch',
+  stepPushMasterDesc: 'Receive critical alerts and system updates.',
+  notificationsIntroTitle: 'Push notifications',
+  notificationsIntroDesc: 'Turn on the switch below and allow browser notifications to continue.',
+  pushBlockedTitle: 'Push notifications required',
+  pushBlockedBody: 'Turn on the push master switch and allow browser notifications before continuing.',
+  pushDeniedHint: 'Notifications are blocked. Allow them in Settings → Safari → Notifications, then try again.',
+  pushEnableFailedHint: 'Could not enable push. Try again and choose Allow when prompted.',
+  homeRequiredAlert: 'Check the box to confirm you added this app to your Home Screen.',
+  back: 'Back',
+  next: 'Next',
+  finish: 'Enter app',
+  setupComplete: 'Setup complete. Welcome.',
+  setupError: 'Could not finish setup. Please try again.',
 };
 
 const authZh: AuthStrings = {

@@ -91,6 +91,7 @@ class PortalService:
             "phone": user.phone or None,
             "needsProfileCompletion": _needs_profile_completion(user),
             "mustChangePassword": user.must_change_password,
+            "setupGuideCompleted": user.setup_guide_completed,
         }
         return self._attach_push_prefs(db, user, out)
 
@@ -532,6 +533,7 @@ class PortalService:
             "roles": rcast,
             "needsProfileCompletion": _needs_profile_completion(user),
             "mustChangePassword": user.must_change_password,
+            "setupGuideCompleted": user.setup_guide_completed,
         }
         return self._attach_push_prefs(db, user, out)
 
@@ -566,6 +568,10 @@ class PortalService:
                 push_reminder_enabled=payload.push_reminder_enabled,
                 push_escalation_enabled=payload.push_escalation_enabled,
             )
+        if payload.setup_guide_completed is True:
+            row = self._users.get_by_id(db, user_id)
+            if row is not None:
+                row.setup_guide_completed = True
         db.commit()
         db.expire_all()
         refreshed = self._users.get_by_id(db, user_id)

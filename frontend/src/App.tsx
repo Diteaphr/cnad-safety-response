@@ -7,7 +7,7 @@ import {
 import { Toast } from './components/Toast';
 import { DirectReportEventHistoryPage } from './profile/DirectReportEventHistoryPage';
 import { DirectReportsListPage } from './profile/DirectReportsListPage';
-import { ForcePasswordChangePage } from './profile/ForcePasswordChangePage';
+import { FirstLoginWizard } from './profile/SetupGuideWizard';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
 import { LoginPage } from './features/auth/AuthScreens';
 import { SupervisorDashboardPage, AdminDashboardPage } from './features/dashboard/DashboardPages';
@@ -265,7 +265,8 @@ function App() {
   useEffect(() => {
     if (!session.isLoggedIn) return;
     let unsub: (() => void) | undefined;
-    void import('./lib/firebase').then(({ onForegroundMessage }) => {
+    void import('./lib/firebase').then(({ isFirebaseConfigured, onForegroundMessage }) => {
+      if (!isFirebaseConfigured()) return;
       unsub = onForegroundMessage((payload: unknown) => {
         const p = payload as { notification?: { title?: string; body?: string } };
         const title = p.notification?.title ?? '安全確認';
@@ -1397,14 +1398,26 @@ function App() {
     );
   }
 
-  if (session.user?.mustChangePassword) {
+  if (
+    session.user &&
+    (session.user.mustChangePassword || !session.user.setupGuideCompleted)
+  ) {
     return (
       <>
-        <ForcePasswordChangePage
+        <FirstLoginWizard
+          user={session.user}
+          mustChangePassword={Boolean(session.user.mustChangePassword)}
           showToast={showToast}
-          onCompleted={async (nextUser) => {
-            mergeUserIntoList(nextUser);
-            const me = await getMyProfileApi();
+          onUserUpdated={(me) => {
+            mergeUserIntoList(me);
+            setSession((prev) => ({
+              ...prev,
+              user: me,
+              caps: deriveUserCapabilities(me.roles),
+            }));
+          }}
+          onCompleted={(me) => {
+            mergeUserIntoList(me);
             setSession((prev) => ({
               ...prev,
               user: me,

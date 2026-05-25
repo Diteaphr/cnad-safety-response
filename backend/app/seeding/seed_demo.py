@@ -145,6 +145,7 @@ def insert_demo_entities(db: Session) -> None:
                 status="active",
                 phone=f"+886900{uid:06d}" if uid > 1 else None,
                 password_hash=pw,
+                setup_guide_completed=False,
             )
         )
         db.flush()

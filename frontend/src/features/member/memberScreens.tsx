@@ -799,7 +799,7 @@ function EmployeeQuickReportPanel({
   const ec = getStrings(locale).employee;
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const helpDetailsRef = useRef<HTMLDivElement>(null);
-  const persistDraftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistDraftTimer = useRef<number | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const [employeeComment, setEmployeeComment] = useState('');
   const [employeeLocation, setEmployeeLocation] = useState('');

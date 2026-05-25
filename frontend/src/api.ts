@@ -287,6 +287,7 @@ function mapProfileToUser(data: {
   employeeCode?: string | null;
   needsProfileCompletion?: boolean;
   mustChangePassword?: boolean;
+  setupGuideCompleted?: boolean;
   pushEnabled?: boolean;
   pushEmergencyEnabled?: boolean;
   pushReminderEnabled?: boolean;
@@ -308,6 +309,7 @@ function mapProfileToUser(data: {
     phone: data.phone ?? undefined,
     needsProfileCompletion: data.needsProfileCompletion,
     mustChangePassword: data.mustChangePassword,
+    setupGuideCompleted: data.setupGuideCompleted ?? false,
   };
 }
 
@@ -334,6 +336,7 @@ export async function updateMyProfileApi(body: {
   pushEmergencyEnabled?: boolean;
   pushReminderEnabled?: boolean;
   pushEscalationEnabled?: boolean;
+  setupGuideCompleted?: boolean;
 }): Promise<User> {
   const data = await apiFetch<{
     id: string;
@@ -345,6 +348,7 @@ export async function updateMyProfileApi(body: {
     roles: Role[];
     employeeNo?: string;
     needsProfileCompletion?: boolean;
+    setupGuideCompleted?: boolean;
     pushEnabled?: boolean;
     pushEmergencyEnabled?: boolean;
     pushReminderEnabled?: boolean;
