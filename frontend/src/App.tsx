@@ -145,6 +145,7 @@ function App() {
   const eventsSelectionInitialized = useRef(false);
   const supervisorDashEventIdRef = useRef('');
   const adminDashEventIdRef = useRef('');
+  const optimisticResponsesRef = useRef<Map<string, SafetyResponse>>(new Map());
   const [adminDepartmentFilter, setAdminDepartmentFilter] = useState('all');
   const [closingAdminEventId, setClosingAdminEventId] = useState<string | null>(null);
   const [userMgmtSelectedDeptId, setUserMgmtSelectedDeptId] = useState<string | null>(null);
@@ -973,21 +974,40 @@ function App() {
     [locale, showToast],
   );
 
-  const refreshOperationalData = useCallback(async ({ skipResponses = false }: { skipResponses?: boolean } = {}) => {
+  const refreshOperationalData = useCallback(async () => {
     if (!session.isLoggedIn) return;
     if (useMockOfflineCatalog) {
       setDashboardUpdatedAt(Date.now());
       return;
     }
     try {
-      if (skipResponses) {
-        const evtFresh = await getEvents();
-        setEvents(evtFresh);
-      } else {
-        const [repFresh, evtFresh] = await Promise.all([getReports(), getEvents()]);
-        setResponses(repFresh);
-        setEvents(evtFresh);
+      const [repFresh, evtFresh] = await Promise.all([getReports(), getEvents()]);
+      // Merge any pending optimistic responses — the DB write is async (Pub/Sub),
+      // so fresh GET data may not yet include a recently submitted report.
+      let merged = repFresh;
+      if (optimisticResponsesRef.current.size > 0) {
+        const result = [...repFresh];
+        for (const [key, optimistic] of optimisticResponsesRef.current) {
+          const confirmed = repFresh.find(
+            (r) =>
+              r.eventId === optimistic.eventId &&
+              r.userId === optimistic.userId &&
+              new Date(r.updatedAt) >= new Date(optimistic.updatedAt),
+          );
+          if (confirmed) {
+            optimisticResponsesRef.current.delete(key);
+          } else {
+            const idx = result.findIndex(
+              (r) => r.eventId === optimistic.eventId && r.userId === optimistic.userId,
+            );
+            if (idx >= 0) result[idx] = optimistic;
+            else result.push(optimistic);
+          }
+        }
+        merged = result;
       }
+      setResponses(merged);
+      setEvents(evtFresh);
     } catch {
       /* retain cache */
     }
@@ -1325,6 +1345,9 @@ function App() {
         setSupervisorTeamNudge(null);
       }
       clearEmployeeReportDraft(uid, eventId);
+      // Register as optimistic so every subsequent refreshOperationalData call
+      // preserves this entry until the DB write (via Pub/Sub) is confirmed.
+      optimisticResponsesRef.current.set(`${nextResponse.eventId}:${nextResponse.userId}`, nextResponse);
       setResponses(mergedResponses);
       lastSubmitMetaRef.current = null;
       maybeOpenSubmissionOverlay(nextResponse);
@@ -1334,10 +1357,7 @@ function App() {
           message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}`,
         });
       }
-      // Pub/Sub path: DB write is async so GET /api/reports would return stale
-      // data. Skip refreshing responses — the optimistic update above is the
-      // source of truth until the next full refresh or poll cycle.
-      void refreshOperationalData({ skipResponses: true });
+      void refreshOperationalData();
     } catch (e) {
       const msg =
         e instanceof Error
