@@ -84,6 +84,10 @@ def send_fcm(
             notification=messaging.Notification(title=title, body=body),
             token=device_token,
             data={k: str(v) for k, v in (data or {}).items()},
+            android=messaging.AndroidConfig(priority="high"),
+            apns=messaging.APNSConfig(
+                headers={"apns-priority": "10"},
+            ),
         )
         messaging.send(message)
         logger.info("[FCM] sent to token=%s...", device_token[:12])
@@ -142,6 +146,10 @@ def send_fcm_batch(messages: list[dict[str, Any]]) -> list[bool]:
                 ),
                 token=m["token"],
                 data={k: str(v) for k, v in (m.get("data") or {}).items()},
+                android=messaging.AndroidConfig(priority="high"),
+                apns=messaging.APNSConfig(
+                    headers={"apns-priority": "10"},
+                ),
             )
             for m in chunk
         ]
