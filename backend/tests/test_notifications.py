@@ -32,7 +32,7 @@ def test_notifications_empty_initially(client, make_user):
 def test_notifications_appear_after_reminder(client, make_user, make_department, make_event):
     d = make_department("T")
     sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
-    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
+    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id, fcm_token="test-fcm-token")
     event = make_event(status="active")
 
     client.post(_reminders_url(event.event_id), headers=auth_headers(sup))

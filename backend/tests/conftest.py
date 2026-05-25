@@ -185,6 +185,7 @@ def make_user(db, roles):
         password: str = "password123",
         role: str = "employee",
         phone: str | None = None,
+        fcm_token: str | None = None,
         department_id: uuid.UUID | None = None,
         managed_department_id: uuid.UUID | None = None,
     ) -> User:
@@ -193,6 +194,7 @@ def make_user(db, roles):
             name=name,
             email=email,
             phone=phone,
+            fcm_token=fcm_token,
             status="active",
             password_hash=hash_password(password),
         )

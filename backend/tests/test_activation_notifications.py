@@ -277,6 +277,7 @@ def test_reminder_sms_fallback_when_fcm_fails(
         email="emp@test.com",
         role="employee",
         phone="+886987654321",
+        fcm_token="test-fcm-token",
         department_id=d.department_id,
     )
     event = make_event(status="active")
