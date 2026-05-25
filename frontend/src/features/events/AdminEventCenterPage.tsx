@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Lightbulb,
   Plus,
+  Search,
   X,
 } from 'lucide-react';
 import {
@@ -29,6 +30,7 @@ import {
   formatEventImpactScope,
   stripRedundantStatusFromTitle,
 } from '../../lib/adminEventDisplay';
+import { formatEmployeeCardTime } from '../member/memberFormat';
 
 function TypeIcon({ type }: { type: string }) {
   const common = { size: 22 as const, strokeWidth: 2.1 as const, 'aria-hidden': true as const };
@@ -51,6 +53,107 @@ function formatEventStart(iso: string | null, locale: string): string {
   if (iso == null || iso === '') return '—';
   const loc = locale === 'en' ? 'en-US' : 'zh-TW';
   return new Date(iso).toLocaleString(loc, { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function SupervisorStackedProgressBar({
+  safe,
+  needHelp,
+  pending,
+}: {
+  safe: number;
+  needHelp: number;
+  pending: number;
+}) {
+  const totalSum = Math.max(safe + needHelp + pending, 1);
+  const ws = `${(safe / totalSum) * 100}%`;
+  const wn = `${(needHelp / totalSum) * 100}%`;
+  const wp = `${(pending / totalSum) * 100}%`;
+
+  return (
+    <div className="sv-dist-stack-bar admin-event-center-stack-bar" aria-hidden>
+      <div className="sv-dist-stack-track">
+        {safe > 0 ? <div className="sv-dist-stack-seg sv-dist-stack-seg--safe" style={{ width: ws }} /> : null}
+        {needHelp > 0 ? <div className="sv-dist-stack-seg sv-dist-stack-seg--need" style={{ width: wn }} /> : null}
+        {pending > 0 ? <div className="sv-dist-stack-seg sv-dist-stack-seg--pending" style={{ width: wp }} /> : null}
+      </div>
+    </div>
+  );
+}
+
+/** Narrow-view donut: stacked safe / need / pending arcs with response rate in center. */
+function SupervisorMobileProgressRing({
+  safe,
+  needHelp,
+  pending,
+  responseRate,
+}: {
+  safe: number;
+  needHelp: number;
+  pending: number;
+  responseRate: number;
+}) {
+  const size = 44;
+  const stroke = 3.5;
+  const radius = (size - stroke) / 2;
+  const cx = size / 2;
+  const circumference = 2 * Math.PI * radius;
+  const total = safe + needHelp + pending;
+  const totalMax = Math.max(total, 1);
+
+  const parts: Array<{ key: 'safe' | 'need' | 'pending'; count: number }> = [];
+  if (safe > 0) parts.push({ key: 'safe', count: safe });
+  if (needHelp > 0) parts.push({ key: 'need', count: needHelp });
+  if (pending > 0) parts.push({ key: 'pending', count: pending });
+
+  const gapPx = parts.length > 1 ? 2.5 : 0;
+  const gapTotal = gapPx * Math.max(parts.length - 1, 0);
+  const usable = circumference - gapTotal;
+
+  let cumulative = 0;
+  const segments =
+    parts.length === 0
+      ? []
+      : parts.map((part) => {
+          const len = (part.count / totalMax) * usable;
+          const seg = { ...part, len, dashoffset: -cumulative };
+          cumulative += len + gapPx;
+          return seg;
+        });
+
+  return (
+    <div className="admin-event-center-progress-ring" role="img" aria-label={`${responseRate}%`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+        {segments.length === 0 ? (
+          <circle
+            cx={cx}
+            cy={cx}
+            r={radius}
+            fill="none"
+            strokeWidth={stroke}
+            className="admin-event-center-progress-ring-track"
+          />
+        ) : (
+          <g transform={`rotate(-90 ${cx} ${cx})`}>
+            {segments.map((seg) => (
+              <circle
+                key={seg.key}
+                cx={cx}
+                cy={cx}
+                r={radius}
+                fill="none"
+                strokeWidth={stroke}
+                strokeLinecap="round"
+                className={`admin-event-center-progress-ring-seg admin-event-center-progress-ring-seg--${seg.key}`}
+                strokeDasharray={`${seg.len} ${circumference - seg.len}`}
+                strokeDashoffset={seg.dashoffset}
+              />
+            ))}
+          </g>
+        )}
+      </svg>
+      <span className="admin-event-center-progress-ring-pct">{responseRate}%</span>
+    </div>
+  );
 }
 
 export function AdminEventCenterPage({
@@ -79,6 +182,8 @@ export function AdminEventCenterPage({
   const { portal: p, dash, statusBadge } = getStrings(locale);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all');
   const [searchText, setSearchText] = useState('');
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const isSupervisor = variant === 'supervisor';
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [tipVisible, setTipVisible] = useState(true);
@@ -215,7 +320,7 @@ export function AdminEventCenterPage({
         </div>
       </header>
 
-      <div className="admin-event-center-toolbar">
+      <div className={`admin-event-center-toolbar${isSupervisor ? ' supervisor-event-center-toolbar' : ''}`}>
         <div className="event-filter-chips admin-event-center-tabs" role="tablist" aria-label={p.eventFilterLabel}>
           {(
             [
@@ -234,17 +339,54 @@ export function AdminEventCenterPage({
             </button>
           ))}
         </div>
-        <div className="admin-event-center-toolbar-right">
+        {isSupervisor ? (
+          <>
+            <label className="sv-roster-search sv-roster-search--desktop supervisor-event-center-search">
+              <Search className="sv-roster-search-icon" size={18} aria-hidden />
+              <input
+                type="search"
+                placeholder={p.adminEventCenterSearchPlaceholder}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                aria-label={p.adminEventCenterSearchPlaceholder}
+              />
+            </label>
+            <button
+              type="button"
+              className="sv-roster-search-toggle sv-roster-search--mobile supervisor-event-center-search-toggle"
+              aria-label={p.adminEventCenterSearchPlaceholder}
+              aria-expanded={searchExpanded}
+              onClick={() => setSearchExpanded((open) => !open)}
+            >
+              <Search size={20} aria-hidden />
+            </button>
+          </>
+        ) : (
+          <div className="admin-event-center-toolbar-right">
+            <input
+              type="search"
+              className="admin-event-center-search"
+              placeholder={p.adminEventCenterSearchPlaceholder}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              aria-label={p.adminEventCenterSearchPlaceholder}
+            />
+          </div>
+        )}
+      </div>
+      {isSupervisor && searchExpanded ? (
+        <label className="sv-roster-search sv-roster-search--mobile-expanded supervisor-event-center-search-expanded">
+          <Search className="sv-roster-search-icon" size={18} aria-hidden />
           <input
             type="search"
-            className="admin-event-center-search"
             placeholder={p.adminEventCenterSearchPlaceholder}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             aria-label={p.adminEventCenterSearchPlaceholder}
+            autoFocus
           />
-        </div>
-      </div>
+        </label>
+      ) : null}
 
       <div className="admin-event-center-table-wrap">
         <div className="admin-event-center-table">
@@ -266,6 +408,87 @@ export function AdminEventCenterPage({
                   const barWidth = total > 0 ? Math.min(100, responseRate) : 0;
                   const scopeTime = `${formatEventImpactScope(event, departments, p)} · ${formatEventStart(event.startAt, locale)}`;
                   const titleDisplay = stripRedundantStatusFromTitle(event.title);
+                  const typeLabel = formatAdminEventTypeLabel(event.type, p);
+                  const createdLine = formatEmployeeCardTime(event.startAt ?? event.createdAt, locale);
+                  const isClosed = event.status === 'closed';
+
+                  if (isSupervisor) {
+                    return (
+                      <div
+                        key={event.id}
+                        className="admin-event-center-row admin-event-center-row--supervisor"
+                        role="row"
+                        tabIndex={0}
+                        onClick={onRowClick(event.id)}
+                        onKeyDown={onRowKeyDown(event.id)}
+                        aria-label={event.title}
+                      >
+                        <div className="admin-event-center-card-head">
+                          <div className="admin-event-center-cell admin-event-center-cell--event">
+                            <SupervisorMobileProgressRing
+                              safe={safe}
+                              needHelp={needHelp}
+                              pending={pending}
+                              responseRate={responseRate}
+                            />
+                            <div className={`admin-event-center-type-icon admin-event-center-type-icon--${event.type} admin-event-center-type-icon--wide`}>
+                              <TypeIcon type={event.type} />
+                            </div>
+                            <div className="admin-event-center-event-text">
+                              <div className="admin-event-center-event-title-row">
+                                <strong className="admin-event-center-event-title">{titleDisplay}</strong>
+                                <span className="muted-text small admin-event-center-event-type-inline">{typeLabel}</span>
+                              </div>
+                              <span className="muted-text small admin-event-center-event-sub admin-event-center-event-sub--mobile-time">
+                                {createdLine}
+                              </span>
+                              <span className="muted-text small admin-event-center-event-type admin-event-center-event-type--wide">
+                                {typeLabel}
+                              </span>
+                              <strong className="admin-event-center-event-title admin-event-center-event-title--wide">
+                                {titleDisplay}
+                              </strong>
+                              <span className="muted-text small admin-event-center-event-sub admin-event-center-event-sub--wide">
+                                {scopeTime}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="admin-event-center-cell admin-event-center-cell--status">
+                            <span
+                              className={`admin-event-center-status-pill admin-event-center-status-pill--${isClosed ? 'closed' : 'active'}`}
+                            >
+                              {isClosed ? dash.closed : dash.ongoing}
+                            </span>
+                          </div>
+                          <div className="admin-event-center-cell admin-event-center-cell--chev" aria-hidden>
+                            <ChevronRight className="admin-event-center-chevron" size={20} />
+                          </div>
+                        </div>
+                        <div className="admin-event-center-cell admin-event-center-cell--progress">
+                          <div className="admin-event-center-progress-head">
+                            <span className="admin-event-center-pct">{responseRate}%</span>
+                          </div>
+                          <SupervisorStackedProgressBar safe={safe} needHelp={needHelp} pending={pending} />
+                          <span className="muted-text small admin-event-center-reported-line">
+                            {p.adminEventCenterReportedOfTotal(reported, total)}
+                          </span>
+                        </div>
+                        <div className="admin-event-center-cell admin-event-center-cell--stats">
+                          <ul className="admin-event-center-stat-dots">
+                            <li>
+                              <span className="admin-event-center-dot admin-event-center-dot--safe" />
+                              {statusBadge.safe} {safe}
+                            </li>
+                            <li>
+                              <span className="admin-event-center-dot admin-event-center-dot--help" />
+                              {statusBadge.needHelp} {needHelp}
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={event.id}
@@ -282,18 +505,16 @@ export function AdminEventCenterPage({
                             <TypeIcon type={event.type} />
                           </div>
                           <div className="admin-event-center-event-text">
-                            <span className="muted-text small admin-event-center-event-type">
-                              {formatAdminEventTypeLabel(event.type, p)}
-                            </span>
+                            <span className="muted-text small admin-event-center-event-type">{typeLabel}</span>
                             <strong className="admin-event-center-event-title">{titleDisplay}</strong>
                             <span className="muted-text small admin-event-center-event-sub">{scopeTime}</span>
                           </div>
                         </div>
                         <div className="admin-event-center-cell admin-event-center-cell--status">
                           <span
-                            className={`admin-event-center-status-pill admin-event-center-status-pill--${event.status === 'closed' ? 'closed' : 'active'}`}
+                            className={`admin-event-center-status-pill admin-event-center-status-pill--${isClosed ? 'closed' : 'active'}`}
                           >
-                            {event.status === 'closed' ? dash.closed : dash.ongoing}
+                            {isClosed ? dash.closed : dash.ongoing}
                           </span>
                         </div>
                         <div className="admin-event-center-cell admin-event-center-cell--chev" aria-hidden>

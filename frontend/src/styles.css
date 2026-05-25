@@ -6304,6 +6304,187 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   background: rgba(var(--palette-blue-baby-blue-rgb), 0.15);
 }
 
+/* --- Supervisor team report list (event center) --- */
+.supervisor-event-center {
+  --sv-status-safe-bar: #2ba95a;
+  --sv-status-need-bar: #d53d3f;
+  --sv-status-pending-bar: #8eb1d1;
+}
+
+.supervisor-event-center-toolbar {
+  align-items: center;
+}
+
+.supervisor-event-center-search-expanded {
+  margin-top: -8px;
+  margin-bottom: 16px;
+}
+
+.supervisor-event-center .admin-event-center-progress-ring {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: none;
+}
+
+.supervisor-event-center .admin-event-center-progress-ring-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--member-nav-bg);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.supervisor-event-center .admin-event-center-progress-ring-track {
+  stroke: #e8eef5;
+}
+
+.supervisor-event-center .admin-event-center-progress-ring-seg--safe {
+  stroke: var(--sv-status-safe-bar);
+}
+
+.supervisor-event-center .admin-event-center-progress-ring-seg--need {
+  stroke: var(--sv-status-need-bar);
+}
+
+.supervisor-event-center .admin-event-center-progress-ring-seg--pending {
+  stroke: var(--sv-status-pending-bar);
+}
+
+.supervisor-event-center .admin-event-center-type-icon--wide {
+  display: none;
+}
+
+.supervisor-event-center .admin-event-center-event-title-row {
+  display: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.supervisor-event-center .admin-event-center-event-title-row .admin-event-center-event-title {
+  display: inline;
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.supervisor-event-center .admin-event-center-event-type-inline {
+  display: inline;
+  margin-left: 0.35em;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.supervisor-event-center .admin-event-center-event-sub--mobile-time {
+  display: none;
+  line-height: 1.35;
+}
+
+.supervisor-event-center .admin-event-center-event-type--wide,
+.supervisor-event-center .admin-event-center-event-title--wide,
+.supervisor-event-center .admin-event-center-event-sub--wide {
+  display: none;
+}
+
+.supervisor-event-center .admin-event-center-stack-bar {
+  padding: 0;
+}
+
+@media (max-width: 1024px) {
+  .supervisor-event-center .admin-event-center-row--supervisor {
+    gap: 0;
+    padding: 10px 12px;
+  }
+
+  .supervisor-event-center .admin-event-center-card-head {
+    align-items: center;
+    gap: 10px;
+  }
+
+  .supervisor-event-center .admin-event-center-progress-ring {
+    display: block;
+  }
+
+  .supervisor-event-center .admin-event-center-event-title-row {
+    display: block;
+  }
+
+  .supervisor-event-center .admin-event-center-event-sub--mobile-time {
+    display: block;
+    font-size: 0.78rem;
+  }
+
+  .supervisor-event-center .admin-event-center-row--supervisor .admin-event-center-cell--progress,
+  .supervisor-event-center .admin-event-center-row--supervisor .admin-event-center-cell--stats {
+    display: none !important;
+  }
+
+  .supervisor-event-center .admin-event-center-cell--status {
+    display: flex !important;
+    flex-shrink: 0;
+    align-items: center;
+  }
+
+  .supervisor-event-center .admin-event-center-cell--status .admin-event-center-status-pill {
+    padding: 3px 10px;
+    font-size: 0.75rem;
+  }
+
+  .supervisor-event-center .admin-event-center-cell--chev {
+    flex-shrink: 0;
+    padding-top: 0;
+  }
+}
+
+@media (min-width: 1025px) {
+  .supervisor-event-center .admin-event-center-progress-ring {
+    display: none;
+  }
+
+  .supervisor-event-center .admin-event-center-type-icon--wide {
+    display: flex;
+  }
+
+  .supervisor-event-center .admin-event-center-event-title-row,
+  .supervisor-event-center .admin-event-center-event-sub--mobile-time {
+    display: none !important;
+  }
+
+  .supervisor-event-center .admin-event-center-event-type--wide {
+    display: block;
+    line-height: 1.2;
+  }
+
+  .supervisor-event-center .admin-event-center-event-title--wide {
+    display: block;
+    font-size: 1.02rem;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .supervisor-event-center .admin-event-center-event-sub--wide {
+    display: block;
+    line-height: 1.35;
+  }
+
+  .supervisor-event-center .admin-event-center-row--supervisor .admin-event-center-progress-track {
+    display: none;
+  }
+}
+
 /* --- Supervisor event detail redesign --- */
 .supervisor-event-detail-root {
   --sv-status-safe-bar: #2ba95a;
