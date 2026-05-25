@@ -30,9 +30,10 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.api.deps import verify_pubsub_oidc
 from app.core.database import get_db
 from app.services.notification_dispatch import (
     dispatch_activation_notifications,
@@ -46,26 +47,12 @@ router = APIRouter(prefix="/api/internal", tags=["internal"])
 
 
 @router.post("/notifications/dispatch")
-def dispatch_notifications(body: dict, db: Session = Depends(get_db)):
-    """
-    Pub/Sub push endpoint — handles both activation fan-out and per-user FCM.
-
-    Pub/Sub message envelope:
-      {"message": {"data": "<base64-encoded-json>", ...}, "subscription": "..."}
-
-    --- Production: OIDC token validation ---
-    Uncomment the block below and supply the expected audience (your Cloud Run URL)
-    to reject requests that do not come from the authorised Pub/Sub service account.
-
-    # from fastapi import Request
-    # from google.auth.transport import requests as google_requests
-    # from google.oauth2 import id_token
-    #
-    # def _verify_oidc(request: Request) -> None:
-    #     token = request.headers.get("Authorization", "").removeprefix("Bearer ")
-    #     audience = "https://<your-cloud-run-url>/api/internal/notifications/dispatch"
-    #     id_token.verify_oauth2_token(token, google_requests.Request(), audience)
-    """
+def dispatch_notifications(
+    request: Request,
+    body: dict,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_pubsub_oidc),
+):
     try:
         message = body.get("message", {})
         data_b64 = message.get("data", "")

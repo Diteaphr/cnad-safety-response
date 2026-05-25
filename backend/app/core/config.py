@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     # Email／demo 登入核發之 access token 有效小時數（預設 720 ≈ 30 天，可用 JWT_ACCESS_TOKEN_EXPIRE_HOURS 覆寫）。
     jwt_access_token_expire_hours: int = 720
 
+    # Pub/Sub OIDC authentication
+    # service_url: Cloud Run URL (e.g. https://safety-response-api-xxx-de.a.run.app)
+    # pubsub_sa_email: service account that signs Pub/Sub OIDC tokens
+    service_url: str = ""
+    pubsub_sa_email: str = ""
+
     # Firebase Cloud Messaging
     # 設 true 後會嘗試用 Firebase Admin SDK 真實發送；false 則 log-only mock。
     # 本機開發保持 false；Cloud Run 設 true 並確保 service account 有 FCM 發送權限。
