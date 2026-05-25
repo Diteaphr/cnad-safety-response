@@ -4029,6 +4029,72 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   color: var(--admin-accent-soft);
 }
 
+/* Admin center: shared supervisor layout with purple chrome (not member blue) */
+.app-frame.app-frame--admin-center .supervisor-event-center,
+.app-frame.app-frame--admin-center .supervisor-event-detail-root {
+  --sv-status-pending-bar: var(--palette-purple-dusky-lilac);
+  --sv-status-pending-bg: rgba(var(--palette-purple-iris-mist-rgb), 0.45);
+  --sv-status-pending-text: var(--admin-accent-soft);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-center .admin-event-center-progress-ring-pct {
+  color: var(--admin-accent);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .supervisor-event-detail-scope-bar .admin-event-detail-scope-heading {
+  color: var(--admin-accent);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-insight-action-btn,
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-roster-search,
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-roster-search-toggle,
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-employee-card-contact-btn {
+  border-color: var(--admin-chip-border);
+  color: var(--admin-accent-soft);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-insight-action-btn:hover,
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-roster-search-toggle:hover,
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-employee-card-contact-btn:hover {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.28);
+  border-color: var(--admin-chip-border-active);
+  color: var(--admin-accent);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-dist-stack-track {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.45);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-dist-divider {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.55);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-dist-breakdown-row {
+  border-bottom-color: rgba(var(--palette-purple-iris-mist-rgb), 0.45);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-dist-breakdown-row--pending .sv-dist-breakdown-icon {
+  box-shadow: inset 0 0 0 2px rgba(var(--palette-purple-dusky-lilac-rgb), 0.55);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-employee-card {
+  border-color: rgba(var(--palette-purple-iris-mist-rgb), 0.55);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .sv-employee-card-avatar {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.35);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .pill.active {
+  background: var(--admin-cta-bg);
+  border-color: var(--admin-cta-bg);
+  color: #fff;
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-detail-root .pill {
+  border-color: var(--admin-nav-idle-border);
+}
+
 .content:has(.dash-board-surface) {
   overflow-x: hidden;
 }
@@ -5537,147 +5603,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   border-radius: 14px;
 }
 
-/* --- Admin event detail (tabs / scope / KPI strip) --- */
-.admin-event-detail-root .admin-event-detail-title {
-  font-size: clamp(1.12rem, 2.5vw, 1.45rem);
-}
-.admin-event-detail-root .dash-subsection-title {
-  font-size: 1.05rem;
-  color: var(--admin-accent);
-}
-.admin-event-detail-root .admin-event-detail-scope-heading {
-  font-size: 1.05rem;
-}
-.admin-event-detail-root .admin-event-detail-progress-rate {
-  font-size: clamp(1.12rem, 2.6vw, 1.42rem);
-}
-.admin-event-detail-root .admin-event-type-line {
-  font-size: 0.9rem;
-}
-.admin-event-detail-root .admin-dept-status-table {
-  font-size: 0.92rem;
-}
-.admin-event-detail-root .admin-dept-mobile-card {
-  font-size: 0.92rem;
-}
-.admin-event-detail-root .admin-kpi-card-value {
-  font-size: 1.22rem;
-}
-.admin-event-detail-root .admin-kpi-card-label {
-  font-size: 0.84rem;
-}
-
-.admin-event-header-card {
-  margin-bottom: 14px;
-}
-.admin-event-header-top {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-.admin-event-header-titles {
-  flex: 1;
-  min-width: 200px;
-}
-.admin-event-type-line {
-  margin: 0 0 6px;
-  font-size: 0.88rem;
-}
-.admin-event-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-.admin-event-detail-title {
-  margin: 0;
-  font-size: clamp(1.25rem, 2.8vw, 1.65rem);
-  line-height: 1.25;
-}
-.admin-event-header-actions {
-  flex-shrink: 0;
-}
-.admin-event-header-main {
-  flex: 1;
-  min-width: 200px;
-}
-.admin-event-header-aside-desktop {
-  flex-shrink: 0;
-  align-self: flex-start;
-}
-.admin-event-detail-close-aside {
-  flex-shrink: 0;
-}
-
-.admin-event-detail-desktop-only {
-  display: block;
-}
-.admin-event-detail-mobile-only {
-  display: none;
-}
-@media (max-width: 720px) {
-  .admin-event-detail-desktop-only {
-    display: none !important;
-  }
-  .admin-event-detail-mobile-only {
-    display: block;
-  }
-}
-
-.admin-event-detail-tabs {
-  margin: 14px 0 12px;
-  flex-wrap: wrap;
-}
-.admin-event-detail-tabs.admin-event-center-toolbar {
-  justify-content: flex-start;
-  width: 100%;
-}
-.admin-event-detail-tabs .event-filter-chip .admin-tab-label-short {
-  display: none;
-}
-@media (max-width: 720px) {
-  .admin-event-detail-tabs .event-filter-chip .admin-tab-label-long {
-    display: none;
-  }
-  .admin-event-detail-tabs .event-filter-chip .admin-tab-label-short {
-    display: inline;
-  }
-}
-
-/* Detail tabs: solid purple active + white label (does not affect event list chips). */
-.admin-event-detail-root .admin-event-detail-tabs .event-filter-chip {
-  background: var(--admin-chip-inactive-bg);
-  border-color: var(--admin-nav-idle-border);
-  color: var(--admin-accent-soft);
-}
-.admin-event-detail-root .admin-event-detail-tabs .event-filter-chip:hover {
-  border-color: var(--admin-chip-border-active);
-  color: var(--admin-accent);
-}
-.admin-event-detail-root .admin-event-detail-tabs .event-filter-chip.is-active {
-  background: var(--admin-cta-bg);
-  color: #fff;
-  border-color: var(--admin-cta-bg);
-}
-.admin-event-detail-root .admin-event-detail-tabs .event-filter-chip.is-active:hover {
-  background: var(--admin-cta-bg-hover);
-  border-color: var(--admin-cta-bg-hover);
-}
-
-.admin-event-detail-scope-row .event-filter-chip .admin-scope-chip-label-short {
-  display: none;
-}
-@media (max-width: 720px) {
-  .admin-event-detail-scope-row .event-filter-chip .admin-scope-chip-label-long {
-    display: none;
-  }
-  .admin-event-detail-scope-row .event-filter-chip .admin-scope-chip-label-short {
-    display: inline;
-  }
-}
-
 .admin-scope-employees-hint .admin-scope-hint-short {
   display: none;
 }
@@ -5688,38 +5613,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   .admin-scope-employees-hint .admin-scope-hint-short {
     display: inline;
   }
-}
-
-@media (max-width: 720px) {
-  .admin-event-detail-meta-mobile-line.admin-event-detail-mobile-only {
-    display: flex !important;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin: 10px 0 6px;
-    font-size: 0.88rem;
-  }
-  .admin-event-detail-meta-mobile-time.admin-event-detail-mobile-only {
-    margin: 0 0 10px;
-    font-size: 0.82rem;
-  }
-}
-
-.admin-mobile-more-summary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  min-height: 40px;
-  padding: 0 10px;
-  list-style: none;
-}
-.admin-mobile-more-summary::-webkit-details-marker {
-  display: none;
-}
-.admin-event-detail-mobile-actions-panel {
-  right: 0;
-  left: auto;
 }
 
 .admin-event-detail-scope-bar {
@@ -5756,10 +5649,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   flex: 1 1 auto;
   min-width: 0;
 }
-.admin-event-detail-scope-row .admin-scope-all-chip {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
 .admin-event-detail-scope-select {
   flex: 0 1 auto;
   width: auto;
@@ -5781,52 +5670,25 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   background-size: 12px 12px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2388708e' stroke-width='2.25'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
-.admin-event-detail-root .admin-event-detail-scope-select.admin-scope-select {
+.supervisor-event-detail-root .admin-event-detail-scope-select.admin-scope-select {
   min-width: 8.5rem;
   max-width: min(16rem, 100%);
-  /* Override generic .admin-scope-select { background: #fff } so chevron does not tile */
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 12px 12px;
 }
-.admin-event-detail-root .admin-event-detail-scope-row .admin-scope-all-chip.is-active {
-  background: var(--admin-cta-bg);
-  color: #fff;
-  border-color: var(--admin-cta-bg);
-}
-.admin-event-detail-root .admin-event-detail-scope-row .admin-scope-all-chip.is-active:hover {
-  background: var(--admin-cta-bg-hover);
-  border-color: var(--admin-cta-bg-hover);
-}
-.admin-event-detail-root .admin-event-detail-scope-row .admin-scope-all-chip--muted {
-  background: var(--admin-chip-inactive-bg);
-  border-color: var(--admin-nav-idle-border);
-  color: var(--admin-sidebar-muted);
-}
-.admin-event-detail-root .admin-event-detail-scope-row .admin-scope-all-chip--muted:hover {
-  border-color: var(--admin-accent-soft);
-  color: var(--admin-accent-soft);
-}
-
-.admin-event-detail-root .admin-event-detail-scope-select--idle {
+.supervisor-event-detail-root .admin-event-detail-scope-select--idle {
   border-color: var(--admin-nav-idle-border);
   color: var(--admin-sidebar-muted);
   background-color: var(--admin-surface-content);
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 12px 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2388708e' stroke-width='2.25'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
-.admin-event-detail-root .admin-event-detail-scope-select--filled {
+.supervisor-event-detail-root .admin-event-detail-scope-select--filled {
   border-color: var(--admin-accent);
   color: var(--admin-accent);
   background-color: var(--admin-chip-inactive-bg);
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 12px 12px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23312a44' stroke-width='2.25'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
-.admin-event-detail-root .admin-event-detail-scope-select--filled:focus {
+.supervisor-event-detail-root .admin-event-detail-scope-select--filled:focus {
   outline: none;
   border-color: var(--admin-accent);
   box-shadow: 0 0 0 2px var(--admin-focus-ring);
@@ -5845,86 +5707,11 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   opacity: 0.55;
 }
 
-.admin-event-detail-progress-card {
-  margin-bottom: 4px;
-}
-.admin-event-detail-progress-card .admin-event-center-progress-track {
-  height: 10px;
-}
-.admin-event-detail-progress-head {
-  margin-bottom: 4px;
-}
-.admin-event-detail-progress-rate {
-  font-size: clamp(1.35rem, 3vw, 1.85rem);
-  font-weight: 700;
-  color: var(--admin-accent);
-  letter-spacing: -0.02em;
-}
-.admin-event-detail-progress-sub {
-  margin: 0 0 12px;
-}
-
-.admin-tracking-pending-empty {
-  padding: 12px 0 4px;
-}
-.admin-tracking-empty-lead {
-  margin: 0 0 6px;
-  font-weight: 700;
-  font-size: 0.95rem;
-}
-
-.admin-dept-scope-title {
-  margin: 0 0 12px;
-}
-
-.admin-event-detail-root .admin-kpi-card {
-  border-color: var(--admin-nav-idle-border);
-  background: rgba(var(--palette-purple-iris-mist-rgb), 0.2);
-}
-.admin-event-detail-root .admin-kpi-card--neutral {
-  background: var(--admin-chip-inactive-bg);
-}
-.admin-event-detail-root .admin-kpi-card--neutral .admin-kpi-card-value {
-  color: var(--admin-accent);
-}
-.admin-event-detail-root .admin-kpi-card-label {
-  color: var(--admin-sidebar-muted);
-}
-.admin-event-detail-root .admin-dept-status-table th,
-.admin-event-detail-root .admin-dept-status-table td {
-  border-bottom-color: var(--admin-nav-idle-border);
-}
-.admin-event-detail-root .admin-dept-status-table th {
-  color: var(--admin-accent);
-  background: rgba(var(--palette-purple-iris-mist-rgb), 0.35);
-}
-.admin-event-detail-root .admin-dept-mobile-card {
-  border-color: var(--admin-nav-idle-border);
-}
 .admin-close-summary {
   margin: 0 0 10px;
   font-weight: 600;
 }
-.admin-event-description {
-  margin: 12px 0 0;
-  line-height: 1.45;
-  color: #3d5268;
-}
-.admin-event-scope-row {
-  margin-top: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-.admin-scope-label {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 0.92rem;
-}
+
 .admin-scope-select:not(.admin-event-detail-scope-select) {
   font: inherit;
   padding: 8px 12px;
@@ -5932,160 +5719,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   border: 1px solid #c9d9ee;
   background: #fff;
   min-width: 180px;
-}
-.admin-detail-tabs {
-  margin: 14px 0 12px;
-}
-.admin-detail-tab-panels {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.admin-kpi-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin: 12px 0;
-}
-@media (max-width: 720px) {
-  .admin-kpi-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-.admin-kpi-card {
-  border-radius: 12px;
-  padding: 12px 14px;
-  border: 1px solid #dbe8f7;
-  background: #fbfdff;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.admin-kpi-card-label {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #5d7289;
-}
-.admin-kpi-card-value {
-  font-size: 1.35rem;
-  line-height: 1.2;
-}
-.admin-kpi-card--danger .admin-kpi-card-value {
-  color: #b91c1c;
-}
-.admin-kpi-card--warning .admin-kpi-card-value {
-  color: #a16207;
-}
-.admin-kpi-card--safe .admin-kpi-card-value {
-  color: #15803d;
-}
-.admin-kpi-card--neutral .admin-kpi-card-value {
-  color: #1e3a5f;
-}
-
-.admin-tracking-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
-  gap: 14px;
-  align-items: start;
-}
-@media (max-width: 900px) {
-  .admin-tracking-layout {
-    grid-template-columns: 1fr;
-  }
-}
-.admin-tracking-lists {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.admin-tracking-map {
-  min-height: 220px;
-}
-.admin-tracking-card-aside {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-.admin-tracking-pending-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.admin-dept-status-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-.admin-dept-status-table th,
-.admin-dept-status-table td {
-  padding: 10px 12px;
-  text-align: left;
-  border-bottom: 1px solid #e8f0fa;
-}
-.admin-dept-status-table th {
-  font-weight: 700;
-  color: #355065;
-  background: rgba(232, 240, 250, 0.65);
-}
-.admin-dept-view-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.admin-dept-status-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-}
-.admin-dept-status-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 112px;
-  padding: 14px 16px;
-  border: 1px solid #dbe8f7;
-  border-radius: 12px;
-  background: #fff;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.admin-dept-status-card:hover {
-  border-color: var(--admin-accent-soft, #7eb8e8);
-  box-shadow: 0 4px 16px rgba(15, 39, 66, 0.06);
-}
-.admin-dept-status-card-body {
-  flex: 1;
-  min-width: 0;
-}
-.admin-dept-status-card-title {
-  display: block;
-  font-size: 1rem;
-  color: #1e3a5f;
-  margin-bottom: 4px;
-}
-.admin-dept-status-card-rate {
-  margin: 0 0 6px;
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--admin-accent, #1a5fb4);
-  line-height: 1.1;
-}
-.admin-dept-status-card-stats {
-  margin: 0;
-}
-.admin-dept-status-card-footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: flex-end;
-  margin-top: auto;
-  padding-top: 10px;
-}
-.admin-dept-status-card-footer .admin-dept-view-btn {
-  margin-left: auto;
 }
 
 .admin-dept-table-desktop {
@@ -6252,12 +5885,12 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 }
 
 /*
- * Supervisor (團隊報表 + event detail): reuses admin layout classes but member blue chrome.
- * Remap admin CSS variables on supervisor roots so descendants never pick up purple.
+ * Supervisor (團隊報表 + event detail): member blue chrome only.
+ * Admin center reuses layout classes but keeps purple tokens from design-tokens.css.
  */
-.supervisor-event-center,
-.supervisor-event-detail-root,
-.supervisor-dash-page {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center,
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root,
+.app-frame:not(.app-frame--admin-center) .supervisor-dash-page {
   --admin-accent: var(--member-nav-bg);
   --admin-accent-soft: var(--member-text-soft);
   --admin-border-subtle: var(--member-border-soft);
@@ -6279,60 +5912,43 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   --admin-note-info-text: var(--member-text);
 }
 
-/* Hardcoded purple rgba in shared admin-event-center rules */
-.supervisor-event-center .admin-event-center-thead {
+/* Hardcoded blue tints — member supervisor list/detail only */
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .admin-event-center-thead {
   background: rgba(var(--palette-blue-baby-blue-rgb), 0.22);
 }
 
-.supervisor-event-center .admin-event-center-type-icon {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .admin-event-center-type-icon {
   background: rgba(var(--palette-blue-baby-blue-rgb), 0.35);
 }
 
-.supervisor-event-center .admin-event-center-progress-track,
-.supervisor-event-detail-root .admin-event-center-progress-track {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .admin-event-center-progress-track,
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .admin-event-center-progress-track {
   background: rgba(var(--palette-blue-light-grey-rgb), 0.55);
 }
 
-.supervisor-event-detail-root .admin-kpi-card {
-  border-color: rgba(var(--palette-blue-light-grey-rgb), 0.85);
-  background: #fbfdff;
-}
-
-.supervisor-event-detail-root .admin-kpi-card--neutral {
-  background: rgba(var(--palette-blue-platinum-rgb), 0.7);
-}
-
-.supervisor-event-detail-root .admin-dept-status-table th {
-  background: rgba(var(--palette-blue-baby-blue-rgb), 0.22);
-}
-
-.supervisor-event-detail-root .admin-dept-status-card:hover {
-  border-color: var(--member-accent);
-}
-
 /* Filter / tab chips: solid member navy when active (not admin purple) */
-.supervisor-event-center .event-filter-chip,
-.supervisor-event-detail-root .event-filter-chip {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .event-filter-chip,
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .event-filter-chip {
   border-color: #d6e3f3;
   background: #f7fbff;
   color: #345273;
 }
 
-.supervisor-event-center .event-filter-chip:hover,
-.supervisor-event-detail-root .event-filter-chip:hover {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .event-filter-chip:hover,
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .event-filter-chip:hover {
   border-color: #bfdbfe;
   color: var(--member-nav-bg);
 }
 
-.supervisor-event-center .event-filter-chip.is-active,
-.supervisor-event-detail-root .admin-event-detail-tabs .event-filter-chip.is-active {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .event-filter-chip.is-active,
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .event-filter-chip.is-active {
   background: var(--member-nav-bg);
   color: #fff;
   border-color: var(--member-nav-bg);
 }
 
-.supervisor-event-center .event-filter-chip.is-active:hover,
-.supervisor-event-detail-root .admin-event-detail-tabs .event-filter-chip.is-active:hover {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .event-filter-chip.is-active:hover,
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .event-filter-chip.is-active:hover {
   background: var(--member-nav-active-bg);
   border-color: var(--member-nav-active-bg);
   color: #fff;
@@ -6342,7 +5958,7 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   margin-bottom: 0;
 }
 
-.supervisor-event-detail-root .supervisor-event-detail-scope-bar .admin-event-detail-scope-heading {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .supervisor-event-detail-scope-bar .admin-event-detail-scope-heading {
   color: var(--member-nav-bg);
 }
 
@@ -6357,42 +5973,47 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   gap: 14px;
 }
 
-.supervisor-event-detail-root .page-content-back,
-.supervisor-event-detail-root .dash-shell-back.dash-shell-back {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .page-content-back,
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .dash-shell-back.dash-shell-back {
   border-color: rgba(var(--palette-blue-midnight-rgb), 0.28);
   background: #eff6ff;
   color: var(--member-nav-bg);
 }
 
-.supervisor-event-detail-root .page-content-back:hover,
-.supervisor-event-detail-root .dash-shell-back.dash-shell-back:hover {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .page-content-back:hover,
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .dash-shell-back.dash-shell-back:hover {
   background: #dbeafe;
   color: var(--member-nav-bg);
   border-color: rgba(var(--palette-blue-midnight-rgb), 0.35);
 }
 
-.supervisor-event-detail-root .supervisor-dept-back {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .supervisor-dept-back {
   color: var(--member-nav-bg);
 }
 
-.supervisor-event-detail-root .dash-panel-elevated {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root .dash-panel-elevated {
   border-color: var(--member-border-soft);
 }
 
-.supervisor-event-center .admin-event-center-table-wrap {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .admin-event-center-table-wrap {
   border-color: var(--member-border-soft);
 }
 
-.supervisor-event-center .admin-event-center-tip {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .admin-event-center-tip {
   border-color: var(--member-border-soft);
   background: rgba(var(--palette-blue-baby-blue-rgb), 0.15);
 }
 
 /* --- Supervisor team report list (event center) --- */
-.supervisor-event-center {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center {
   --sv-status-safe-bar: #2ba95a;
   --sv-status-need-bar: #d53d3f;
   --sv-status-pending-bar: #8eb1d1;
+}
+
+.supervisor-event-center {
+  --sv-status-safe-bar: #2ba95a;
+  --sv-status-need-bar: #d53d3f;
 }
 
 .supervisor-event-center-toolbar {
@@ -6413,6 +6034,10 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   display: none;
 }
 
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .admin-event-center-progress-ring-pct {
+  color: var(--member-nav-bg);
+}
+
 .supervisor-event-center .admin-event-center-progress-ring-pct {
   position: absolute;
   inset: 0;
@@ -6421,13 +6046,20 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   justify-content: center;
   font-size: 0.625rem;
   font-weight: 700;
-  color: var(--member-nav-bg);
   line-height: 1;
   pointer-events: none;
 }
 
-.supervisor-event-center .admin-event-center-progress-ring-track {
+.app-frame:not(.app-frame--admin-center) .supervisor-event-center .admin-event-center-progress-ring-track {
   stroke: #e8eef5;
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-center .admin-event-center-progress-ring-track {
+  stroke: rgba(var(--palette-purple-iris-mist-rgb), 0.65);
+}
+
+.app-frame.app-frame--admin-center .supervisor-event-center .admin-event-center-progress-ring-pct {
+  color: var(--admin-accent);
 }
 
 .supervisor-event-center .admin-event-center-progress-ring-seg--safe {
@@ -6571,12 +6203,15 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
 }
 
 /* --- Supervisor event detail redesign --- */
-.supervisor-event-detail-root {
-  --sv-status-safe-bar: #2ba95a;
-  --sv-status-need-bar: #d53d3f;
+.app-frame:not(.app-frame--admin-center) .supervisor-event-detail-root {
   --sv-status-pending-bar: #8eb1d1;
   --sv-status-pending-bg: rgba(167, 199, 231, 0.35);
   --sv-status-pending-text: #345273;
+}
+
+.supervisor-event-detail-root {
+  --sv-status-safe-bar: #2ba95a;
+  --sv-status-need-bar: #d53d3f;
   display: grid;
   gap: 14px;
 }
@@ -6643,6 +6278,389 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   font-size: 0.8125rem;
   line-height: 1.45;
   color: #8aa3bd;
+}
+
+.sv-event-hero-close-footer {
+  margin-top: 6px;
+  padding-top: 14px;
+}
+
+.sv-event-hero-close-btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+/* Admin event detail — compact info + KPI + dept histogram */
+.admin-event-info-card {
+  padding: 14px 16px;
+}
+
+.admin-event-info-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-event-info-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-event-info-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-event-info-title {
+  margin: 0;
+  font-size: clamp(1.05rem, 3.5vw, 1.25rem);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--member-text);
+}
+
+.admin-event-info-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.admin-event-info-close-btn {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+}
+
+.admin-event-detail-body {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-event-kpi-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.admin-event-kpi-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--dash-danger, #a32d2d);
+  background: rgba(226, 75, 74, 0.08);
+  border: 1px solid rgba(226, 75, 74, 0.22);
+}
+
+.app-frame.app-frame--admin-center .admin-event-kpi-banner {
+  color: #8b2e2e;
+  background: rgba(226, 75, 74, 0.1);
+  border-color: rgba(226, 75, 74, 0.25);
+}
+
+.admin-event-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-event-stat-card {
+  padding: 10px 8px;
+  border-radius: 10px;
+  text-align: center;
+  background: var(--color-background-secondary, rgba(var(--palette-purple-iris-mist-rgb), 0.22));
+}
+
+.app-frame.app-frame--admin-center .admin-event-stat-card {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.28);
+}
+
+.admin-event-stat-num {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--member-text);
+}
+
+.admin-event-stat-num--pending {
+  color: var(--sv-status-pending-text, #854f0b);
+}
+
+.admin-event-stat-num--need {
+  color: var(--sv-status-need-bar, #d53d3f);
+}
+
+.admin-event-stat-num--safe {
+  color: var(--sv-status-safe-bar, #2ba95a);
+}
+
+.admin-event-stat-label {
+  margin-top: 2px;
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary, #64748b);
+}
+
+.admin-event-kpi-summary {
+  margin: 0;
+  text-align: center;
+  line-height: 1.45;
+}
+
+.admin-event-kpi-summary-dot {
+  opacity: 0.65;
+}
+
+.admin-dept-histogram {
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.admin-dept-histogram-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-dept-histogram-head-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-dept-histogram-hint {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.admin-dept-histogram-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--member-text);
+}
+
+.admin-dept-histogram-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary, #64748b);
+  cursor: pointer;
+}
+
+.admin-dept-histogram-link:hover {
+  color: var(--admin-accent, var(--member-text));
+  text-decoration: underline;
+}
+
+.admin-dept-histogram-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-dept-histogram-clear {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--admin-accent-soft, #345273);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.admin-dept-histogram-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.admin-dept-histogram-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-chip-border, rgba(var(--palette-purple-iris-mist-rgb), 0.55));
+  background: var(--admin-surface-content, #fff);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-dept-histogram-row-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-dept-histogram-row:hover {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.18);
+  border-color: var(--admin-chip-border-active, rgba(var(--palette-purple-iris-mist-rgb), 0.75));
+}
+
+.admin-dept-histogram-row:focus-visible {
+  outline: 2px solid var(--admin-accent, #6b4fa0);
+  outline-offset: 2px;
+}
+
+.admin-dept-histogram-row.is-active {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.32);
+  border-color: var(--admin-chip-border-active, rgba(26, 95, 180, 0.45));
+  box-shadow: 0 0 0 1px rgba(var(--palette-purple-iris-mist-rgb), 0.35);
+}
+
+.admin-dept-histogram-chevron {
+  flex-shrink: 0;
+  color: var(--admin-accent-soft, #64748b);
+  opacity: 0.75;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.admin-dept-histogram-row:hover .admin-dept-histogram-chevron,
+.admin-dept-histogram-row.is-active .admin-dept-histogram-chevron {
+  opacity: 1;
+  color: var(--admin-accent, #6b4fa0);
+}
+
+.admin-dept-histogram-row:hover .admin-dept-histogram-chevron {
+  transform: translateX(2px);
+}
+
+.admin-dept-histogram-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.admin-dept-histogram-name {
+  font-weight: 600;
+  color: var(--member-text);
+}
+
+.admin-dept-histogram-alert {
+  font-weight: 600;
+  color: var(--sv-status-need-bar, #d53d3f);
+  white-space: nowrap;
+}
+
+.admin-dept-histogram-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-dept-histogram-legend-item--need {
+  color: var(--sv-status-need-bar, #d53d3f);
+}
+
+.admin-dept-histogram-legend-item--safe {
+  color: var(--sv-status-safe-bar, #2ba95a);
+}
+
+.admin-roster-section-title {
+  margin: 0 0 4px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--member-text);
+}
+
+.admin-roster-scope-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.28);
+  border: 1px solid var(--admin-chip-border, rgba(var(--palette-purple-iris-mist-rgb), 0.55));
+}
+
+.admin-roster-scope-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--admin-accent, var(--member-text));
+}
+
+.admin-roster-scope-clear {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--admin-accent-soft, #345273);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.admin-event-roster-panel .sv-roster-toolbar {
+  margin-top: 4px;
+}
+
+.admin-roster-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--color-border-tertiary, rgba(0, 0, 0, 0.08));
+}
+
+.app-frame.app-frame--admin-center .admin-roster-divider {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.55);
+}
+
+.admin-roster-pending-cta-wrap {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.admin-roster-pending-cta {
+  padding: 6px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--admin-chip-border, var(--color-border-tertiary, #d6e3f3));
+  background: transparent;
+  color: var(--color-text-secondary, #64748b);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.admin-roster-pending-cta:hover {
+  background: rgba(var(--palette-purple-iris-mist-rgb), 0.22);
+  border-color: var(--admin-chip-border-active);
+  color: var(--admin-accent-soft);
+}
+
+@media (min-width: 640px) {
+  .admin-event-info-close-btn {
+    width: auto;
+  }
 }
 
 /* Insight card — reference dashboard metric + distribution */

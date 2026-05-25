@@ -10,7 +10,7 @@ import { DirectReportsListPage } from './profile/DirectReportsListPage';
 import { FirstLoginWizard } from './profile/SetupGuideWizard';
 import { ProfileSettingsPage } from './profile/ProfileSettingsPage';
 import { LoginPage } from './features/auth/AuthScreens';
-import { SupervisorDashboardPage, AdminDashboardPage } from './features/dashboard/DashboardPages';
+import { SupervisorDashboardPage, type DashboardStatusFilter } from './features/dashboard/DashboardPages';
 import {
   GlobalNotificationInboxPage,
   UserManagementPage,
@@ -137,7 +137,7 @@ function App() {
   const eventsSelectionInitialized = useRef(false);
   const supervisorDashEventIdRef = useRef('');
   const adminDashEventIdRef = useRef('');
-  const [adminDepartmentFilter, setAdminDepartmentFilter] = useState<string | null>(null);
+  const [adminDepartmentFilter, setAdminDepartmentFilter] = useState('all');
   const [closingAdminEventId, setClosingAdminEventId] = useState<string | null>(null);
   const [userMgmtSelectedDeptId, setUserMgmtSelectedDeptId] = useState<string | null>(null);
   const [eventTypeCatalog, setEventTypeCatalog] = useState<{ name: string }[] | null>(null);
@@ -294,6 +294,7 @@ function App() {
   }, [session.isLoggedIn]);
 
   const [supervisorFilter, setSupervisorFilter] = useState<'all' | 'safe' | 'need_help'>('all');
+  const [adminFilter, setAdminFilter] = useState<DashboardStatusFilter>('all');
   const [searchText, setSearchText] = useState('');
   const [eventForm, setEventForm] = useState(createInitialEventForm);
   const [supervisorDeptFilter, setSupervisorDeptFilter] = useState<string>('all');
@@ -624,11 +625,13 @@ function App() {
             setNavKey(supervisorOpenedDetailFrom === 'team-dashboard-home' ? 'team-dashboard-home' : 'member-home'),
         };
       }
-      case 'admin-event-detail':
+      case 'admin-event-detail': {
+        const { dash } = getStrings(locale);
         return {
-          title: selectedAdminEvent?.title ?? LC.adminSidebarTitle,
+          title: dash.adminEventDetailTitle,
           onBack: () => setNavKey('admin-dashboard'),
         };
+      }
       case 'profile-direct-reports-list':
         return {
           title: PP.directReports,
@@ -867,10 +870,19 @@ function App() {
     locale,
   ]);
 
-  const adminEventDetailRows = useMemo(() => {
-    if (!adminDepartmentFilter) return employeeRows;
+  const adminDepartmentOptions = useMemo(() => {
+    const names = new Set(
+      employeeRows.map((r) => r.department).filter((d) => d && d !== '-' && d.trim() !== ''),
+    );
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [employeeRows]);
+
+  const adminShowDeptTabs = adminDepartmentOptions.length > 1;
+
+  const adminFilteredRows = useMemo(() => {
+    if (!adminShowDeptTabs || adminDepartmentFilter === 'all') return employeeRows;
     return employeeRows.filter((r) => r.department === adminDepartmentFilter);
-  }, [adminDepartmentFilter, employeeRows]);
+  }, [employeeRows, adminDepartmentFilter, adminShowDeptTabs]);
 
   const supervisorDepartmentOptions = useMemo(() => {
     const names = new Set(
@@ -897,21 +909,13 @@ function App() {
       const responseRate = total ? Math.min(100, Math.round(((safe + needHelp) / total) * 100)) : 0;
       return { total, safe, needHelp, pending, responseRate };
     }
-    if (adminUi && adminDepartmentFilter) {
-      const scoped = employeeRows.filter((r) => r.department === adminDepartmentFilter);
-      const total = scoped.length;
-      const safe = scoped.filter((r) => r.status === 'safe').length;
-      const needHelp = scoped.filter((r) => r.status === 'need_help').length;
-      const pending = scoped.filter((r) => r.status === 'pending').length;
-      const responseRate = total ? Math.round(((safe + needHelp) / total) * 100) : 0;
-      return { total, safe, needHelp, pending, responseRate };
-    }
-    if (adminUi && adminViewAligned && adminDashboard) {
-      const kpis = adminDashboard.kpis;
-      const total = kpis.targeted;
-      const safe = kpis.safe;
-      const needHelp = kpis.need_help;
-      const pending = kpis.pending;
+    if (adminUi && selectedAdminEvent) {
+      /** Admin KPI 固定為全事件視角；部門篩選僅影響下方名單 */
+      const scope = employeeRows;
+      const total = scope.length;
+      const safe = scope.filter((r) => r.status === 'safe').length;
+      const needHelp = scope.filter((r) => r.status === 'need_help').length;
+      const pending = scope.filter((r) => r.status === 'pending').length;
       const responseRate = total ? Math.round(((safe + needHelp) / total) * 100) : 0;
       return { total, safe, needHelp, pending, responseRate };
     }
@@ -926,9 +930,7 @@ function App() {
     adminUi,
     supervisorViewAligned,
     supervisorDashboard,
-    adminViewAligned,
-    adminDashboard,
-    adminDepartmentFilter,
+    selectedAdminEvent,
     employeeRows,
     supervisorFilteredRows,
     scopedClientRows,
@@ -1002,12 +1004,17 @@ function App() {
   }, [session.isLoggedIn, refreshOperationalData]);
 
   useEffect(() => {
-    setAdminDepartmentFilter(null);
+    setAdminDepartmentFilter('all');
   }, [selectedAdminEventId]);
 
   useEffect(() => {
-    if (navKey !== 'admin-event-detail') setAdminDepartmentFilter(null);
-  }, [navKey]);
+    if (navKey !== 'admin-event-detail') {
+      setAdminDepartmentFilter('all');
+      setAdminFilter('all');
+      return;
+    }
+    if (adminFilter === 'pending') setAdminFilter('all');
+  }, [navKey, adminFilter]);
 
   useEffect(() => {
     if (!session.isLoggedIn || useMockOfflineCatalog) return;
@@ -1066,16 +1073,24 @@ function App() {
     }));
   }, [selectedSupervisorEventId, supervisorUi]);
 
+  useEffect(() => {
+    if (!selectedAdminEventId || !adminUi) return;
+    setContactedByEvent((prev) => ({
+      ...prev,
+      [selectedAdminEventId]: loadContactedMap(selectedAdminEventId),
+    }));
+  }, [selectedAdminEventId, adminUi]);
+
   const toggleNeedHelpContact = useCallback(
     (userId: string) => {
-      if (!selectedSupervisorEventId || !supervisorUi) return;
-      const eid = selectedSupervisorEventId;
+      const eid = adminUi ? selectedAdminEventId : selectedSupervisorEventId;
+      if (!eid || (!supervisorUi && !adminUi)) return;
       const base = contactedByEvent[eid] ?? loadContactedMap(eid);
       const nextMap = { ...base, [userId]: !(base[userId] ?? false) };
       saveContactedMap(eid, nextMap);
       setContactedByEvent((prev) => ({ ...prev, [eid]: nextMap }));
     },
-    [contactedByEvent, selectedSupervisorEventId, supervisorUi],
+    [contactedByEvent, selectedSupervisorEventId, selectedAdminEventId, supervisorUi, adminUi],
   );
 
   const dispatchRemindersForEvent = useCallback(
@@ -1389,9 +1404,10 @@ function App() {
   };
 
   const contactedForSupervisorRow = contactedByEvent[selectedSupervisorEventId] ?? {};
+  const contactedForAdminRow = contactedByEvent[selectedAdminEventId] ?? {};
 
   const pendingRatioHigh =
-    supervisorUi && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
+    (supervisorUi || adminUi) && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
   if (!session.isLoggedIn) {
     return (
       <LoginPage loading={!catalogLoaded} error={catalogError} onEmailLogin={handleEmailLogin} />
@@ -1531,7 +1547,9 @@ function App() {
             departmentOptions={supervisorDepartmentOptions}
             supervisorOwnDepartment={currentDepartment}
             filter={supervisorFilter}
-            setFilter={setSupervisorFilter}
+            setFilter={(value) => {
+              if (value !== 'pending') setSupervisorFilter(value);
+            }}
             searchText={searchText}
             setSearchText={setSearchText}
             contactedMap={contactedForSupervisorRow}
@@ -1551,6 +1569,7 @@ function App() {
             departments={departments}
             onSelectEvent={(eventId) => {
               setSelectedAdminEventId(eventId);
+              setAdminDepartmentFilter('all');
               setNavKey('admin-event-detail');
             }}
             adminQuickCreate={{
@@ -1570,18 +1589,28 @@ function App() {
           />
         )}
         {navKey === 'admin-event-detail' && adminUi && (
-          <AdminDashboardPage
+          <SupervisorDashboardPage
+            variant="admin"
             event={selectedAdminEvent}
             stats={stats}
-            rows={adminEventDetailRows}
+            rows={adminFilteredRows}
+            allRowsForDeptChart={employeeRows}
             departments={departments}
-            deptBreakdown={adminViewAligned && adminDashboard ? adminDashboard.departments : undefined}
-            deptRankingSourceRows={employeeRows}
-            dashboardFreshAt={dashboardUpdatedAt}
+            showDepartmentTabs={adminShowDeptTabs}
+            departmentFilter={adminDepartmentFilter}
+            setDepartmentFilter={setAdminDepartmentFilter}
+            departmentOptions={adminDepartmentOptions}
+            filter={adminFilter}
+            setFilter={setAdminFilter}
+            searchText={searchText}
+            setSearchText={setSearchText}
+            contactedMap={contactedForAdminRow}
+            onToggleContacted={toggleNeedHelpContact}
+            pendingRatioHigh={pendingRatioHigh}
             dashMismatchHint={adminDashMismatchHint}
+            dashboardFreshAt={dashboardUpdatedAt}
             onBackToEvents={() => setNavKey('admin-dashboard')}
-            selectedDepartment={adminDepartmentFilter}
-            onSelectDepartment={setAdminDepartmentFilter}
+            showToast={showToast}
             onCloseEvent={closeEventFromList}
             closingEventId={closingAdminEventId}
           />
