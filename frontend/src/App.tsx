@@ -87,6 +87,14 @@ const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
   'supervisor-event-detail',
 ];
 
+/** 可切回員工／主管模式時，管理中心不顯示這些共用頁（改由主系統進入）。 */
+const STAFF_PORTAL_NAV: NavKey[] = [
+  'notifications',
+  'profile',
+  'profile-direct-reports-list',
+  'profile-direct-report-history',
+];
+
 function App() {
   const { locale } = useLocale();
 
@@ -600,7 +608,12 @@ function App() {
       case 'notifications':
         return { title: LN.notifications };
       case 'profile':
-        return { title: LN.accountSettings };
+        return {
+          title:
+            session.surface === 'adminCenter' && !session.caps.hasStaffPortal
+              ? LN.adminSystemSettings
+              : LN.accountSettings,
+        };
       case 'admin-dashboard':
         return { title: LC.adminSidebarTitle };
       case 'user-management': {
@@ -651,6 +664,8 @@ function App() {
   }, [
     locale,
     navKey,
+    session.surface,
+    session.caps.hasStaffPortal,
     selectedSupervisorEvent?.title,
     selectedAdminEvent?.title,
     supervisorOpenedDetailFrom,
@@ -699,10 +714,14 @@ function App() {
       setNavKey('admin-dashboard');
       return;
     }
+    if (surface === 'adminCenter' && caps.hasStaffPortal && STAFF_PORTAL_NAV.includes(nk)) {
+      setNavKey('admin-dashboard');
+      return;
+    }
     if (surface === 'member' && !caps.canViewTeam && (nk === 'team-dashboard-home' || nk === 'supervisor-event-detail')) {
       setNavKey('member-home');
     }
-  }, [session.isLoggedIn, session.user, session.surface, session.caps.canViewTeam, navKey]);
+  }, [session.isLoggedIn, session.user, session.surface, session.caps.canViewTeam, session.caps.hasStaffPortal, navKey]);
 
   useEffect(() => {
     if (!hasPendingPersonalReports) return;

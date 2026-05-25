@@ -19,14 +19,22 @@ function navItemsMember(locale: AppLocale, canViewTeam: boolean): Array<{ key: N
   return rows;
 }
 
-function navItemsAdmin(locale: AppLocale): Array<{ key: NavKey; label: string }> {
+function navItemsAdmin(
+  locale: AppLocale,
+  hasStaffPortal: boolean,
+): Array<{ key: NavKey; label: string }> {
   const { layoutNav: L } = getStrings(locale);
-  return [
+  const rows: Array<{ key: NavKey; label: string }> = [
     { key: 'admin-dashboard', label: L.adminEvents },
     { key: 'user-management', label: L.adminUsers },
-    { key: 'notifications', label: L.adminNotifications },
-    { key: 'profile', label: L.adminSystemSettings },
   ];
+  if (!hasStaffPortal) {
+    rows.push(
+      { key: 'notifications', label: L.adminNotifications },
+      { key: 'profile', label: L.adminSystemSettings },
+    );
+  }
+  return rows;
 }
 
 export function Layout({
@@ -63,9 +71,9 @@ export function Layout({
   const { layoutChrome: chrome } = getStrings(locale);
   const navItems = useMemo(() => {
     return surface === 'adminCenter'
-      ? navItemsAdmin(locale)
+      ? navItemsAdmin(locale, caps.hasStaffPortal)
       : navItemsMember(locale, caps.canViewTeam);
-  }, [locale, surface, caps.canViewTeam]);
+  }, [locale, surface, caps.canViewTeam, caps.hasStaffPortal]);
   const sidebarTitle =
     surface === 'adminCenter' ? chrome.adminSidebarTitle : chrome.memberSidebarTitle;
   const sidebarSub = surface === 'adminCenter' ? chrome.adminSidebarSub : chrome.memberSidebarSub;
