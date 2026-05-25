@@ -52,8 +52,8 @@ def test_notifications_only_own(client, make_user, make_department, make_event):
     """Each team member sees only their own notification."""
     d = make_department("T")
     sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
-    emp1 = make_user(email="emp1@test.com", role="employee", department_id=d.department_id)
-    emp2 = make_user(email="emp2@test.com", role="employee", department_id=d.department_id)
+    emp1 = make_user(email="emp1@test.com", role="employee", department_id=d.department_id, fcm_token="test-fcm-token-1")
+    emp2 = make_user(email="emp2@test.com", role="employee", department_id=d.department_id, fcm_token="test-fcm-token-2")
     event = make_event(status="active")
 
     client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
@@ -86,7 +86,7 @@ def test_notifications_idempotent_second_reminder(client, make_user, make_depart
     """Sending reminders twice does not duplicate the notification row."""
     d = make_department("T")
     sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
-    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
+    emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id, fcm_token="test-fcm-token")
     event = make_event(status="active")
 
     client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
