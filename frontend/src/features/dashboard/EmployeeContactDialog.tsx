@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Copy } from 'lucide-react';
 import type { DashboardStrings } from '../../locale/strings';
-import type { ToastState } from '../../types';
+import type { SafetyStatus, ToastState } from '../../types';
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
@@ -25,23 +25,31 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 export function EmployeeContactDialog({
+  userId,
   name,
   department,
   phone,
   email,
   note,
   locationLine,
+  status,
+  contacted = false,
+  onToggleContacted,
   open,
   onClose,
   dash,
   showToast,
 }: {
+  userId: string;
   name: string;
   department: string;
   phone?: string;
   email?: string;
   note?: string;
   locationLine?: string;
+  status?: SafetyStatus;
+  contacted?: boolean;
+  onToggleContacted?: (userId: string) => void;
   open: boolean;
   onClose: () => void;
   dash: DashboardStrings;
@@ -78,6 +86,8 @@ export function EmployeeContactDialog({
     if (ok) showToast({ tone: 'success', message: '已複製到剪貼簿' });
     else showToast({ tone: 'danger', message: '無法複製，請手動選取' });
   };
+
+  const showContactToggle = status === 'need_help' && onToggleContacted;
 
   return (
     <div
@@ -117,6 +127,17 @@ export function EmployeeContactDialog({
             </li>
           ))}
         </ul>
+        {showContactToggle ? (
+          <div className="employee-contact-dialog-actions">
+            <button
+              type="button"
+              className={`btn ghost supervisor-contact-flag${contacted ? ' is-reached' : ''}`}
+              onClick={() => onToggleContacted(userId)}
+            >
+              {contacted ? dash.contacted : dash.markContacted}
+            </button>
+          </div>
+        ) : null}
         <div className="modal-actions">
           <button type="button" className="btn primary" onClick={onClose}>
             {dash.supervisorContactClose}

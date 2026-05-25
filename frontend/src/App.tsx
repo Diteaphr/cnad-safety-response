@@ -1011,6 +1011,7 @@ function App() {
   useEffect(() => {
     if (!session.isLoggedIn || useMockOfflineCatalog) return;
     if (!supervisorUi || !selectedSupervisorEventId) return;
+    setSupervisorDashboard(null);
     let cancelled = false;
     void (async () => {
       try {
@@ -1028,6 +1029,7 @@ function App() {
   useEffect(() => {
     if (!session.isLoggedIn || useMockOfflineCatalog) return;
     if (!adminUi || !selectedAdminEventId) return;
+    setAdminDashboard(null);
     let cancelled = false;
     void (async () => {
       try {
@@ -1514,6 +1516,7 @@ function App() {
             departmentFilter={supervisorDeptFilter}
             setDepartmentFilter={setSupervisorDeptFilter}
             departmentOptions={supervisorDepartmentOptions}
+            supervisorOwnDepartment={currentDepartment}
             filter={supervisorFilter}
             setFilter={setSupervisorFilter}
             searchText={searchText}
@@ -1523,12 +1526,6 @@ function App() {
             pendingRatioHigh={pendingRatioHigh}
             dashMismatchHint={supervisorDashMismatchHint}
             dashboardFreshAt={dashboardUpdatedAt}
-            onSendReminder={() => {
-              const eid = selectedSupervisorEvent?.id;
-              if (eid) void dispatchRemindersForEvent(eid);
-            }}
-            onExport={() => showToast({ tone: 'info', message: 'Report exported and email queued.' })}
-            hideBulkTeamActions
             onBackToEvents={() =>
               setNavKey(supervisorOpenedDetailFrom === 'team-dashboard-home' ? 'team-dashboard-home' : 'member-home')
             }

@@ -136,7 +136,11 @@ export type DashboardStrings = {
   supervisorEventMetaViewScope: string;
   supervisorEventMetaCreated: string;
   supervisorEventMetaSynced: string;
+  supervisorEventScopeLabel: string;
+  supervisorYourDeptLabel: string;
+  supervisorViewingScopeLabel: string;
   supervisorViewScopeAll: (deptNames: string) => string;
+  supervisorSearchToggleLabel: string;
   supervisorPendingListBtn: string;
   supervisorPendingListTitle: string;
   supervisorHighPendingTag: string;
@@ -669,7 +673,11 @@ const dashZh: DashboardStrings = {
   supervisorEventMetaViewScope: '部門資料',
   supervisorEventMetaCreated: '建立時間',
   supervisorEventMetaSynced: '上次同步',
+  supervisorEventScopeLabel: '事件範圍',
+  supervisorYourDeptLabel: '您的部門',
+  supervisorViewingScopeLabel: '目前查看',
   supervisorViewScopeAll: (deptNames) => `全部轄下（${deptNames}）`,
+  supervisorSearchToggleLabel: '搜尋同仁',
   supervisorPendingListBtn: '尚未回報名單',
   supervisorPendingListTitle: '尚未回報人員',
   supervisorHighPendingTag: '逾三成未回報',
@@ -811,7 +819,11 @@ const dashEn: DashboardStrings = {
   supervisorEventMetaViewScope: 'Department data',
   supervisorEventMetaCreated: 'Created',
   supervisorEventMetaSynced: 'Last synced',
+  supervisorEventScopeLabel: 'Event scope',
+  supervisorYourDeptLabel: 'Your department',
+  supervisorViewingScopeLabel: 'Viewing',
   supervisorViewScopeAll: (deptNames) => `All direct reports (${deptNames})`,
+  supervisorSearchToggleLabel: 'Search employees',
   supervisorPendingListBtn: 'Pending list',
   supervisorPendingListTitle: 'Not yet reported',
   supervisorHighPendingTag: 'Over 30% pending',
