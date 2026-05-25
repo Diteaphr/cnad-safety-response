@@ -331,25 +331,40 @@ def dispatch_reminders(
         if lr is not None and lr.status == "safe":
             already_safe += 1
             continue
-        _notif_svc.deliver_with_fallback(
-            db,
-            event_id=event_id,
-            user_id=user.user_id,
-            primary_channel=f"fcm_reminder_{scan_window}",
-            primary_send_fn=lambda u=user: send_fcm_mock(
-                device_token=u.fcm_token or str(u.user_id),
-                title="安全確認提醒",
-                body=f"請盡快回報您的安全狀態：{event.title}",
-                data={"event_id": str(event_id)},
-            ),
-            fallback_channel=f"sms_reminder_{scan_window}" if (user.phone and _has_real_fcm_token(user)) else None,
-            fallback_send_fn=(
-                lambda u=user: send_twilio_sms_mock(
+
+        if _has_real_fcm_token(user):
+            # Has PWA token: try FCM first, SMS fallback if FCM fails and has phone.
+            _notif_svc.deliver_with_fallback(
+                db,
+                event_id=event_id,
+                user_id=user.user_id,
+                primary_channel=f"fcm_reminder_{scan_window}",
+                primary_send_fn=lambda u=user: send_fcm_mock(
+                    device_token=u.fcm_token,
+                    title="安全確認提醒",
+                    body=f"請盡快回報您的安全狀態：{event.title}",
+                    data={"event_id": str(event_id)},
+                ),
+                fallback_channel=f"sms_reminder_{scan_window}" if user.phone else None,
+                fallback_send_fn=(
+                    lambda u=user: send_twilio_sms_mock(
+                        to_e164=u.phone,
+                        body=f"【安全確認提醒】{event.title} 請回報您的安全狀態。",
+                    )
+                ) if user.phone else None,
+            )
+        elif user.phone:
+            # No PWA token but has phone: go directly to SMS.
+            _notif_svc.deliver_with_fallback(
+                db,
+                event_id=event_id,
+                user_id=user.user_id,
+                primary_channel=f"sms_reminder_{scan_window}",
+                primary_send_fn=lambda u=user: send_twilio_sms_mock(
                     to_e164=u.phone,
                     body=f"【安全確認提醒】{event.title} 請回報您的安全狀態。",
-                )
-            ) if (user.phone and _has_real_fcm_token(user)) else None,
-        )
+                ),
+            )
         sent += 1
 
     return {"sent": sent, "already_safe": already_safe, "total": len(employees)}

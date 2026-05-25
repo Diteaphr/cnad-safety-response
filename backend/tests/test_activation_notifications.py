@@ -303,6 +303,7 @@ def test_reminder_no_sms_fallback_when_user_has_no_phone(
         email="emp@test.com",
         role="employee",
         phone=None,
+        fcm_token="test-fcm-token",
         department_id=d.department_id,
     )
     event = make_event(status="active")
