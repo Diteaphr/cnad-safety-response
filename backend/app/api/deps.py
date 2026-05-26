@@ -44,6 +44,38 @@ def verify_pubsub_oidc(request: Request) -> None:
         )
 
 
+def verify_scheduler_oidc(request: Request) -> None:
+    """Verify Cloud Scheduler OIDC token for the reminder-scan endpoint.
+
+    Audience must match the target URL exactly (set when creating the Cloud Scheduler job).
+    Skipped when USE_GCP=false (local dev).
+    """
+    if not settings.use_gcp:
+        return
+
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing OIDC token")
+
+    audience = f"{settings.service_url.rstrip('/')}/api/internal/scheduler/reminder-scan"
+
+    try:
+        from google.auth.transport import requests as google_requests
+        from google.oauth2 import id_token
+
+        id_info = id_token.verify_oauth2_token(
+            token, google_requests.Request(), audience
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"Invalid OIDC token: {exc}") from exc
+
+    if settings.pubsub_sa_email and id_info.get("email") != settings.pubsub_sa_email:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Unauthorized service account: {id_info.get('email')}",
+        )
+
+
 def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
 ) -> uuid.UUID:
@@ -55,3 +87,10 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload.",
         ) from e
+
+
+def get_token_payload(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
+) -> dict:
+    """Return the full decoded JWT payload — used by the logout endpoint."""
+    return decode_token(credentials.credentials)

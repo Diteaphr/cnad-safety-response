@@ -9,7 +9,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_token_payload
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.schemas.portal import AdminUserCreateIn, AdminUserUpdateIn, ChangePasswordIn, CreateEventIn, DemoLoginIn, DepartmentCreateIn, DepartmentUpdateIn, EventActionIn, EventTypeCreateIn, FcmTokenIn, LoginIn, ProfileUpdateIn, RegisterIn, ReportIn
@@ -73,6 +73,11 @@ def register_account(payload: RegisterIn, db: Session = Depends(get_db)):
 @router.post("/auth/login")
 def login_with_email(payload: LoginIn, db: Session = Depends(get_db)):
     return _portal.login(db, payload)
+
+
+@router.post("/auth/logout")
+def logout(token_payload: Annotated[dict, Depends(get_token_payload)], db: Session = Depends(get_db)):
+    return _portal.logout(db, token_payload)
 
 
 @router.post("/auth/demo-login")

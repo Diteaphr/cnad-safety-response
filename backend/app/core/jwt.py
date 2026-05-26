@@ -27,7 +27,7 @@ def create_access_token(user_id: uuid.UUID, roles: list[str]) -> str:
 
 def decode_token(token: str) -> dict[str, Any]:
     try:
-        return jwt.decode(token, settings.jwt_secret, algorithms=[_ALGORITHM])
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[_ALGORITHM])
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,3 +40,22 @@ def decode_token(token: str) -> dict[str, Any]:
             detail="Invalid token.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from e
+
+    jti_str = payload.get("jti", "")
+    if jti_str:
+        import uuid
+        from app.core.database import SessionLocal
+        from app.models.revoked_token import RevokedToken
+        db = SessionLocal()
+        try:
+            revoked = db.get(RevokedToken, uuid.UUID(jti_str))
+        finally:
+            db.close()
+        if revoked is not None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    return payload

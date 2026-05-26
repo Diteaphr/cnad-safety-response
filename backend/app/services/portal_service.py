@@ -454,6 +454,12 @@ class PortalService:
                 "view_as": str(view_as) if view_as else None,
             }
 
+        from app.services.integrations.redis_placeholder import get_dashboard_cache, set_dashboard_cache
+        cache_key = f"dashboard:supervisor:{active_event.event_id}:{target_manager_id}"
+        cached = get_dashboard_cache(cache_key)
+        if cached is not None:
+            return cached
+
         # KPI: SQL aggregate over ALL recursive subordinates — no User objects loaded
         kpis = self._responses.kpi_for_manager_subordinates(
             db, event_id=active_event.event_id, manager_id=target_manager_id
@@ -506,12 +512,14 @@ class PortalService:
                     "sub_team_summary": None,
                 })
 
-        return {
+        result = {
             "event": self._event_out(active_event, nm),
             "kpis": kpis,
             "team": sorted(team, key=lambda x: (not x["needs_follow_up"], x["name"])),
             "view_as": str(view_as) if view_as else None,
         }
+        set_dashboard_cache(cache_key, result, ttl=30)
+        return result
 
     def admin_dashboard(
         self, db: Session, user_id: uuid.UUID, event_id: uuid.UUID | None = None
@@ -534,13 +542,22 @@ class PortalService:
                 "kpis": {"safe": 0, "need_help": 0, "responded": 0, "pending": 0, "targeted": 0},
                 "departments": [],
             }
+
+        from app.services.integrations.redis_placeholder import get_dashboard_cache, set_dashboard_cache
+        cache_key = f"dashboard:admin:{active_event.event_id}"
+        cached = get_dashboard_cache(cache_key)
+        if cached is not None:
+            return cached
+
         kpis = self._responses.admin_kpi(db, event_id=active_event.event_id)
         departments = self._responses.admin_dept_stats(db, event_id=active_event.event_id)
-        return {
+        result = {
             "event": self._event_out(active_event, nm),
             "kpis": kpis,
             "departments": departments,
         }
+        set_dashboard_cache(cache_key, result, ttl=30)
+        return result
 
     # ------------------------------------------------------------------
     # Profile (self-service)
@@ -930,6 +947,25 @@ class PortalService:
             "access_token": token,
             "token_type": "bearer",
         }
+
+    def logout(self, db: Session, token_payload: dict) -> dict[str, Any]:
+        from datetime import datetime, timezone
+        from app.models.revoked_token import RevokedToken
+        jti_str = token_payload.get("jti", "")
+        exp = token_payload.get("exp", 0)
+        if jti_str and exp:
+            import uuid
+            expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
+            db.merge(RevokedToken(jti=uuid.UUID(jti_str), expires_at=expires_at))
+            db.commit()
+            # clean up already-expired tokens to keep the table small
+            db.execute(
+                __import__("sqlalchemy").text(
+                    "DELETE FROM revoked_tokens WHERE expires_at < NOW()"
+                )
+            )
+            db.commit()
+        return {"status": "ok", "message": "Logged out."}
 
     def issue_demo_login_token(self, db: Session, *, user_id_str: str) -> dict[str, Any]:
         """Disabled — use email/password login with database accounts."""

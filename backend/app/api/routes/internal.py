@@ -33,7 +33,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import verify_pubsub_oidc
+from app.api.deps import verify_pubsub_oidc, verify_scheduler_oidc
 from app.core.database import get_db
 from app.schemas.response import SafetyResponseCreate
 from app.services.notification_dispatch import (
@@ -152,4 +152,20 @@ def dispatch_notifications(
 
     # Always return 200 so Pub/Sub marks the message as acknowledged.
     # Non-200 causes Pub/Sub to redeliver.
+    return {"status": "ok"}
+
+
+@router.post("/scheduler/reminder-scan")
+def trigger_reminder_scan(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_scheduler_oidc),
+):
+    """Cloud Scheduler calls this every 15 min to trigger reminder fan-out."""
+    from app.services.scheduler_service import scan_all_active_events
+    try:
+        scan_all_active_events(db)
+    except Exception as exc:
+        logger.exception("Reminder scan failed")
+        raise HTTPException(status_code=500, detail="Reminder scan failed") from exc
     return {"status": "ok"}

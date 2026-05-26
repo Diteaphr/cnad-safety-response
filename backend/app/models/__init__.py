@@ -9,6 +9,7 @@ from app.models.event_type import EventType
 from app.models.event import Event
 from app.models.safety_response import SafetyResponse
 from app.models.notification import Notification
+from app.models.revoked_token import RevokedToken
 
 __all__ = [
     "Role",
@@ -21,4 +22,5 @@ __all__ = [
     "Event",
     "SafetyResponse",
     "Notification",
+    "RevokedToken",
 ]
