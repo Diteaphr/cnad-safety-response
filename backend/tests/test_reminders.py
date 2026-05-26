@@ -61,13 +61,13 @@ def test_reminders_skips_safe_respondents(client, make_user, make_department, ma
     assert body["total_team"] == 1
 
 
-def test_reminders_sends_to_need_help_respondents(client, make_user, make_department, make_event):
+def test_reminders_skips_need_help_respondents(client, make_user, make_department, make_event):
     d = make_department("TeamDept")
     sup = make_user(email="sup@test.com", role="supervisor", managed_department_id=d.department_id)
     emp = make_user(email="emp@test.com", role="employee", department_id=d.department_id)
     event = make_event(status="active")
 
-    # emp reported "need_help" — should still receive reminder
+    # emp reported "need_help" — already responded, should not receive another reminder
     client.post(
         REPORTS,
         json={"eventId": str(event.event_id), "userId": str(emp.user_id), "status": "need_help"},
@@ -76,8 +76,8 @@ def test_reminders_sends_to_need_help_respondents(client, make_user, make_depart
 
     resp = client.post(_reminders_url(event.event_id), headers=auth_headers(sup))
     assert resp.status_code == 200
-    assert resp.json()["sent"] == 1
-    assert resp.json()["already_safe"] == 0
+    assert resp.json()["sent"] == 0
+    assert resp.json()["already_safe"] == 1
 
 
 def test_reminders_no_subordinates(client, make_user, make_event):
@@ -115,8 +115,8 @@ def test_reminders_multiple_team_members(client, make_user, make_department, mak
     assert resp.status_code == 200
     body = resp.json()
     assert body["total_team"] == 3
-    assert body["already_safe"] == 1
-    assert body["sent"] == 2  # emp2 (need_help) + emp3 (pending)
+    assert body["already_safe"] == 2  # emp1 (safe) + emp2 (need_help) both skipped
+    assert body["sent"] == 1  # only emp3 (pending) gets reminded
 
 
 def test_reminders_idempotent(client, make_user, make_department, make_event):
