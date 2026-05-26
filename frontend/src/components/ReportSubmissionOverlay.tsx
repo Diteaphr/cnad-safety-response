@@ -12,19 +12,6 @@ export type ReportSubmissionSummary = {
   attachmentName?: string;
 };
 
-function getSummaryRows(isSafe: boolean, submittedSummary: ReportSubmissionSummary | undefined, ec: any) {
-  const rows: Array<{ label: string; value: string }> = [];
-  if (!isSafe && submittedSummary) {
-    const loc = submittedSummary.location?.trim();
-    const comment = submittedSummary.comment?.trim();
-    const attach = submittedSummary.attachmentName?.trim();
-    if (loc) rows.push({ label: ec.locationLabel, value: loc });
-    if (comment) rows.push({ label: ec.commentLabel, value: comment });
-    if (attach) rows.push({ label: ec.attachTitle, value: attach });
-  }
-  return rows;
-}
-
 export function ReportSubmissionOverlay({
   variant,
   mode = 'initial',
@@ -52,72 +39,65 @@ export function ReportSubmissionOverlay({
   useEffect(() => {
     dismissedRef.current = false;
     setSecondsLeft(AUTO_DISMISS_SECONDS);
-    const tick = globalThis.setInterval(() => {
+    const tick = window.setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
-          globalThis.clearInterval(tick);
+          window.clearInterval(tick);
           dismiss();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-    return () => globalThis.clearInterval(tick);
+    return () => window.clearInterval(tick);
   }, [variant, mode, eventTitle, dismiss]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') dismiss();
     };
-    globalThis.addEventListener('keydown', onKeyDown);
-    return () => globalThis.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [dismiss]);
 
   const isSafe = variant === 'safe';
   const isRevision = mode === 'revision';
-
-  let title = ec.overlayNeedHelpTitle;
-  if (isRevision) {
-    title = ec.overlayRevisionTitle;
-  } else if (isSafe) {
-    title = ec.overlayCompleteTitle;
-  }
-
-  let body = ec.overlayNeedHelpBody;
-  if (isRevision) {
-    body = isSafe ? ec.overlayRevisionSafeBody : ec.overlayRevisionNeedHelpBody;
-  } else if (isSafe) {
-    body = ec.statusDetailSafe;
-  }
-
+  const title = isRevision
+    ? ec.overlayRevisionTitle
+    : isSafe
+      ? ec.overlayCompleteTitle
+      : ec.overlayNeedHelpTitle;
+  const body = isRevision
+    ? isSafe
+      ? ec.overlayRevisionSafeBody
+      : ec.overlayRevisionNeedHelpBody
+    : isSafe
+      ? ec.statusDetailSafe
+      : ec.overlayNeedHelpBody;
   const ctaLabel = isSafe ? ec.overlayDone : ec.overlayGotIt;
 
-  const summaryRows = getSummaryRows(isSafe, submittedSummary, ec);
+  const summaryRows: Array<{ label: string; value: string }> = [];
+  if (!isSafe && submittedSummary) {
+    const loc = submittedSummary.location?.trim();
+    const comment = submittedSummary.comment?.trim();
+    const attach = submittedSummary.attachmentName?.trim();
+    if (loc) summaryRows.push({ label: ec.locationLabel, value: loc });
+    if (comment) summaryRows.push({ label: ec.commentLabel, value: comment });
+    if (attach) summaryRows.push({ label: ec.attachTitle, value: attach });
+  }
 
   return createPortal(
-    <div className={`report-submission-overlay report-submission-overlay--${variant}`}>
-      {/* NOSONAR */}
-      <button
-        type="button"
-        aria-label="Close"
-        className="report-submission-overlay-backdrop-fallback"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          opacity: 0,
-          cursor: 'pointer',
-          border: 'none',
-          background: 'none',
-          width: '100%',
-          height: '100%'
-        }}
-        onClick={dismiss}
-      />
-      <dialog
-        open
+    <div
+      className={`report-submission-overlay report-submission-overlay--${variant}`}
+      role="presentation"
+      onClick={dismiss}
+    >
+      <div
         className="report-submission-overlay-panel"
+        role="dialog"
+        aria-modal="true"
         aria-labelledby="report-submission-overlay-title"
-        style={{ position: 'relative' }}
+        onClick={(e) => e.stopPropagation()}
       >
         <p className="report-submission-overlay-countdown">{ec.overlayAutoCloseCountdown(secondsLeft)}</p>
 
@@ -150,7 +130,7 @@ export function ReportSubmissionOverlay({
         <button type="button" className="report-submission-overlay-cta" onClick={dismiss}>
           {ctaLabel}
         </button>
-      </dialog>
+      </div>
     </div>,
     document.body,
   );

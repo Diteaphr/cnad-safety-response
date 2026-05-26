@@ -4,7 +4,8 @@ import { PageHeader } from '../../components/PageHeader';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { adminCreateEventTypeApi, adminCreateUserApi, type PortalNotificationRow, type FailedNotificationRow } from '../../api';
+import type { FailedNotificationRow } from '../../api';
+import { adminCreateEventTypeApi, adminCreateUserApi, type PortalNotificationRow } from '../../api';
 import type { Department, EventItem, NotificationSummary, User } from '../../types';
 
 export type EventFormState = {
@@ -57,35 +58,11 @@ function isOtherEventType(name: string) {
   return name.trim().toLowerCase() === 'other';
 }
 
-function unassignedDeptLabel(locale: string) {
-  return locale === 'zh-Hant' ? '未分配部門' : 'Unassigned';
-}
-
-function getRosterTitle(
-  selectedDeptId: string | null,
-  locale: string,
-  deptList: Department[],
-): string {
-  if (selectedDeptId === '__none__') return unassignedDeptLabel(locale);
-  if (!selectedDeptId) return '';
-  return deptList.find((d) => d.id === selectedDeptId)?.name ?? '';
-}
-
-function getRosterEmployees(
-  selectedDeptId: string | null,
-  employeesByDept: Map<string, User[]>,
-): User[] {
-  if (selectedDeptId === '__none__') return employeesByDept.get('__none__') ?? [];
-  if (!selectedDeptId) return [];
-  return employeesByDept.get(selectedDeptId) ?? [];
-}
-
 function flattenDepts(depts: Department[]): { dept: Department; depth: number }[] {
   const childMap: Record<string, Department[]> = {};
   for (const d of depts) {
     const parent = d.parentId ?? '__root__';
-    childMap[parent] ??= [];
-    childMap[parent].push(d);
+    (childMap[parent] ??= []).push(d);
   }
   const result: { dept: Department; depth: number }[] = [];
   function walk(parentId: string, depth: number) {
@@ -107,7 +84,7 @@ export function AdminDeptHierarchyList({
   onToggleId,
   hint,
   countLabel,
-}: Readonly<{
+}: {
   flatDepts: { dept: Department; depth: number }[];
   mode: 'single' | 'multiple';
   selectedId?: string;
@@ -116,7 +93,7 @@ export function AdminDeptHierarchyList({
   onToggleId?: (id: string, checked: boolean) => void;
   hint?: string;
   countLabel?: string;
-}>) {
+}) {
   if (flatDepts.length === 0) return null;
   return (
     <div className="admin-notify-dept-picker">
@@ -167,7 +144,7 @@ export function AdminQuickCreateFormFields({
   departments,
   onEventTypesChanged,
   showToast,
-}: Readonly<{
+}: {
   p: ReturnType<typeof getStrings>['portal'];
   eventForm: EventFormState;
   setEventForm: (value: EventFormState) => void;
@@ -175,7 +152,7 @@ export function AdminQuickCreateFormFields({
   departments: Department[];
   onEventTypesChanged?: () => void | Promise<void>;
   showToast?: (t: { tone: 'success' | 'warning' | 'danger' | 'info'; message: string }) => void;
-}>) {
+}) {
   const [addTypeOpen, setAddTypeOpen] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
   const [addingType, setAddingType] = useState(false);
@@ -193,7 +170,7 @@ export function AdminQuickCreateFormFields({
       .filter((row) => !isOtherEventType(row.name))
       .sort((a, b) => {
         const d = rank(a.name) - rank(b.name);
-        return d === 0 ? a.name.localeCompare(b.name) : d;
+        return d !== 0 ? d : a.name.localeCompare(b.name);
       });
   }, [eventTypeCatalog]);
 
@@ -248,7 +225,11 @@ export function AdminQuickCreateFormFields({
             </option>
           ))}
         </select>
-        {addTypeOpen ? (
+        {!addTypeOpen ? (
+          <button type="button" className="auth-link event-form-add-type-link" onClick={() => setAddTypeOpen(true)}>
+            {p.addEventTypeLink}
+          </button>
+        ) : (
           <div className="event-form-add-type-panel">
             <input
               value={newTypeName}
@@ -278,10 +259,6 @@ export function AdminQuickCreateFormFields({
               </button>
             </div>
           </div>
-        ) : (
-          <button type="button" className="auth-link event-form-add-type-link" onClick={() => setAddTypeOpen(true)}>
-            {p.addEventTypeLink}
-          </button>
         )}
       </label>
       <label className="event-form-field">
@@ -311,10 +288,10 @@ export function AdminQuickCreateFormFields({
       <div className="event-form-field admin-notify-scope-field">
           <span className="event-form-field-label">{p.formLabelNotifyTarget}</span>
           <div className="admin-notify-scope-panel">
-            <fieldset className="admin-scope-toggle-row admin-notify-scope-mode" aria-label={p.formLabelNotifyTarget}>
+            <div className="admin-scope-toggle-row admin-notify-scope-mode" role="group" aria-label={p.formLabelNotifyTarget}>
               <button
                 type="button"
-                className={`admin-scope-toggle${limitToDept ? '' : ' is-active'}`}
+                className={`admin-scope-toggle${!limitToDept ? ' is-active' : ''}`}
                 onClick={() => setEventForm({ ...eventForm, targetDepartmentIds: [] })}
               >
                 {p.notifyScopeAll}
@@ -333,7 +310,7 @@ export function AdminQuickCreateFormFields({
               >
                 {p.notifyScopeDepartments}
               </button>
-            </fieldset>
+            </div>
             {limitToDept && flatDepts.length > 0 ? (
               <AdminDeptHierarchyList
                 mode="multiple"
@@ -368,7 +345,7 @@ export function EventSelectionPage({
   selectedEventId,
   onSelectEvent,
   adminQuickCreate,
-}: Readonly<{
+}: {
   variant: 'admin' | 'notification';
   events: EventItem[];
   selectedEventId: string;
@@ -381,7 +358,7 @@ export function EventSelectionPage({
     departments: Department[];
     onSubmitCreate: () => Promise<boolean>;
   };
-}>) {
+}) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
   const title = variant === 'admin' ? p.adminGlobalEventCenter : p.notificationEventCenter;
@@ -403,8 +380,8 @@ export function EventSelectionPage({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !createSubmittingRef.current) setCreateModalOpen(false);
     };
-    globalThis.addEventListener('keydown', onKey);
-    return () => globalThis.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [createModalOpen]);
 
   const submitQuickCreate = async () => {
@@ -423,23 +400,15 @@ export function EventSelectionPage({
       {variant === 'admin' && adminQuickCreate && createModalOpen ? (
         <div
           className="modal-backdrop admin-create-event-backdrop"
-          aria-hidden="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !createSubmitting) {
-              setCreateModalOpen(false);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-              if (!createSubmitting) setCreateModalOpen(false);
-            }
-          }}
+          role="presentation"
+          onClick={() => !createSubmitting && setCreateModalOpen(false)}
         >
-          <dialog
-            open
+          <div
             className="modal admin-create-event-modal"
+            role="dialog"
             aria-modal="true"
             aria-labelledby="admin-create-event-title"
+            onClick={(e) => e.stopPropagation()}
           >
             <h3 id="admin-create-event-title">{p.adminOverviewCreateTitle}</h3>
             <p className="muted-text small">{p.adminOverviewCreateBody}</p>
@@ -468,7 +437,7 @@ export function EventSelectionPage({
                 {createSubmitting ? '…' : p.createEventButton}
               </button>
             </div>
-          </dialog>
+          </div>
         </div>
       ) : null}
       <h2>{title}</h2>
@@ -528,7 +497,7 @@ export function UserManagementPage({
   selectedDeptId,
   onSelectedDeptIdChange,
   onAddModalOpenChange,
-}: Readonly<{
+}: {
   users: User[];
   departments: Department[];
   showToast: (t: { tone: 'success' | 'warning' | 'danger' | 'info'; message: string }) => void;
@@ -538,7 +507,7 @@ export function UserManagementPage({
   selectedDeptId: string | null;
   onSelectedDeptIdChange: (deptId: string | null) => void;
   onAddModalOpenChange?: (open: boolean) => void;
-}>) {
+}) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
   const flatDepts = useMemo(() => flattenDepts(deptList), [deptList]);
@@ -583,8 +552,8 @@ export function UserManagementPage({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !creatingRef.current) setAddModalOpenSynced(false);
     };
-    globalThis.addEventListener('keydown', onKey);
-    return () => globalThis.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [addModalOpen]);
 
   const resetNewUserForm = () => {
@@ -670,8 +639,18 @@ export function UserManagementPage({
     setNewDeptId,
   };
 
-  const rosterTitle = getRosterTitle(selectedDeptId, locale, deptList);
-  const rosterEmployees = getRosterEmployees(selectedDeptId, employeesByDept);
+  const rosterTitle =
+    selectedDeptId === '__none__'
+      ? locale === 'zh-Hant'
+        ? '未分配部門'
+        : 'Unassigned'
+      : (deptList.find((d) => d.id === selectedDeptId)?.name ?? '');
+  const rosterEmployees =
+    selectedDeptId === '__none__'
+      ? (employeesByDept.get('__none__') ?? [])
+      : selectedDeptId
+        ? (employeesByDept.get(selectedDeptId) ?? [])
+        : [];
 
   return (
     <section className="page-section portal-user-mgmt">
@@ -690,36 +669,95 @@ export function UserManagementPage({
             {creating ? '…' : p.userMgmtCreateSubmit}
           </button>
         </section>
-        <UserMgmtRosterPanel
-          p={p}
-          locale={locale}
-          selectedDeptId={selectedDeptId}
-          rosterTitle={rosterTitle}
-          rosterEmployees={rosterEmployees}
-          flatDepts={flatDepts}
-          employeesByDept={employeesByDept}
-          onSelectedDeptIdChange={onSelectedDeptIdChange}
-          onOpenAddModal={() => setAddModalOpenSynced(true)}
-        />
+        <section className="panel portal-user-mgmt-roster">
+          {selectedDeptId ? (
+            <>
+              <PageBackButton
+                onClick={() => onSelectedDeptIdChange(null)}
+                ariaLabel={p.userMgmtBackToDepts}
+              />
+              <h3>{rosterTitle}</h3>
+              {rosterEmployees.length === 0 ? (
+                <p className="muted-text empty">{p.userMgmtNoEmployeesInDept}</p>
+              ) : (
+                <div className="user-mgmt-roster-list">
+
+                  {rosterEmployees.map((user) => (
+                    <div className="list-item user-mgmt-roster-row" key={user.id}>
+                      <div>
+                        <strong>{user.name}</strong>
+                        <p>{user.email}</p>
+                        {user.phone ? <p className="muted-text small">{user.phone}</p> : null}
+                      </div>
+                      <span className="muted-text small">{user.pushEnabled ? p.pushEnabled : p.pushNotEnabled}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="user-mgmt-roster-head">
+                <h3>{p.userMgmtEmployeesByDept}</h3>
+                <button
+                  type="button"
+                  className="user-mgmt-add-trigger"
+                  onClick={() => setAddModalOpenSynced(true)}
+                  aria-label={p.userMgmtFabAddAccountAria}
+                  aria-haspopup="dialog"
+                >
+                  <Plus size={18} strokeWidth={2.4} aria-hidden />
+                  <span>{p.userMgmtAddAccount}</span>
+                </button>
+              </div>
+              <p className="muted-text small">{p.userMgmtEmployeesByDeptDesc}</p>
+              <div className="user-mgmt-dept-list">
+                {flatDepts.map(({ dept, depth }) => {
+                  const count = employeesByDept.get(dept.id)?.length ?? 0;
+                  return (
+                    <button
+                      type="button"
+                      key={dept.id}
+                      className="user-mgmt-dept-row"
+                      style={{ paddingLeft: 12 + depth * 14 }}
+                      onClick={() => onSelectedDeptIdChange(dept.id)}
+                    >
+                      <span className="user-mgmt-dept-name">{dept.name}</span>
+                      <span className="user-mgmt-dept-meta">
+                        <span className="muted-text">{p.userMgmtEmployeeCount(count)}</span>
+                        <ChevronRight size={18} aria-hidden />
+                      </span>
+                    </button>
+                  );
+                })}
+                {(employeesByDept.get('__none__')?.length ?? 0) > 0 ? (
+                  <button type="button" className="user-mgmt-dept-row" onClick={() => onSelectedDeptIdChange('__none__')}>
+                    <span className="user-mgmt-dept-name">{locale === 'zh-Hant' ? '未分配部門' : 'Unassigned'}</span>
+                    <span className="user-mgmt-dept-meta">
+                      <span className="muted-text">
+                        {p.userMgmtEmployeeCount(employeesByDept.get('__none__')?.length ?? 0)}
+                      </span>
+                      <ChevronRight size={18} aria-hidden />
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
+        </section>
       </div>
       {addModalOpen ? (
         <div
           className="modal-backdrop user-mgmt-add-backdrop"
-          aria-hidden="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !creating) setAddModalOpenSynced(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-              if (!creating) setAddModalOpenSynced(false);
-            }
-          }}
+          role="presentation"
+          onClick={() => !creating && setAddModalOpenSynced(false)}
         >
-          <dialog
-            open
+          <div
             className="modal user-mgmt-add-modal"
+            role="dialog"
             aria-modal="true"
             aria-labelledby="user-mgmt-add-title"
+            onClick={(e) => e.stopPropagation()}
           >
             <h3 id="user-mgmt-add-title">{p.userMgmtAddAccount}</h3>
             <UserMgmtAddAccountForm {...addAccountFormProps} />
@@ -741,105 +779,9 @@ export function UserManagementPage({
                 {creating ? '…' : p.userMgmtCreateSubmit}
               </button>
             </div>
-          </dialog>
+          </div>
         </div>
       ) : null}
-    </section>
-  );
-}
-
-function UserMgmtRosterPanel({
-  p,
-  locale,
-  selectedDeptId,
-  rosterTitle,
-  rosterEmployees,
-  flatDepts,
-  employeesByDept,
-  onSelectedDeptIdChange,
-  onOpenAddModal,
-}: Readonly<{
-  p: ReturnType<typeof getStrings>['portal'];
-  locale: string;
-  selectedDeptId: string | null;
-  rosterTitle: string;
-  rosterEmployees: User[];
-  flatDepts: { dept: Department; depth: number }[];
-  employeesByDept: Map<string, User[]>;
-  onSelectedDeptIdChange: (deptId: string | null) => void;
-  onOpenAddModal: () => void;
-}>) {
-  if (selectedDeptId) {
-    return (
-      <section className="panel portal-user-mgmt-roster">
-        <PageBackButton onClick={() => onSelectedDeptIdChange(null)} ariaLabel={p.userMgmtBackToDepts} />
-        <h3>{rosterTitle}</h3>
-        {rosterEmployees.length === 0 ? (
-          <p className="muted-text empty">{p.userMgmtNoEmployeesInDept}</p>
-        ) : (
-          <div className="user-mgmt-roster-list">
-            {rosterEmployees.map((user) => (
-              <div className="list-item user-mgmt-roster-row" key={user.id}>
-                <div>
-                  <strong>{user.name}</strong>
-                  <p>{user.email}</p>
-                  {user.phone ? <p className="muted-text small">{user.phone}</p> : null}
-                </div>
-                <span className="muted-text small">{user.pushEnabled ? p.pushEnabled : p.pushNotEnabled}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-    );
-  }
-
-  const unassignedCount = employeesByDept.get('__none__')?.length ?? 0;
-  return (
-    <section className="panel portal-user-mgmt-roster">
-      <div className="user-mgmt-roster-head">
-        <h3>{p.userMgmtEmployeesByDept}</h3>
-        <button
-          type="button"
-          className="user-mgmt-add-trigger"
-          onClick={onOpenAddModal}
-          aria-label={p.userMgmtFabAddAccountAria}
-          aria-haspopup="dialog"
-        >
-          <Plus size={18} strokeWidth={2.4} aria-hidden />
-          <span>{p.userMgmtAddAccount}</span>
-        </button>
-      </div>
-      <p className="muted-text small">{p.userMgmtEmployeesByDeptDesc}</p>
-      <div className="user-mgmt-dept-list">
-        {flatDepts.map(({ dept, depth }) => {
-          const count = employeesByDept.get(dept.id)?.length ?? 0;
-          return (
-            <button
-              type="button"
-              key={dept.id}
-              className="user-mgmt-dept-row"
-              style={{ paddingLeft: 12 + depth * 14 }}
-              onClick={() => onSelectedDeptIdChange(dept.id)}
-            >
-              <span className="user-mgmt-dept-name">{dept.name}</span>
-              <span className="user-mgmt-dept-meta">
-                <span className="muted-text">{p.userMgmtEmployeeCount(count)}</span>
-                <ChevronRight size={18} aria-hidden />
-              </span>
-            </button>
-          );
-        })}
-        {unassignedCount > 0 ? (
-          <button type="button" className="user-mgmt-dept-row" onClick={() => onSelectedDeptIdChange('__none__')}>
-            <span className="user-mgmt-dept-name">{unassignedDeptLabel(locale)}</span>
-            <span className="user-mgmt-dept-meta">
-              <span className="muted-text">{p.userMgmtEmployeeCount(unassignedCount)}</span>
-              <ChevronRight size={18} aria-hidden />
-            </span>
-          </button>
-        ) : null}
-      </div>
     </section>
   );
 }
@@ -858,7 +800,7 @@ function UserMgmtAddAccountForm({
   setNewEmployeeNo,
   newDeptId,
   setNewDeptId,
-}: Readonly<{
+}: {
   p: ReturnType<typeof getStrings>['portal'];
   flatDepts: { dept: Department; depth: number }[];
   creating: boolean;
@@ -872,7 +814,7 @@ function UserMgmtAddAccountForm({
   setNewEmployeeNo: (v: string) => void;
   newDeptId: string;
   setNewDeptId: (v: string) => void;
-}>) {
+}) {
   return (
     <div className="event-form user-mgmt-add-form" style={{ marginTop: 12 }}>
       <label className="event-form-field">
@@ -933,7 +875,7 @@ function UserMgmtAddAccountForm({
   );
 }
 
-export function GlobalNotificationInboxPage({ rows }: Readonly<{ rows: PortalNotificationRow[] }>) {
+export function GlobalNotificationInboxPage({ rows }: { rows: PortalNotificationRow[] }) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
   const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
@@ -973,52 +915,6 @@ export function GlobalNotificationInboxPage({ rows }: Readonly<{ rows: PortalNot
   );
 }
 
-function FailedDeliveriesList({
-  p,
-  locale,
-  loadingFailed,
-  failedRows,
-  canManageFailed,
-  onRetryFailed,
-}: Readonly<{
-  p: ReturnType<typeof getStrings>['portal'];
-  locale: string;
-  loadingFailed?: boolean;
-  failedRows: FailedNotificationRow[];
-  canManageFailed?: boolean;
-  onRetryFailed: (notificationId: string) => void;
-}>) {
-  const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
-  if (loadingFailed) {
-    return <p className="muted-text">{p.loading}</p>;
-  }
-  if (failedRows.length === 0) {
-    return <p className="empty">{p.noFailedDeliveries}</p>;
-  }
-  return (
-    <>
-      {failedRows.map((row) => (
-        <article className="list-item" key={row.id}>
-          <div>
-            <strong>{row.userName}</strong>
-            <p>
-              {(row.department ?? p.na)} · {row.channel}
-            </p>
-            <p>{row.sentAt ? new Date(row.sentAt).toLocaleString(localeTag) : p.notSentYet}</p>
-          </div>
-          {canManageFailed ? (
-            <button type="button" className="btn warning btn-sm" onClick={() => onRetryFailed(row.id)}>
-              {p.retryDelivery}
-            </button>
-          ) : (
-            <span className="muted-text">{p.adminOnlyManageFailed}</span>
-          )}
-        </article>
-      ))}
-    </>
-  );
-}
-
 export function NotificationPage({
   summary,
   failedRows,
@@ -1029,7 +925,7 @@ export function NotificationPage({
   onRetryFailed,
   onRefreshFailed,
   onBackToEvents,
-}: Readonly<{
+}: {
   summary: NotificationSummary;
   failedRows: FailedNotificationRow[];
   loadingFailed?: boolean;
@@ -1039,7 +935,7 @@ export function NotificationPage({
   onRetryFailed: (notificationId: string) => void;
   onRefreshFailed: () => void;
   onBackToEvents: () => void;
-}>) {
+}) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
 
@@ -1079,14 +975,33 @@ export function NotificationPage({
             </button>
           </div>
           <div className="list">
-            <FailedDeliveriesList
-              p={p}
-              locale={locale}
-              loadingFailed={loadingFailed}
-              failedRows={failedRows}
-              canManageFailed={canManageFailed}
-              onRetryFailed={onRetryFailed}
-            />
+            {loadingFailed ? (
+              <p className="muted-text">{p.loading}</p>
+            ) : failedRows.length === 0 ? (
+              <p className="empty">{p.noFailedDeliveries}</p>
+            ) : (
+              failedRows.map((row) => {
+                const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
+                return (
+                  <article className="list-item" key={row.id}>
+                    <div>
+                      <strong>{row.userName}</strong>
+                      <p>
+                        {(row.department ?? p.na)} · {row.channel}
+                      </p>
+                      <p>{row.sentAt ? new Date(row.sentAt).toLocaleString(localeTag) : p.notSentYet}</p>
+                    </div>
+                    {canManageFailed ? (
+                      <button type="button" className="btn warning btn-sm" onClick={() => onRetryFailed(row.id)}>
+                        {p.retryDelivery}
+                      </button>
+                    ) : (
+                      <span className="muted-text">{p.adminOnlyManageFailed}</span>
+                    )}
+                  </article>
+                );
+              })
+            )}
           </div>
         </section>
       </div>

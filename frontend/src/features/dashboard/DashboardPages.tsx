@@ -36,7 +36,7 @@ type AdminPersonRow = {
   locationLine?: string;
 };
 
-export function SupervisorDashboardPage({ // NOSONAR
+export function SupervisorDashboardPage({
   event,
   stats,
   rows,
@@ -61,7 +61,7 @@ export function SupervisorDashboardPage({ // NOSONAR
   variant = 'supervisor',
   onCloseEvent,
   closingEventId,
-}: Readonly<{
+}: {
   event: EventItem | null;
   stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
   rows: AdminPersonRow[];
@@ -87,7 +87,7 @@ export function SupervisorDashboardPage({ // NOSONAR
   variant?: 'supervisor' | 'admin';
   onCloseEvent?: (eventId: string) => void | Promise<void>;
   closingEventId?: string | null;
-}>) {
+}) {
   const { locale } = useLocale();
   const { dash, portal: portalStrings, statusBadge } = getStrings(locale);
   const [pendingListOpen, setPendingListOpen] = useState(false);
@@ -106,18 +106,19 @@ export function SupervisorDashboardPage({ // NOSONAR
     .sort((a, b) => (a.status === 'need_help' ? -1 : 1) - (b.status === 'need_help' ? -1 : 1));
   const pendingRows = rows.filter((row) => row.status === 'pending');
   const tableRows = filtered;
-  const rosterEmptyMessage = filter === 'all' ? dash.supervisorRosterNoReportedEmployees : undefined;
+  const rosterEmptyMessage =
+    filter === 'all'
+      ? isAdmin
+        ? dash.supervisorRosterNoReportedEmployees
+        : dash.supervisorRosterNoReportedEmployees
+      : undefined;
 
   const eventTitle = event ? stripRedundantStatusFromTitle(event.title) : '—';
   const typeDisplay = event ? formatAdminEventTypeLabel(event.type, portalStrings) : '—';
   const eventImpactScope = event ? formatEventImpactScope(event, deptList, portalStrings) : '—';
-  const updatedLine = Array.isArray(dashboardFreshAt) || !dashboardFreshAt
-    ? null
-    : (() => {
-        const freshDate = new Date(dashboardFreshAt);
-        const locStr = locale === 'en' ? 'en-US' : 'zh-TW';
-        return freshDate.toLocaleString(locStr);
-      })();
+  const updatedLine = dashboardFreshAt
+    ? new Date(dashboardFreshAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')
+    : null;
   const createdSource = event?.startAt ?? event?.createdAt ?? null;
   const createdLine = formatEmployeeCardTime(createdSource, locale);
   const syncedLine = updatedLine ?? '—';
@@ -251,14 +252,14 @@ export function SupervisorDashboardPage({ // NOSONAR
   );
 
   const pendingModal = pendingListOpen ? (
-    <div className="modal-backdrop">
-      <button 
-        type="button" 
-        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', border: 'none', background: 'none', width: '100%', height: '100%', zIndex: 0 }}
-        onClick={() => setPendingListOpen(false)}
-        aria-label="Close"
-      />
-      <dialog open className="modal sv-pending-list-modal" aria-labelledby="sv-pending-list-title" style={{ position: 'relative', zIndex: 1 }}>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setPendingListOpen(false);
+      }}
+    >
+      <div className="modal sv-pending-list-modal" role="dialog" aria-modal="true" aria-labelledby="sv-pending-list-title">
         <h3 id="sv-pending-list-title">{dash.supervisorPendingListTitle}</h3>
         <p className="muted-text small sv-pending-list-note">{dash.supervisorPendingListNote}</p>
         {pendingRows.length === 0 ? (
@@ -277,27 +278,20 @@ export function SupervisorDashboardPage({ // NOSONAR
             {dash.supervisorContactClose}
           </button>
         </div>
-      </dialog>
+      </div>
     </div>
   ) : null;
 
-  let confirmButtonLabel = dash.adminCloseEventConfirmOk;
-  if (closingEventId === event?.id) {
-    confirmButtonLabel = '…';
-  } else if (outstandingClose) {
-    confirmButtonLabel = dash.adminCloseEventConfirmAnyway;
-  }
-
   const closeEventModal =
     isAdmin && closeModalOpen ? (
-      <div className="modal-backdrop">
-        <button 
-          type="button" 
-          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', border: 'none', background: 'none', width: '100%', height: '100%', zIndex: 0 }}
-          onClick={() => setCloseModalOpen(false)}
-          aria-label="Close"
-        />
-        <dialog open className="modal admin-close-event-modal" aria-labelledby="admin-close-event-title" style={{ position: 'relative', zIndex: 1 }}>
+      <div
+        className="modal-backdrop"
+        role="presentation"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setCloseModalOpen(false);
+        }}
+      >
+        <div className="modal admin-close-event-modal" role="dialog" aria-modal="true" aria-labelledby="admin-close-event-title">
           <h3 id="admin-close-event-title">{dash.adminCloseEventTitle}</h3>
           {outstandingClose ? (
             <>
@@ -322,10 +316,14 @@ export function SupervisorDashboardPage({ // NOSONAR
               onClick={() => void handleConfirmClose()}
               disabled={closeSubmitting || closingEventId === event?.id}
             >
-              {confirmButtonLabel}
+              {closingEventId === event?.id
+                ? '…'
+                : outstandingClose
+                  ? dash.adminCloseEventConfirmAnyway
+                  : dash.adminCloseEventConfirmOk}
             </button>
           </div>
-        </dialog>
+        </div>
       </div>
     ) : null;
 

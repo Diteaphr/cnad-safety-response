@@ -7848,13 +7848,6 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   align-items: center;
   text-align: center;
   padding: 8px 8px 4px;
-  background: transparent;
-  border: none;
-  margin: 0;
-  color: inherit;
-  max-width: 100%;
-  max-height: 100%;
-  overflow: visible;
 }
 
 .report-submission-overlay-countdown {

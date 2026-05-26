@@ -15,6 +15,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import type { AdminEventListRow, Department } from '../../types';
 import { useLocale } from '../../locale/LocaleContext';
@@ -31,7 +32,7 @@ import {
 } from '../../lib/adminEventDisplay';
 import { formatEmployeeCardTime } from '../member/memberFormat';
 
-function TypeIcon({ type }: Readonly<{ type: string }>) {
+function TypeIcon({ type }: { type: string }) {
   const common = { size: 22 as const, strokeWidth: 2.1 as const, 'aria-hidden': true as const };
   switch (type) {
     case 'Earthquake':
@@ -58,11 +59,11 @@ function SupervisorStackedProgressBar({
   safe,
   needHelp,
   pending,
-}: Readonly<{
+}: {
   safe: number;
   needHelp: number;
   pending: number;
-}>) {
+}) {
   const totalSum = Math.max(safe + needHelp + pending, 1);
   const ws = `${(safe / totalSum) * 100}%`;
   const wn = `${(needHelp / totalSum) * 100}%`;
@@ -85,12 +86,12 @@ function SupervisorMobileProgressRing({
   needHelp,
   pending,
   responseRate,
-}: Readonly<{
+}: {
   safe: number;
   needHelp: number;
   pending: number;
   responseRate: number;
-}>) {
+}) {
   const size = 44;
   const stroke = 3.5;
   const radius = (size - stroke) / 2;
@@ -161,7 +162,7 @@ export function AdminEventCenterPage({
   onSelectEvent,
   adminQuickCreate,
   variant = 'admin',
-}: Readonly<{
+}: {
   rows: AdminEventListRow[];
   departments: Department[];
   onSelectEvent: (eventId: string) => void;
@@ -176,7 +177,7 @@ export function AdminEventCenterPage({
     onEventTypesChanged?: () => void | Promise<void>;
     showToast?: (t: { tone: 'success' | 'warning' | 'danger' | 'info'; message: string }) => void;
   };
-}>) {
+}) {
   const { locale } = useLocale();
   const { portal: p, dash, statusBadge } = getStrings(locale);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all');
@@ -199,8 +200,8 @@ export function AdminEventCenterPage({
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape' && !createSubmittingRef.current) setCreateModalOpen(false);
     };
-    globalThis.addEventListener('keydown', onKey);
-    return () => globalThis.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [createModalOpen]);
 
   const counts = useMemo(() => {
@@ -253,28 +254,26 @@ export function AdminEventCenterPage({
     onSelectEvent(eventId);
   };
 
+  const onRowKeyDown = (eventId: string) => (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    onSelectEvent(eventId);
+  };
+
   return (
     <section className="page-section admin-event-center supervisor-event-center">
       {variant === 'admin' && createModalOpen && adminQuickCreate ? (
         <div
           className="modal-backdrop admin-create-event-backdrop"
-          aria-hidden="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !createSubmitting) {
-              setCreateModalOpen(false);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-              if (!createSubmitting) setCreateModalOpen(false);
-            }
-          }}
+          role="presentation"
+          onClick={() => !createSubmitting && setCreateModalOpen(false)}
         >
-          <dialog
-            open
+          <div
             className="modal admin-create-event-modal"
+            role="dialog"
             aria-modal="true"
             aria-labelledby="admin-create-event-title"
+            onClick={(e) => e.stopPropagation()}
           >
             <h3 id="admin-create-event-title">{p.adminOverviewCreateTitle}</h3>
             <p className="muted-text small">{p.adminOverviewCreateBody}</p>
@@ -305,7 +304,7 @@ export function AdminEventCenterPage({
                 {createSubmitting ? '…' : p.createEventButton}
               </button>
             </div>
-          </dialog>
+          </div>
         </div>
       ) : null}
 
@@ -379,14 +378,14 @@ export function AdminEventCenterPage({
             <p className="empty muted-text admin-event-center-empty">{p.adminEventCenterEmpty}</p>
           ) : (
             <>
-              <div className="admin-event-center-thead">
+              <div className="admin-event-center-thead" role="row">
                 <span className="admin-event-center-th admin-event-center-th--event">{p.adminEventCenterColEvent}</span>
                 <span className="admin-event-center-th">{p.adminEventCenterColStatus}</span>
                 <span className="admin-event-center-th">{p.adminEventCenterColProgress}</span>
                 <span className="admin-event-center-th">{p.adminEventCenterColStats}</span>
                 <span className="admin-event-center-th admin-event-center-th--chev" aria-hidden />
               </div>
-              <div className="admin-event-center-tbody">
+              <div className="admin-event-center-tbody" role="presentation">
                 {pageRows.map((row) => {
                   const { event, total, safe, needHelp, pending, responseRate, reported } = row;
                   const scopeTime = `${formatEventImpactScope(event, departments, p)} · ${formatEventStart(event.startAt, locale)}`;
@@ -396,12 +395,14 @@ export function AdminEventCenterPage({
                   const isClosed = event.status === 'closed';
 
                   return (
-                    <button
-                      type="button"
+                    <div
                       key={event.id}
                       className="admin-event-center-row admin-event-center-row--supervisor"
-                      aria-label={event.title}
+                      role="row"
+                      tabIndex={0}
                       onClick={onRowClick(event.id)}
+                      onKeyDown={onRowKeyDown(event.id)}
+                      aria-label={event.title}
                     >
                       <div className="admin-event-center-card-head">
                         <div className="admin-event-center-cell admin-event-center-cell--event">
@@ -465,7 +466,7 @@ export function AdminEventCenterPage({
                           </li>
                         </ul>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -522,7 +523,7 @@ export function AdminEventCenterPage({
       ) : null}
 
       {tipVisible ? (
-        <output className="admin-event-center-tip">
+        <div className="admin-event-center-tip" role="status">
           <Lightbulb size={18} className="admin-event-center-tip-icon" aria-hidden />
           <p>{p.adminEventCenterTip}</p>
           <button
@@ -533,7 +534,7 @@ export function AdminEventCenterPage({
           >
             <X size={18} />
           </button>
-        </output>
+        </div>
       ) : null}
 
       {variant === 'admin' && adminQuickCreate ? (
