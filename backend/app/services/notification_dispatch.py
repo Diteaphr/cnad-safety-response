@@ -328,7 +328,7 @@ def dispatch_reminders(
     sent = already_safe = 0
     for user in employees:
         lr = latest_by_user.get(user.user_id)
-        if lr is not None and lr.status == "safe":
+        if lr is not None and lr.status in ("safe", "need_help"):
             already_safe += 1
             continue
 
