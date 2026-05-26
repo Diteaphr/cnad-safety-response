@@ -81,3 +81,26 @@ def test_empty_string_raises_401():
     with pytest.raises(HTTPException) as exc_info:
         decode_token("")
     assert exc_info.value.status_code == 401
+
+
+def test_blacklisted_token_raises_401(db):
+    """Token whose JTI is in revoked_tokens must be rejected."""
+    import uuid
+    from datetime import datetime, timedelta, timezone
+    from app.models.revoked_token import RevokedToken
+
+    uid = uuid.uuid4()
+    token = create_access_token(uid, ["employee"])
+    payload = decode_token(token)
+    jti = uuid.UUID(payload["jti"])
+
+    db.add(RevokedToken(
+        jti=jti,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=8),
+    ))
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        decode_token(token)
+    assert exc_info.value.status_code == 401
+    assert "revoked" in exc_info.value.detail.lower()

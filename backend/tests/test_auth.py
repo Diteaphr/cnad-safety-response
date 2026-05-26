@@ -78,6 +78,40 @@ def test_login_token_is_decodable(client, make_user):
     assert payload["sub"] == resp.json()["user"]["id"]
 
 
+LOGOUT = "/api/auth/logout"
+
+
+# ---------------------------------------------------------------------------
+# Logout + JWT blacklist
+# ---------------------------------------------------------------------------
+
+def test_logout_success(client, make_user):
+    make_user(email="alice@test.com", password="password123")
+    login = client.post(LOGIN, json={"email": "alice@test.com", "password": "password123"})
+    token = login.json()["access_token"]
+
+    resp = client.post(LOGOUT, headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
+def test_logout_token_revoked(client, make_user):
+    """Token cannot be used after logout — protected endpoint returns 401."""
+    make_user(email="alice@test.com", password="password123")
+    login = client.post(LOGIN, json={"email": "alice@test.com", "password": "password123"})
+    token = login.json()["access_token"]
+
+    client.post(LOGOUT, headers={"Authorization": f"Bearer {token}"})
+
+    resp = client.get("/api/users/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401
+
+
+def test_logout_unauthenticated_401(client, roles):
+    resp = client.post(LOGOUT)
+    assert resp.status_code in (401, 403)
+
+
 DEMO_LOGIN = "/api/auth/demo-login"
 
 
