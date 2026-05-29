@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 # TEST_DATABASE_URL lets CI / Docker override the host:port while keeping the DB name.
 _default_test_url = "postgresql+psycopg://user:password@localhost:15432/employee_safety_test"
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", _default_test_url)
+# Disable Redis during tests by default so the suite doesn't depend on a Redis
+# service, but allow the CI/container environment to override if explicitly set.
 os.environ.setdefault("REDIS_ENABLED", "false")
 
 import pytest
@@ -69,25 +71,33 @@ def _seed_four_event_types() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Session-scoped: create / drop tables once per pytest run
+# Lazy DB schema: only when a test uses the database (skip for no_db unit tests)
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="session", autouse=True)
-def _create_tables():
+_tables_initialized = False
+
+
+def _ensure_tables() -> None:
+    global _tables_initialized
+    if _tables_initialized:
+        return
     Base.metadata.create_all(bind=_engine)
     _seed_four_event_types()
+    _tables_initialized = True
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _dispose_engine_after_session():
     yield
-    Base.metadata.drop_all(bind=_engine)
     _engine.dispose()
 
 
-# ---------------------------------------------------------------------------
-# Function-scoped: truncate all tables before each test
-# ---------------------------------------------------------------------------
-
 @pytest.fixture(autouse=True)
-def _clean_tables(_create_tables):
+def _clean_tables(request):
     """Wipe all rows before every test so each test starts from a clean state."""
+    if request.node.get_closest_marker("no_db"):
+        return
+    _ensure_tables()
     table_names = ", ".join(t.name for t in Base.metadata.sorted_tables)
     with _engine.connect() as conn:
         conn.execute(text(f"TRUNCATE {table_names} CASCADE"))
@@ -101,7 +111,7 @@ def _clean_tables(_create_tables):
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def db(_clean_tables):
+def db(_clean_tables):  # noqa: ARG001 — triggers truncate via autouse
     """A SQLAlchemy Session connected to the test database."""
     session = _Session()
     try:
