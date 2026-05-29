@@ -42,6 +42,7 @@ class EventService:
                 title=payload.title,
                 event_type_id=et.event_type_id,
                 description=payload.description,
+                location=None,
                 status=payload.status,
                 created_by=actor_user_id,
                 start_time=payload.start_time,

@@ -1,0 +1,8 @@
+[run]
+source = app
+omit =
+    app/seeding/seed_demo.py
+
+[report]
+precision = 0
+skip_empty = True
