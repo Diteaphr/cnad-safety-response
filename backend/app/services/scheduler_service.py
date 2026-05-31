@@ -51,32 +51,45 @@ def scan_all_active_events(db) -> None:
         logger.debug("Reminder scan: no active events")
         return
 
-    for event in active_events:
+    # Pre-extract scalars so the event ORM objects can be freed before batching.
+    # Without this, SQLAlchemy's identity map accumulates every loaded User/Event/
+    # SafetyResponse across all batches and events, which causes OOM on large tenants.
+    event_snapshots = [
+        {
+            "event_id": event.event_id,
+            "title": event.title,
+            "target_dept_ids": (
+                [d.department_id for d in event.target_departments]
+                if event.target_departments else None
+            ),
+        }
+        for event in active_events
+    ]
+    db.expunge_all()
+
+    for ed in event_snapshots:
         total_sent = total_skipped = total = 0
-        target_dept_ids = (
-            [d.department_id for d in event.target_departments]
-            if event.target_departments else None
-        )
         offset = 0
         while True:
-            if target_dept_ids is not None:
+            if ed["target_dept_ids"] is not None:
                 batch = user_repo.list_employees_in_departments(
-                    db, department_ids=target_dept_ids,
+                    db, department_ids=ed["target_dept_ids"],
                     limit=_EMPLOYEE_BATCH_SIZE, offset=offset,
                 )
             else:
                 batch = user_repo.list_employees(db, limit=_EMPLOYEE_BATCH_SIZE, offset=offset)
             if not batch:
                 break
-            stats = dispatch_reminders(db, event.event_id, batch)
+            stats = dispatch_reminders(db, ed["event_id"], batch)
             total_sent += stats["sent"]
             total_skipped += stats["already_safe"]
             total += stats["total"]
             offset += _EMPLOYEE_BATCH_SIZE
+            db.expunge_all()
 
         logger.info(
             "Reminder scan: event %s (%s) → sent=%d already_safe=%d total=%d",
-            event.event_id, event.title,
+            ed["event_id"], ed["title"],
             total_sent, total_skipped, total,
         )
 
