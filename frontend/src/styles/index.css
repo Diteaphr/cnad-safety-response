@@ -1,0 +1,13 @@
+/* Aggregated app styles — import order preserves cascade. */
+@import "./base.css";
+@import "./employee-event-detail.css";
+@import "./employee-revision.css";
+@import "./employee-events-list.css";
+@import "./profile.css";
+@import "./member-event-home.css";
+@import "./dashboard.css";
+@import "./admin-center.css";
+@import "./supervisor.css";
+@import "./member-priority-home.css";
+@import "./overlays.css";
+@import "./setup-guide.css";

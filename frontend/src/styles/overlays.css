@@ -1,0 +1,190 @@
+/* Full-screen report submission overlay */
+.report-submission-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  animation: report-overlay-fade-in 0.28s ease;
+}
+
+.report-submission-overlay--safe {
+  background: #fff;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(46, 204, 113, 0.12) 0, transparent 42%),
+    radial-gradient(circle at 88% 12%, rgba(52, 152, 219, 0.08) 0, transparent 38%),
+    radial-gradient(circle at 72% 82%, rgba(46, 204, 113, 0.1) 0, transparent 40%);
+}
+
+.report-submission-overlay--need_help {
+  background: linear-gradient(165deg, #fff0ed 0%, #fde2e4 48%, #fff5f3 100%);
+}
+
+.report-submission-overlay-panel {
+  width: min(100%, 400px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 8px 8px 4px;
+  background: transparent;
+  border: none;
+  margin: 0;
+  color: inherit;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: visible;
+}
+
+.report-submission-overlay-countdown {
+  margin: 0 0 16px;
+  font-size: 0.82rem;
+  color: #7a92a8;
+}
+
+.report-submission-overlay--safe .report-submission-overlay-countdown {
+  color: #4a9a6a;
+}
+
+.report-submission-overlay--need_help .report-submission-overlay-countdown {
+  color: #c47266;
+}
+
+.report-submission-overlay-icon-wrap {
+  position: relative;
+  width: 108px;
+  height: 108px;
+  margin-bottom: 20px;
+}
+
+.report-submission-overlay-halo {
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(46, 204, 113, 0.28) 0%, transparent 68%);
+}
+
+.report-submission-overlay--need_help .report-submission-overlay-halo {
+  background: radial-gradient(circle, rgba(248, 131, 121, 0.32) 0%, transparent 68%);
+}
+
+.report-submission-overlay-icon-circle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: 0 12px 36px rgba(15, 39, 66, 0.14);
+}
+
+.report-submission-overlay--safe .report-submission-overlay-icon-circle {
+  background: #2ecc71;
+}
+
+.report-submission-overlay--need_help .report-submission-overlay-icon-circle {
+  background: #f88379;
+}
+
+.report-submission-overlay-title {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #1a334d;
+}
+
+.report-submission-overlay-event {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #3d5f85;
+}
+
+.report-submission-overlay-body {
+  margin: 0 0 16px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: #5a7088;
+  max-width: 32ch;
+}
+
+.report-submission-overlay-summary {
+  width: 100%;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(248, 131, 121, 0.25);
+  text-align: left;
+}
+
+.report-submission-overlay-summary-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 10px;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.report-submission-overlay-summary-row + .report-submission-overlay-summary-row {
+  margin-top: 8px;
+}
+
+.report-submission-overlay-summary-label {
+  color: #7a92a8;
+  white-space: nowrap;
+}
+
+.report-submission-overlay-summary-value {
+  color: #1a334d;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.report-submission-overlay-cta {
+  width: 100%;
+  max-width: 320px;
+  border: none;
+  border-radius: 999px;
+  padding: 14px 20px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+
+.report-submission-overlay--safe .report-submission-overlay-cta {
+  background: #2ecc71;
+  box-shadow: 0 8px 24px rgba(46, 204, 113, 0.35);
+}
+
+.report-submission-overlay--need_help .report-submission-overlay-cta {
+  background: #f88379;
+  box-shadow: 0 8px 24px rgba(248, 131, 121, 0.32);
+}
+
+@keyframes report-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Narrow viewports: in-page back controls (Layout header owns back / menu). */
+@media (max-width: 1024px) {
+  .page-content-back,
+  .employee-event-page-nav,
+  .supervisor-dept-back {
+    display: none !important;
+  }
+}
+

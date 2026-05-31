@@ -1,0 +1,88 @@
+/* ---------- Enterprise dashboard shell (supervisor / admin reference) ---------- */
+.dash-board-surface {
+  --dash-navy: var(--palette-blue-midnight);
+  --dash-navy-accent: var(--member-accent);
+  --dash-navy-soft: rgba(var(--palette-blue-platinum-rgb), 0.85);
+  --dash-card-shadow: 0 8px 28px var(--member-shadow-soft);
+  gap: 16px;
+  overflow-x: clip;
+  min-width: 0;
+  width: 100%;
+}
+
+.app-frame--admin-center .admin-dash-page.dash-board-surface {
+  --dash-navy: var(--admin-accent);
+  --dash-navy-accent: var(--admin-accent-soft);
+  --dash-navy-soft: rgba(var(--palette-purple-iris-mist-rgb), 0.28);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-shell-header {
+  border-bottom-color: var(--admin-border-subtle);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .page-content-back,
+.app-frame.app-frame--admin-center .admin-dash-page .dash-shell-back.dash-shell-back {
+  border-color: rgba(var(--palette-purple-midnight-orchid-rgb), 0.5);
+  background: var(--admin-cta-bg);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .page-content-back:hover,
+.app-frame.app-frame--admin-center .admin-dash-page .dash-shell-back.dash-shell-back:hover {
+  background: var(--admin-cta-bg-hover);
+  color: #fff;
+  border-color: rgba(var(--palette-purple-midnight-orchid-rgb), 0.65);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-event-overview {
+  border: 1px solid var(--admin-border-subtle);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-panel-elevated {
+  border: 1px solid var(--admin-border-subtle);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-dept-ranking-list .dash-dept-rank-row:hover {
+  background: var(--admin-nav-active-bg);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .list-item {
+  border-color: var(--admin-border-subtle);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .list-item p {
+  color: var(--admin-sidebar-muted);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-hero-kpi-row {
+  border-color: var(--admin-border-subtle);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-hero-kpi-row--primary {
+  background: rgba(var(--palette-purple-silver-wisteria-rgb), 0.22);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-hero-kpi-row--primary .dash-hero-kpi-value {
+  color: var(--admin-accent);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-donut-center {
+  box-shadow: inset 0 0 0 1px var(--admin-border-subtle);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-hero-progress {
+  background: rgba(var(--palette-purple-midnight-orchid-rgb), 0.1);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-kpi-card {
+  border-color: var(--admin-border-subtle);
+  box-shadow: 0 4px 14px rgba(var(--palette-purple-midnight-orchid-rgb), 0.06);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-kpi-card--primary .dash-kpi-card-icon {
+  color: var(--admin-accent-soft);
+}
+
+.app-frame.app-frame--admin-center .admin-dash-page .dash-kpi-card-label {
+  color: var(--admin-accent-soft);
+}
+
