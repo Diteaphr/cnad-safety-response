@@ -354,6 +354,11 @@ export function FirstLoginWizard({
                   {sg.stepHomeCheckbox}
                 </span>
               </label>
+              {homeAck && (
+                <div className="setup-guide-top-alert" role="note">
+                  <p>加到桌面後，請從桌面圖示重新開啟 App，再至「帳號與設定」頁面，關閉再開啟推播總開關，並確認手機系統已允許此 App 傳送通知。</p>
+                </div>
+              )}
             </section>
           </div>
         </div>
