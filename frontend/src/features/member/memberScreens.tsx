@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Activity,
   AlertCircle,
@@ -7,48 +7,36 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  ClipboardList,
-  CloudUpload,
-  FileImage,
-  Flame,
   Filter,
+  Flame,
   Headphones,
   Hourglass,
-  Info,
-  LifeBuoy,
-  MapPin,
-  MessageSquare,
   Package,
-  Paperclip,
-  Pencil,
   Phone,
-  RefreshCw,
   Search,
   ShieldCheck,
-  Trash2,
   Users,
   Wind,
 } from 'lucide-react';
-import { ConfirmModal } from '../../components/ConfirmModal';
 import { PageBackButton } from '../../components/PageBackButton';
 import { PageHeader } from '../../components/PageHeader';
-import { StatusBadge } from '../../components/StatusBadge';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import { stripRedundantStatusFromTitle } from '../../lib/adminEventDisplay';
-import { loadEmployeeReportDraft, saveEmployeeReportDraft } from '../../lib/employeeReportDraft';
 import type { Department, EventItem, SafetyResponse } from '../../types';
-import { formatEmployeeCardTime, formatFileSize } from './memberFormat';
+import { formatEmployeeCardTime } from './memberFormat';
 import { ReportHistoryCard } from './ReportHistoryCard';
 import { ReportRevisionModal } from './ReportRevisionModal';
+import { EmployeeQuickReportPanel } from './EmployeeQuickReportPanel';
+import type {
+  EmployeeReportFields,
+  EventFilterTab,
+  MemberHomeRow,
+  MemberMode,
+  TeamCounts,
+} from './memberTypes';
 
-export type EmployeeReportFields = {
-  comment: string;
-  location: string;
-  attachment: File | null;
-};
-
-const EMPTY_STACK_REPORT_FIELDS: EmployeeReportFields = { comment: '', location: '', attachment: null };
+export type { EmployeeReportFields, MemberHomeRow, MemberMode } from './memberTypes';
 
 function employeeEventTypeIcon(type: EventItem['type']) {
   switch (type) {
@@ -63,88 +51,260 @@ function employeeEventTypeIcon(type: EventItem['type']) {
   }
 }
 
+function personalEventStripeClass(isOngoingTab: boolean, pending: boolean, latest?: SafetyResponse): string {
+  if (!isOngoingTab) return 'muted';
+  if (pending) return 'pending';
+  if (latest?.status === 'need_help') return 'danger';
+  return 'safe';
+}
+
+function memberListSubtitleHero(mode: MemberMode): string {
+  if (mode === 3) {
+    return "Review direct reports' safety responses for events that include your department.";
+  }
+  if (mode === 2) {
+    return 'Submit your status and monitor your direct reports.';
+  }
+  return 'Stay informed. Report your status. Stay safe.';
+}
+
+function teamStripeClass(isOngoingTab: boolean, teamCounts: { needHelp: number; pending: number; safe: number }): string {
+  if (!isOngoingTab) return 'muted';
+  if (teamCounts.needHelp > 0) return 'danger';
+  if (teamCounts.pending > 0) return 'pending';
+  if (teamCounts.safe > 0) return 'safe';
+  return 'muted';
+}
+
+function MemberTeamMiniBadges({
+  teamCounts,
+  ariaLabel,
+  safeLabel,
+  needLabel,
+  pendingLabel,
+}: Readonly<{
+  teamCounts: TeamCounts;
+  ariaLabel: string;
+  safeLabel: string;
+  needLabel: string;
+  pendingLabel: string;
+}>) {
+  return (
+    <fieldset className="member-event-team-mini-badges">
+      <legend className="sr-only">{ariaLabel}</legend>
+      <span className="member-team-pill safe">
+        <CheckCircle2 size={12} strokeWidth={2.25} aria-hidden />
+        {safeLabel}
+      </span>
+      <span className={`member-team-pill${teamCounts.needHelp > 0 ? ' danger' : ''}`}>
+        <AlertCircle size={12} strokeWidth={2.25} aria-hidden />
+        {needLabel}
+      </span>
+      <span className="member-team-pill muted">
+        <Hourglass size={12} strokeWidth={2} aria-hidden />
+        {pendingLabel}
+      </span>
+    </fieldset>
+  );
+}
+
+function EmployeeOngoingStatusBlock({
+  pending,
+  latest,
+  ec,
+  respondedTimeStr,
+}: Readonly<{
+  pending: boolean;
+  latest?: SafetyResponse;
+  ec: ReturnType<typeof getStrings>['employee'];
+  respondedTimeStr: string;
+}>) {
+  let statusPill: ReactNode = null;
+  if (pending) {
+    statusPill = (
+      <span className="employee-events-status-pill pending">
+        <Hourglass size={14} strokeWidth={2} aria-hidden />
+        {ec.cardPendingLabel}
+      </span>
+    );
+  } else if (latest?.status === 'safe') {
+    statusPill = (
+      <span className="employee-events-status-pill safe">
+        <CheckCircle2 size={14} strokeWidth={2} aria-hidden />
+        {ec.cardReportedSafeLabel}
+      </span>
+    );
+  } else if (latest) {
+    statusPill = (
+      <span className="employee-events-status-pill danger">
+        <AlertCircle size={14} strokeWidth={2} aria-hidden />
+        {ec.cardReportedNeedLabel}
+      </span>
+    );
+  }
+
+  let hint: ReactNode = null;
+  if (pending) {
+    hint = <span className="employee-events-status-hint">{ec.cardAskSubmitHint}</span>;
+  } else if (latest) {
+    hint = <span className="employee-events-status-hint muted">{ec.cardRespondedHint(respondedTimeStr)}</span>;
+  }
+
+  return (
+    <>
+      {statusPill}
+      {hint}
+    </>
+  );
+}
+
+function EmployeeClosedStatusBlock({
+  latest,
+  ec,
+  closedDetailTime,
+}: Readonly<{
+  latest?: SafetyResponse;
+  ec: ReturnType<typeof getStrings>['employee'];
+  closedDetailTime: string;
+}>) {
+  let detail: ReactNode = (
+    <span className="employee-events-status-hint muted">{ec.cardNoSubmissionClosed}</span>
+  );
+  if (latest?.status === 'safe') {
+    detail = (
+      <span className="employee-events-closed-safe">
+        <CheckCircle2 size={14} className="text-safe" aria-hidden />
+        {ec.cardIamSafeShort} · {closedDetailTime}
+      </span>
+    );
+  } else if (latest?.status === 'need_help') {
+    detail = (
+      <span className="employee-events-closed-safe danger-text">
+        <AlertCircle size={14} aria-hidden />
+        {ec.cardNeedHelpShort} · {closedDetailTime}
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <span className="employee-events-status-pill closed">{ec.cardClosedBadge}</span>
+      {detail}
+    </>
+  );
+}
+
+function personalClosedDetail(latest: SafetyResponse | undefined, ec: ReturnType<typeof getStrings>['employee']): ReactNode {
+  if (latest?.status === 'safe') {
+    return (
+      <span className="employee-events-closed-safe">
+        <CheckCircle2 size={14} className="text-safe" aria-hidden />
+        {ec.dualPersonalSafeClosed}
+      </span>
+    );
+  }
+  if (latest?.status === 'need_help') {
+    return (
+      <span className="employee-events-closed-safe danger-text">
+        <AlertCircle size={14} aria-hidden />
+        {ec.dualPersonalNeedClosed}
+      </span>
+    );
+  }
+  return <span className="employee-events-status-hint muted">{ec.dualNoPersonalSubmissionClosed}</span>;
+}
+
+function EmployeePersonalMiniStatus({
+  isOngoingTab,
+  latest,
+  ec,
+}: Readonly<{
+  isOngoingTab: boolean;
+  latest?: SafetyResponse;
+  ec: ReturnType<typeof getStrings>['employee'];
+}>) {
+  if (isOngoingTab) {
+    if (!latest) {
+      return (
+        <span className="employee-events-status-pill pending">
+          <Hourglass size={14} strokeWidth={2} aria-hidden />
+          {ec.cardPendingLabel}
+        </span>
+      );
+    }
+    if (latest.status === 'safe') {
+      return (
+        <span className="employee-events-status-pill safe">
+          <CheckCircle2 size={14} strokeWidth={2} aria-hidden />
+          {ec.cardIamSafeShort}
+        </span>
+      );
+    }
+    return (
+      <span className="employee-events-status-pill danger">
+        <AlertCircle size={14} strokeWidth={2} aria-hidden />
+        {ec.cardNeedHelpShort}
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <span className="employee-events-status-pill closed">{ec.cardClosedBadge}</span>
+      {personalClosedDetail(latest, ec)}
+    </>
+  );
+}
+
+function formatCardRespondedTime(latest: SafetyResponse | undefined, pending: boolean, localeTag: string): string {
+  if (!latest || pending) return '';
+  return new Date(latest.updatedAt).toLocaleTimeString(localeTag, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatCardClosedTime(latest: SafetyResponse | undefined, isClosedTab: boolean, localeTag: string): string {
+  if (!latest || !isClosedTab) return '';
+  return new Date(latest.updatedAt).toLocaleString(localeTag, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function EmployeeEventListCard({
   event,
   latest,
   filterTab,
   selectedEventId,
   onSelectEvent,
-}: {
+}: Readonly<{
   event: EventItem;
   latest?: SafetyResponse;
-  filterTab: 'ongoing' | 'closed';
+  filterTab: EventFilterTab;
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
   const Icon = employeeEventTypeIcon(event.type);
   const deptLabel = event.cardDepartment ?? '';
   const isOngoingTab = filterTab === 'ongoing';
   const pending = !latest && isOngoingTab;
-  const stripeClass =
-    !isOngoingTab ? 'muted' : pending ? 'pending' : latest?.status === 'need_help' ? 'danger' : 'safe';
-  const respondedTimeStr =
-    latest && !pending
-      ? new Date(latest.updatedAt).toLocaleTimeString(locale === 'en' ? 'en-US' : 'zh-TW', {
-          hour: 'numeric',
-          minute: '2-digit',
-        })
-      : '';
-  const closedDetailTime =
-    latest && filterTab === 'closed'
-      ? new Date(latest.updatedAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW', {
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        })
-      : '';
+  const stripeClass = personalEventStripeClass(isOngoingTab, pending, latest);
+  const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
+  const respondedTimeStr = formatCardRespondedTime(latest, pending, localeTag);
+  const closedDetailTime = formatCardClosedTime(latest, filterTab === 'closed', localeTag);
 
   const ongoingStatusBlock = isOngoingTab ? (
-    <>
-      {pending ? (
-        <span className="employee-events-status-pill pending">
-          <Hourglass size={14} strokeWidth={2} aria-hidden />
-          {ec.cardPendingLabel}
-        </span>
-      ) : latest?.status === 'safe' ? (
-        <span className="employee-events-status-pill safe">
-          <CheckCircle2 size={14} strokeWidth={2} aria-hidden />
-          {ec.cardReportedSafeLabel}
-        </span>
-      ) : latest ? (
-        <span className="employee-events-status-pill danger">
-          <AlertCircle size={14} strokeWidth={2} aria-hidden />
-          {ec.cardReportedNeedLabel}
-        </span>
-      ) : null}
-      {pending ? (
-        <span className="employee-events-status-hint">{ec.cardAskSubmitHint}</span>
-      ) : latest ? (
-        <span className="employee-events-status-hint muted">{ec.cardRespondedHint(respondedTimeStr)}</span>
-      ) : null}
-    </>
+    <EmployeeOngoingStatusBlock pending={pending} latest={latest} ec={ec} respondedTimeStr={respondedTimeStr} />
   ) : null;
 
   const closedStatusBlock =
     filterTab === 'closed' ? (
-      <>
-        <span className="employee-events-status-pill closed">{ec.cardClosedBadge}</span>
-        {latest?.status === 'safe' ? (
-          <span className="employee-events-closed-safe">
-            <CheckCircle2 size={14} className="text-safe" aria-hidden />
-            {ec.cardIamSafeShort} · {closedDetailTime}
-          </span>
-        ) : latest?.status === 'need_help' ? (
-          <span className="employee-events-closed-safe danger-text">
-            <AlertCircle size={14} aria-hidden />
-            {ec.cardNeedHelpShort} · {closedDetailTime}
-          </span>
-        ) : (
-          <span className="employee-events-status-hint muted">{ec.cardNoSubmissionClosed}</span>
-        )}
-      </>
+      <EmployeeClosedStatusBlock latest={latest} ec={ec} closedDetailTime={closedDetailTime} />
     ) : null;
 
   return (
@@ -204,12 +364,6 @@ function EmployeeEventListCard({
   );
 }
 
-export type MemberHomeRow = {
-  event: EventItem;
-  latest?: SafetyResponse;
-  teamCounts?: { total: number; safe: number; needHelp: number; pending: number };
-};
-
 function MemberEventDualCard({
   event,
   latest,
@@ -219,78 +373,34 @@ function MemberEventDualCard({
   selectedTeamEventId,
   onOpenPersonal,
   onOpenTeam,
-}: {
+}: Readonly<{
   event: EventItem;
   latest?: SafetyResponse;
-  teamCounts: { total: number; safe: number; needHelp: number; pending: number };
-  filterTab: 'ongoing' | 'closed';
+  teamCounts: TeamCounts;
+  filterTab: EventFilterTab;
   selectedPersonalEventId: string;
   selectedTeamEventId: string;
   onOpenPersonal: (eventId: string) => void;
   onOpenTeam: (eventId: string) => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
   const Icon = employeeEventTypeIcon(event.type);
   const deptLabel = event.cardDepartment ?? '';
   const isOngoingTab = filterTab === 'ongoing';
   const pending = !latest && isOngoingTab;
-  const stripeClass =
-    !isOngoingTab ? 'muted' : pending ? 'pending' : latest?.status === 'need_help' ? 'danger' : 'safe';
+  const stripeClass = personalEventStripeClass(isOngoingTab, pending, latest);
 
-  const personalMini = isOngoingTab ? (
-    <>
-      {!latest ? (
-        <span className="employee-events-status-pill pending">
-          <Hourglass size={14} strokeWidth={2} aria-hidden />
-          {ec.cardPendingLabel}
-        </span>
-      ) : latest.status === 'safe' ? (
-        <span className="employee-events-status-pill safe">
-          <CheckCircle2 size={14} strokeWidth={2} aria-hidden />
-          {ec.cardIamSafeShort}
-        </span>
-      ) : (
-        <span className="employee-events-status-pill danger">
-          <AlertCircle size={14} strokeWidth={2} aria-hidden />
-          {ec.cardNeedHelpShort}
-        </span>
-      )}
-    </>
-  ) : (
-    <>
-      <span className="employee-events-status-pill closed">{ec.cardClosedBadge}</span>
-      {latest?.status === 'safe' ? (
-        <span className="employee-events-closed-safe">
-          <CheckCircle2 size={14} className="text-safe" aria-hidden />
-          {ec.dualPersonalSafeClosed}
-        </span>
-      ) : latest?.status === 'need_help' ? (
-        <span className="employee-events-closed-safe danger-text">
-          <AlertCircle size={14} aria-hidden />
-          {ec.dualPersonalNeedClosed}
-        </span>
-      ) : (
-        <span className="employee-events-status-hint muted">{ec.dualNoPersonalSubmissionClosed}</span>
-      )}
-    </>
-  );
+  const personalMini = <EmployeePersonalMiniStatus isOngoingTab={isOngoingTab} latest={latest} ec={ec} />;
 
   const teamMini = (
-    <div className="member-event-team-mini-badges" role="group" aria-label={ec.dualAriaTeamSummary}>
-      <span className="member-team-pill safe">
-        <CheckCircle2 size={12} strokeWidth={2.25} aria-hidden />
-        {ec.teamMiniSafe(teamCounts.safe)}
-      </span>
-      <span className={`member-team-pill${teamCounts.needHelp > 0 ? ' danger' : ''}`}>
-        <AlertCircle size={12} strokeWidth={2.25} aria-hidden />
-        {ec.teamMiniNeed(teamCounts.needHelp)}
-      </span>
-      <span className="member-team-pill muted">
-        <Hourglass size={12} strokeWidth={2} aria-hidden />
-        {ec.teamMiniPending(teamCounts.pending)}
-      </span>
-    </div>
+    <MemberTeamMiniBadges
+      teamCounts={teamCounts}
+      ariaLabel={ec.dualAriaTeamSummary}
+      safeLabel={ec.teamMiniSafe(teamCounts.safe)}
+      needLabel={ec.teamMiniNeed(teamCounts.needHelp)}
+      pendingLabel={ec.teamMiniPending(teamCounts.pending)}
+    />
   );
 
   return (
@@ -353,40 +463,28 @@ function MemberEventTeamCard({
   filterTab,
   selectedTeamEventId,
   onOpenTeam,
-}: {
+}: Readonly<{
   event: EventItem;
-  teamCounts: { total: number; safe: number; needHelp: number; pending: number };
-  filterTab: 'ongoing' | 'closed';
+  teamCounts: TeamCounts;
+  filterTab: EventFilterTab;
   selectedTeamEventId: string;
   onOpenTeam: (eventId: string) => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
   const Icon = employeeEventTypeIcon(event.type);
   const deptLabel = event.cardDepartment ?? '';
   const isOngoingTab = filterTab === 'ongoing';
-  let stripeClass: string;
-  if (!isOngoingTab) stripeClass = 'muted';
-  else if (teamCounts.needHelp > 0) stripeClass = 'danger';
-  else if (teamCounts.pending > 0) stripeClass = 'pending';
-  else if (teamCounts.safe > 0) stripeClass = 'safe';
-  else stripeClass = 'muted';
+  const stripeClass = teamStripeClass(isOngoingTab, teamCounts);
 
   const teamMini = (
-    <div className="member-event-team-mini-badges" role="group" aria-label={ec.dualAriaTeamSummary}>
-      <span className="member-team-pill safe">
-        <CheckCircle2 size={12} strokeWidth={2.25} aria-hidden />
-        {ec.teamMiniSafe(teamCounts.safe)}
-      </span>
-      <span className={`member-team-pill${teamCounts.needHelp > 0 ? ' danger' : ''}`}>
-        <AlertCircle size={12} strokeWidth={2.25} aria-hidden />
-        {ec.teamMiniNeed(teamCounts.needHelp)}
-      </span>
-      <span className="member-team-pill muted">
-        <Hourglass size={12} strokeWidth={2} aria-hidden />
-        {ec.teamMiniPending(teamCounts.pending)}
-      </span>
-    </div>
+    <MemberTeamMiniBadges
+      teamCounts={teamCounts}
+      ariaLabel={ec.dualAriaTeamSummary}
+      safeLabel={ec.teamMiniSafe(teamCounts.safe)}
+      needLabel={ec.teamMiniNeed(teamCounts.needHelp)}
+      pendingLabel={ec.teamMiniPending(teamCounts.pending)}
+    />
   );
 
   return (
@@ -427,6 +525,270 @@ function MemberEventTeamCard({
   );
 }
 
+function memberListOngoingIntro(mode: MemberMode) {
+  if (mode === 3) {
+    return (
+      <div className="employee-events-section-intro">
+        <Users className="employee-events-intro-icon" size={22} aria-hidden />
+        <div>
+          <h3>Ongoing Events</h3>
+          <p>Open teams first — sorted by unanswered direct reports.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="employee-events-section-intro">
+      <Activity className="employee-events-intro-icon" size={22} aria-hidden />
+      <div>
+        <h3>Ongoing Events</h3>
+        <p>Events that require your response.</p>
+      </div>
+    </div>
+  );
+}
+
+function memberListClosedIntro(mode: MemberMode) {
+  const closedBody =
+    mode === 3 ? "Past incidents for your team's departments." : 'Events that have ended.';
+  return (
+    <div className="employee-events-section-intro">
+      <Archive className="employee-events-intro-icon" size={22} aria-hidden />
+      <div>
+        <h3>Closed Events</h3>
+        <p>{closedBody}</p>
+      </div>
+    </div>
+  );
+}
+
+function renderMode1MemberCards(
+  filterTab: EventFilterTab,
+  pendingList: MemberHomeRow[],
+  respondedList: MemberHomeRow[],
+  closedFlat: MemberHomeRow[],
+  selectedPersonalEventId: string,
+  onOpenPersonal: (eventId: string) => void,
+) {
+  if (filterTab === 'closed') {
+    return closedFlat.map(({ event, latest }) => (
+      <EmployeeEventListCard
+        key={event.id}
+        event={event}
+        latest={latest}
+        filterTab="closed"
+        selectedEventId={selectedPersonalEventId}
+        onSelectEvent={onOpenPersonal}
+      />
+    ));
+  }
+  return (
+    <>
+      {pendingList.map(({ event, latest }) => (
+        <EmployeeEventListCard
+          key={event.id}
+          event={event}
+          latest={latest}
+          filterTab="ongoing"
+          selectedEventId={selectedPersonalEventId}
+          onSelectEvent={onOpenPersonal}
+        />
+      ))}
+      {respondedList.map(({ event, latest }) => (
+        <EmployeeEventListCard
+          key={event.id}
+          event={event}
+          latest={latest}
+          filterTab="ongoing"
+          selectedEventId={selectedPersonalEventId}
+          onSelectEvent={onOpenPersonal}
+        />
+      ))}
+    </>
+  );
+}
+
+function memberPendingRows(rows: MemberHomeRow[], mode: MemberMode, isOngoingFilter: boolean): MemberHomeRow[] {
+  if (!isOngoingFilter) return [];
+  if (mode === 3) return rows;
+  return rows.filter((r) => !r.latest);
+}
+
+function renderMode2MemberCards(
+  args: Readonly<{
+    filterTab: EventFilterTab;
+    pendingList: MemberHomeRow[];
+    respondedList: MemberHomeRow[];
+    closedFlat: MemberHomeRow[];
+    selectedPersonalEventId: string;
+    selectedTeamEventId: string;
+    onOpenPersonal: (eventId: string) => void;
+    onOpenTeam: (eventId: string) => void;
+  }>,
+) {
+  const {
+    filterTab,
+    pendingList,
+    respondedList,
+    closedFlat,
+    selectedPersonalEventId,
+    selectedTeamEventId,
+    onOpenPersonal,
+    onOpenTeam,
+  } = args;
+  const renderDual = ({ event, latest, teamCounts }: MemberHomeRow) => (
+    <MemberEventDualCard
+      key={event.id}
+      event={event}
+      latest={latest}
+      teamCounts={teamCounts!}
+      filterTab={filterTab}
+      selectedPersonalEventId={selectedPersonalEventId}
+      selectedTeamEventId={selectedTeamEventId}
+      onOpenPersonal={onOpenPersonal}
+      onOpenTeam={onOpenTeam}
+    />
+  );
+  if (filterTab === 'ongoing') {
+    return (
+      <>
+        {pendingList.map((row) => renderDual(row))}
+        {respondedList.map((row) => renderDual(row))}
+      </>
+    );
+  }
+  return closedFlat.map((row) => renderDual(row));
+}
+
+function renderMode3MemberCards(
+  filterTab: EventFilterTab,
+  pendingList: MemberHomeRow[],
+  respondedList: MemberHomeRow[],
+  closedFlat: MemberHomeRow[],
+  selectedTeamEventId: string,
+  onOpenTeam: (eventId: string) => void,
+) {
+  const renderTeamOnly = ({ event, teamCounts }: MemberHomeRow) => (
+    <MemberEventTeamCard
+      key={event.id}
+      event={event}
+      teamCounts={teamCounts!}
+      filterTab={filterTab}
+      selectedTeamEventId={selectedTeamEventId}
+      onOpenTeam={onOpenTeam}
+    />
+  );
+  if (filterTab === 'ongoing') {
+    return pendingList.concat(respondedList).map((row) => renderTeamOnly(row));
+  }
+  return closedFlat.map((row) => renderTeamOnly(row));
+}
+
+function renderMemberEventCards(
+  mode: MemberMode,
+  args: Readonly<{
+    pendingList: MemberHomeRow[];
+    respondedList: MemberHomeRow[];
+    closedFlat: MemberHomeRow[];
+    filterTab: EventFilterTab;
+    selectedPersonalEventId: string;
+    selectedTeamEventId: string;
+    onOpenPersonal: (eventId: string) => void;
+    onOpenTeam: (eventId: string) => void;
+  }>,
+) {
+  const { pendingList, respondedList, closedFlat, filterTab, selectedPersonalEventId, selectedTeamEventId, onOpenPersonal, onOpenTeam } =
+    args;
+  if (mode === 1) {
+    return renderMode1MemberCards(filterTab, pendingList, respondedList, closedFlat, selectedPersonalEventId, onOpenPersonal);
+  }
+  if (mode === 2) {
+    return renderMode2MemberCards({
+      filterTab,
+      pendingList,
+      respondedList,
+      closedFlat,
+      selectedPersonalEventId,
+      selectedTeamEventId,
+      onOpenPersonal,
+      onOpenTeam,
+    });
+  }
+  return renderMode3MemberCards(filterTab, pendingList, respondedList, closedFlat, selectedTeamEventId, onOpenTeam);
+}
+
+function MemberOngoingEventSections({
+  mode,
+  pendingRows,
+  respondedRows,
+  showPendingGroup,
+  pendingHeading,
+  pendingCount,
+  pendingListForCards,
+  cardListArgs,
+}: Readonly<{
+  mode: MemberMode;
+  pendingRows: MemberHomeRow[];
+  respondedRows: MemberHomeRow[];
+  showPendingGroup: boolean;
+  pendingHeading: string;
+  pendingCount: number;
+  pendingListForCards: MemberHomeRow[];
+  cardListArgs: {
+    selectedPersonalEventId: string;
+    selectedTeamEventId: string;
+    onOpenPersonal: (eventId: string) => void;
+    onOpenTeam: (eventId: string) => void;
+  };
+}>) {
+  return (
+    <>
+      {showPendingGroup ? (
+        <div
+          className={`employee-events-status-group employee-events-status-group--pending${mode === 3 ? ' member-mode3-single-list' : ''}`}
+        >
+          <h4 className="employee-events-group-heading">
+            {pendingHeading}
+            {' '}
+            <span className="employee-events-group-count">{pendingCount}</span>
+          </h4>
+          <div className="employee-events-group-cards">
+            {renderMemberEventCards(mode, {
+              pendingList: pendingListForCards,
+              respondedList: [],
+              closedFlat: [],
+              filterTab: 'ongoing',
+              ...cardListArgs,
+            })}
+          </div>
+        </div>
+      ) : null}
+      {mode !== 3 && respondedRows.length > 0 ? (
+        <div
+          className={`employee-events-status-group employee-events-status-group--responded${
+            pendingRows.length > 0 ? ' employee-events-status-group--after-pending' : ''
+          }`}
+        >
+          <h4 className="employee-events-group-heading">
+            Responded
+            {' '}
+            <span className="employee-events-group-count">{respondedRows.length}</span>
+          </h4>
+          <div className="employee-events-group-cards">
+            {renderMemberEventCards(mode, {
+              pendingList: [],
+              respondedList: respondedRows,
+              closedFlat: [],
+              filterTab: 'ongoing',
+              ...cardListArgs,
+            })}
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function MemberEventListPage({
   mode,
   rows,
@@ -440,163 +802,36 @@ export function MemberEventListPage({
   closedCount,
   searchQuery,
   setSearchQuery,
-}: {
-  mode: 1 | 2 | 3;
+}: Readonly<{
+  mode: MemberMode;
   rows: MemberHomeRow[];
   selectedPersonalEventId: string;
   selectedTeamEventId: string;
   onOpenPersonal: (eventId: string) => void;
   onOpenTeam: (eventId: string) => void;
-  employeeEventFilter: 'ongoing' | 'closed';
-  setEmployeeEventFilter: (value: 'ongoing' | 'closed') => void;
+  employeeEventFilter: EventFilterTab;
+  setEmployeeEventFilter: (value: EventFilterTab) => void;
   ongoingCount: number;
   closedCount: number;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
-}) {
-  const pendingRows =
-    employeeEventFilter === 'ongoing' ? rows.filter((r) => !(mode === 3 ? false : Boolean(r.latest))) : [];
-  const respondedRows =
-    employeeEventFilter === 'ongoing' ? rows.filter((r) => (mode === 3 ? false : Boolean(r.latest))) : [];
+}>) {
+  const isOngoingFilter = employeeEventFilter === 'ongoing';
+  const pendingRows = memberPendingRows(rows, mode, isOngoingFilter);
+  const respondedRows = isOngoingFilter && mode !== 3 ? rows.filter((r) => Boolean(r.latest)) : [];
+  const subtitleHero = memberListSubtitleHero(mode);
+  const ongoingIntro = memberListOngoingIntro(mode);
+  const closedIntro = memberListClosedIntro(mode);
+  const showPendingGroup = mode === 3 ? rows.length > 0 : pendingRows.length > 0;
+  const pendingHeading = mode === 3 ? 'Active' : 'Not responded yet';
+  const pendingCount = mode === 3 ? rows.length : pendingRows.length;
+  const pendingListForCards = mode === 3 ? rows : pendingRows;
 
-  const subtitleHero =
-    mode === 3
-      ? 'Review direct reports\' safety responses for events that include your department.'
-      : mode === 2
-        ? 'Submit your status and monitor your direct reports.'
-        : 'Stay informed. Report your status. Stay safe.';
-
-  const ongoingIntro =
-    mode === 3 ? (
-      <div className="employee-events-section-intro">
-        <Users className="employee-events-intro-icon" size={22} aria-hidden />
-        <div>
-          <h3>Ongoing Events</h3>
-          <p>Open teams first — sorted by unanswered direct reports.</p>
-        </div>
-      </div>
-    ) : (
-      <div className="employee-events-section-intro">
-        <Activity className="employee-events-intro-icon" size={22} aria-hidden />
-        <div>
-          <h3>Ongoing Events</h3>
-          <p>Events that require your response.</p>
-        </div>
-      </div>
-    );
-
-  const closedIntro =
-    mode === 3 ? (
-      <div className="employee-events-section-intro">
-        <Archive className="employee-events-intro-icon" size={22} aria-hidden />
-        <div>
-          <h3>Closed Events</h3>
-          <p>Past incidents for your team&apos;s departments.</p>
-        </div>
-      </div>
-    ) : (
-      <div className="employee-events-section-intro">
-        <Archive className="employee-events-intro-icon" size={22} aria-hidden />
-        <div>
-          <h3>Closed Events</h3>
-          <p>Events that have ended.</p>
-        </div>
-      </div>
-    );
-
-  const dualOrTeamCards = ({
-    pendingList,
-    respondedList,
-    closedFlat,
-    filterTab,
-  }: {
-    pendingList: MemberHomeRow[];
-    respondedList: MemberHomeRow[];
-    closedFlat: MemberHomeRow[];
-    filterTab: 'ongoing' | 'closed';
-  }) => {
-    if (mode === 1) {
-      if (filterTab === 'closed') {
-        return closedFlat.map(({ event, latest }) => (
-          <EmployeeEventListCard
-            key={event.id}
-            event={event}
-            latest={latest}
-            filterTab="closed"
-            selectedEventId={selectedPersonalEventId}
-            onSelectEvent={(id) => onOpenPersonal(id)}
-          />
-        ));
-      }
-      return (
-        <>
-          {pendingList.map(({ event, latest }) => (
-            <EmployeeEventListCard
-              key={event.id}
-              event={event}
-              latest={latest}
-              filterTab="ongoing"
-              selectedEventId={selectedPersonalEventId}
-              onSelectEvent={(id) => onOpenPersonal(id)}
-            />
-          ))}
-          {respondedList.map(({ event, latest }) => (
-            <EmployeeEventListCard
-              key={event.id}
-              event={event}
-              latest={latest}
-              filterTab="ongoing"
-              selectedEventId={selectedPersonalEventId}
-              onSelectEvent={(id) => onOpenPersonal(id)}
-            />
-          ))}
-        </>
-      );
-    }
-    if (mode === 2) {
-      const renderDual = ({ event, latest, teamCounts }: MemberHomeRow) => (
-        <MemberEventDualCard
-          key={event.id}
-          event={event}
-          latest={latest}
-          teamCounts={teamCounts!}
-          filterTab={filterTab}
-          selectedPersonalEventId={selectedPersonalEventId}
-          selectedTeamEventId={selectedTeamEventId}
-          onOpenPersonal={onOpenPersonal}
-          onOpenTeam={onOpenTeam}
-        />
-      );
-      if (filterTab === 'ongoing')
-        return (
-          <>
-            {pendingList.map((row) => renderDual(row))}
-            {respondedList.map((row) => renderDual(row))}
-          </>
-        );
-      return closedFlat.map((row) => renderDual(row));
-    }
-
-    /* mode === 3 */
-    const renderTeamOnly = ({ event, teamCounts }: MemberHomeRow) => (
-      <MemberEventTeamCard
-        key={event.id}
-        event={event}
-        teamCounts={teamCounts!}
-        filterTab={filterTab}
-        selectedTeamEventId={selectedTeamEventId}
-        onOpenTeam={onOpenTeam}
-      />
-    );
-
-    if (filterTab === 'ongoing')
-      return (
-        <>
-          {pendingList.concat(respondedList).map((row) => renderTeamOnly(row))}
-        </>
-      );
-
-    return closedFlat.map((row) => renderTeamOnly(row));
+  const cardListArgs = {
+    selectedPersonalEventId,
+    selectedTeamEventId,
+    onOpenPersonal,
+    onOpenTeam,
   };
 
   return (
@@ -640,72 +875,23 @@ export function MemberEventListPage({
 
       <div className="employee-events-card-list">
         {employeeEventFilter === 'ongoing' ? (
-          <>
-            {(mode !== 3 && pendingRows.length > 0) || (mode === 3 && rows.length > 0) ? (
-              <div
-                className={`employee-events-status-group employee-events-status-group--pending${mode === 3 ? ' member-mode3-single-list' : ''}`}
-              >
-                {mode !== 3 ? (
-                  <h4 className="employee-events-group-heading">
-                    Not responded yet
-                    <span className="employee-events-group-count">{pendingRows.length}</span>
-                  </h4>
-                ) : (
-                  <h4 className="employee-events-group-heading">
-                    Active
-                    <span className="employee-events-group-count">{rows.length}</span>
-                  </h4>
-                )}
-                <div className="employee-events-group-cards">
-                  {mode === 3 ? (
-                    dualOrTeamCards({
-                      pendingList: rows,
-                      respondedList: [],
-                      closedFlat: [],
-                      filterTab: 'ongoing',
-                    })
-                  ) : (
-                    dualOrTeamCards({
-                      pendingList: pendingRows,
-                      respondedList: [],
-                      closedFlat: [],
-                      filterTab: 'ongoing',
-                    })
-                  )}
-                </div>
-              </div>
-            ) : null}
-            {mode !== 3 ? (
-              <>
-                {respondedRows.length > 0 ? (
-                  <div
-                    className={`employee-events-status-group employee-events-status-group--responded${
-                      pendingRows.length > 0 ? ' employee-events-status-group--after-pending' : ''
-                    }`}
-                  >
-                    <h4 className="employee-events-group-heading">
-                      Responded
-                      <span className="employee-events-group-count">{respondedRows.length}</span>
-                    </h4>
-                    <div className="employee-events-group-cards">
-                      {dualOrTeamCards({
-                        pendingList: [],
-                        respondedList: respondedRows,
-                        closedFlat: [],
-                        filterTab: 'ongoing',
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </>
+          <MemberOngoingEventSections
+            mode={mode}
+            pendingRows={pendingRows}
+            respondedRows={respondedRows}
+            showPendingGroup={showPendingGroup}
+            pendingHeading={pendingHeading}
+            pendingCount={pendingCount}
+            pendingListForCards={pendingListForCards}
+            cardListArgs={cardListArgs}
+          />
         ) : (
-          dualOrTeamCards({
+          renderMemberEventCards(mode, {
             pendingList: [],
             respondedList: [],
             closedFlat: rows,
             filterTab: 'closed',
+            ...cardListArgs,
           })
         )}
       </div>
@@ -722,12 +908,12 @@ function EventSelectionPage({
   events,
   selectedEventId,
   onSelectEvent,
-}: {
+}: Readonly<{
   title: string;
   events: EventItem[];
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
-}) {
+}>) {
   return (
     <section className="page-section">
       <h2>{title}</h2>
@@ -744,934 +930,6 @@ function EventSelectionPage({
   );
 }
 
-interface EditDraftBaseline {
-  comment: string;
-  location: string;
-  attachment: File | null;
-  selectedNeedHelp: boolean;
-  pendingSubmission: 'safe' | 'need_help' | null;
-  omitStoredAttachment: boolean;
-}
-
-function EmployeeQuickReportPanel({
-  draftUserId,
-  userName,
-  selectedEvent,
-  currentDepartment,
-  latestResponse,
-  reportSubmitting,
-  submitErrorMessage,
-  onDismissSubmitError,
-  onRetrySubmit,
-  onSubmit,
-  layout = 'full',
-  hideEmergencyContact = false,
-  stackSectionId,
-  onBackToEvents,
-  stackInitialReport = false,
-  openInEditMode = false,
-}: {
-  draftUserId: string | null;
-  userName: string;
-  selectedEvent: EventItem | null;
-  currentDepartment: string;
-  latestResponse?: SafetyResponse;
-  reportSubmitting: boolean;
-  submitErrorMessage: string | null;
-  onDismissSubmitError: () => void;
-  onRetrySubmit: () => void;
-  onSubmit: (
-    status: 'safe' | 'need_help',
-    fields: EmployeeReportFields,
-    meta?: { omitStoredAttachment?: boolean },
-  ) => void | Promise<void>;
-  layout?: 'full' | 'embedded';
-  /** 堆疊卡片用於 a11y 與捲動錨點 */
-  stackSectionId?: string;
-  hideEmergencyContact?: boolean;
-  onBackToEvents?: () => void;
-  /** 待回報首報：窄列＋雙大鈕、送出僅 status、成功 overlay */
-  stackInitialReport?: boolean;
-  /** 進入頁面時直接開啟編輯已提交回報 */
-  openInEditMode?: boolean;
-}) {
-  const { locale } = useLocale();
-  const ec = getStrings(locale).employee;
-  const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const helpDetailsRef = useRef<HTMLDivElement>(null);
-  const persistDraftTimer = useRef<number | null>(null);
-  const [dropActive, setDropActive] = useState(false);
-  const [employeeComment, setEmployeeComment] = useState('');
-  const [employeeLocation, setEmployeeLocation] = useState('');
-  const [employeeAttachment, setEmployeeAttachment] = useState<File | null>(null);
-  const [selectedNeedHelp, setSelectedNeedHelp] = useState(false);
-  const [wantToUpdate, setWantToUpdate] = useState(false);
-  const [draftBaseline, setDraftBaseline] = useState<EditDraftBaseline | null>(null);
-  const [pendingSubmission, setPendingSubmission] = useState<'safe' | 'need_help' | null>(null);
-  const [discardPromptAfter, setDiscardPromptAfter] = useState<'back' | 'cancel' | null>(null);
-  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
-  const [omitStoredAttachment, setOmitStoredAttachment] = useState(false);
-
-  const MAX_COMMENT_LEN = 500;
-  const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-
-  const hasReport = Boolean(latestResponse);
-  const showReportingControls = !hasReport || wantToUpdate;
-  const isRevisionDraft = Boolean(hasReport && wantToUpdate);
-
-  /** 詳細區塊：初次回報在選「需要協助」後顯示；修訂草稿在選 need help 或已暫存 need_help 時顯示 */
-  const showHelpDetailsPanel =
-    selectedNeedHelp || (isRevisionDraft && pendingSubmission === 'need_help');
-
-  const needFlowActive =
-    (!isRevisionDraft && selectedNeedHelp) || (isRevisionDraft && (selectedNeedHelp || pendingSubmission === 'need_help'));
-
-  const safeButtonDimmed = needFlowActive && (!isRevisionDraft || pendingSubmission !== 'safe');
-  const revertToBaselineAndExitEdit = (baseline: EditDraftBaseline) => {
-    setEmployeeComment(baseline.comment);
-    setEmployeeLocation(baseline.location);
-    setEmployeeAttachment(baseline.attachment);
-    setSelectedNeedHelp(baseline.selectedNeedHelp);
-    setPendingSubmission(baseline.pendingSubmission);
-    setOmitStoredAttachment(baseline.omitStoredAttachment);
-    setWantToUpdate(false);
-    setDraftBaseline(null);
-  };
-
-  const isDraftDirty =
-    draftBaseline !== null &&
-    (employeeComment !== draftBaseline.comment ||
-      employeeLocation !== draftBaseline.location ||
-      employeeAttachment !== draftBaseline.attachment ||
-      selectedNeedHelp !== draftBaseline.selectedNeedHelp ||
-      pendingSubmission !== draftBaseline.pendingSubmission ||
-      omitStoredAttachment !== draftBaseline.omitStoredAttachment);
-
-  useEffect(() => {
-    setWantToUpdate(false);
-    setPendingSubmission(null);
-    setDraftBaseline(null);
-    setOmitStoredAttachment(false);
-
-    const eid = selectedEvent?.id;
-    if (!eid || !draftUserId) return;
-    if (latestResponse) return;
-
-    const stored = loadEmployeeReportDraft(draftUserId, eid);
-    setEmployeeComment(stored?.comment ?? '');
-    setEmployeeLocation(stored?.location ?? '');
-    setSelectedNeedHelp(false);
-  }, [selectedEvent?.id, draftUserId, latestResponse?.id]);
-
-  useEffect(() => {
-    if (!openInEditMode || !latestResponse) return;
-    const wasNeedHelp = latestResponse.status === 'need_help';
-    const pendingInit = wasNeedHelp ? 'need_help' : 'safe';
-    const c = latestResponse.comment ?? '';
-    const loc = latestResponse.location ?? '';
-    setEmployeeComment(c);
-    setEmployeeLocation(loc);
-    setEmployeeAttachment(null);
-    setUploadNotice(null);
-    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
-    setDraftBaseline({
-      comment: c,
-      location: loc,
-      attachment: null,
-      selectedNeedHelp: wasNeedHelp,
-      pendingSubmission: pendingInit,
-      omitStoredAttachment: false,
-    });
-    setOmitStoredAttachment(false);
-    setWantToUpdate(true);
-    setPendingSubmission(pendingInit);
-    setSelectedNeedHelp(wasNeedHelp);
-  }, [openInEditMode, latestResponse?.id, selectedEvent?.id]);
-
-  useEffect(() => {
-    if (!draftUserId || !selectedEvent?.id || Boolean(latestResponse) || wantToUpdate) return;
-    if (stackInitialReport) return;
-    if (persistDraftTimer.current) window.clearTimeout(persistDraftTimer.current);
-    persistDraftTimer.current = window.setTimeout(() => {
-      saveEmployeeReportDraft(draftUserId, selectedEvent.id, {
-        comment: employeeComment,
-        location: employeeLocation,
-        selectedNeedHelp,
-      });
-    }, 420);
-    return () => {
-      if (persistDraftTimer.current) window.clearTimeout(persistDraftTimer.current);
-    };
-  }, [
-    draftUserId,
-    selectedEvent?.id,
-    latestResponse,
-    wantToUpdate,
-    employeeComment,
-    employeeLocation,
-    selectedNeedHelp,
-    stackInitialReport,
-  ]);
-
-
-  useEffect(() => {
-    if (latestResponse) setWantToUpdate(false);
-  }, [latestResponse?.updatedAt]);
-
-  useEffect(() => {
-    if (!showHelpDetailsPanel) return;
-    const id = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        helpDetailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    });
-    return () => cancelAnimationFrame(id);
-  }, [showHelpDetailsPanel]);
-
-  useEffect(() => {
-    if (!wantToUpdate) setDraftBaseline(null);
-  }, [wantToUpdate]);
-
-  const reportFields = (): EmployeeReportFields => ({
-    comment: employeeComment,
-    location: employeeLocation,
-    attachment: employeeAttachment,
-  });
-
-  const handleSubmitSafeTap = () => {
-    if (reportSubmitting) return;
-    if (isRevisionDraft) {
-      setPendingSubmission('safe');
-      setSelectedNeedHelp(false);
-      return;
-    }
-    setSelectedNeedHelp(false);
-    const fields = stackInitialReport ? EMPTY_STACK_REPORT_FIELDS : reportFields();
-    void onSubmit('safe', fields, {
-      omitStoredAttachment: stackInitialReport ? false : omitStoredAttachment,
-    });
-  };
-
-  const handleNeedHelpTap = () => {
-    if (reportSubmitting) return;
-    if (isRevisionDraft) {
-      setPendingSubmission('need_help');
-      setSelectedNeedHelp(true);
-      return;
-    }
-    setSelectedNeedHelp(true);
-  };
-
-  const handleConfirmNeedHelp = () => {
-    if (reportSubmitting) return;
-    if (isRevisionDraft) return;
-    if (!selectedNeedHelp) return;
-    void onSubmit('need_help', reportFields(), {
-      omitStoredAttachment: stackInitialReport ? false : omitStoredAttachment,
-    });
-  };
-
-  const enterRevisionMode = () => {
-    if (!latestResponse) return;
-    const wasNeedHelp = latestResponse.status === 'need_help';
-    const pendingInit = wasNeedHelp ? 'need_help' : 'safe';
-    const c = latestResponse.comment ?? '';
-    const loc = latestResponse.location ?? '';
-    setEmployeeComment(c);
-    setEmployeeLocation(loc);
-    setEmployeeAttachment(null);
-    setUploadNotice(null);
-    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
-    setDraftBaseline({
-      comment: c,
-      location: loc,
-      attachment: null,
-      selectedNeedHelp: wasNeedHelp,
-      pendingSubmission: pendingInit,
-      omitStoredAttachment: false,
-    });
-    setOmitStoredAttachment(false);
-    setWantToUpdate(true);
-    setPendingSubmission(pendingInit);
-    setSelectedNeedHelp(wasNeedHelp);
-  };
-
-  const confirmDiscardDraft = () => {
-    const reason = discardPromptAfter;
-    if (draftBaseline) revertToBaselineAndExitEdit(draftBaseline);
-    setDiscardPromptAfter(null);
-    if (reason === 'back') onBackToEvents?.();
-  };
-
-  const requestBackNavigation = () => {
-    if (isRevisionDraft && isDraftDirty) {
-      setDiscardPromptAfter('back');
-      return;
-    }
-    onBackToEvents?.();
-  };
-
-  const requestCancelRevision = () => {
-    if (!draftBaseline || !isRevisionDraft) return;
-    if (isDraftDirty) {
-      setDiscardPromptAfter('cancel');
-      return;
-    }
-    revertToBaselineAndExitEdit(draftBaseline);
-  };
-
-  const handleSaveRevision = () => {
-    if (reportSubmitting) return;
-    if (!pendingSubmission || !isRevisionDraft) return;
-    void onSubmit(pendingSubmission, reportFields(), { omitStoredAttachment });
-  };
-
-  const applyAttachment = (file: File | undefined | null) => {
-    setUploadNotice(null);
-    if (!file) {
-      setEmployeeAttachment(null);
-      return;
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setUploadNotice(ec.uploadTooBig);
-      return;
-    }
-    setOmitStoredAttachment(false);
-    setEmployeeAttachment(file);
-  };
-
-  if (!selectedEvent) return null;
-
-  const fieldId = selectedEvent.id.replace(/[^a-zA-Z0-9_-]/g, '');
-  const heroTimeSource = selectedEvent.startAt ?? selectedEvent.createdAt;
-  const heroTime = new Date(heroTimeSource).toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-
-  const fullHero =
-    layout === 'full' ? (
-      <header className="employee-event-hero">
-        <div className="employee-event-hero-art" aria-hidden />
-        <div className="employee-event-hero-body">
-          <div className="employee-event-icon-ring">
-            <Activity size={36} strokeWidth={1.6} aria-hidden />
-          </div>
-          <h1 className="employee-event-headline">{selectedEvent.title}</h1>
-          <p className="employee-event-subline">
-            {hasReport && wantToUpdate
-              ? ec.heroSublineDraft
-              : hasReport && !wantToUpdate
-                ? '\u00a0'
-                : ec.heroSublineReporting(userName)}
-          </p>
-          <div className="employee-event-meta-pill">
-            <span className="employee-event-meta-item">
-              <span className="employee-event-meta-ic" aria-hidden>
-                ●
-              </span>
-              {selectedEvent.type}
-            </span>
-            <span className="employee-event-meta-split" aria-hidden />
-            <span className="employee-event-meta-item">{currentDepartment}</span>
-            <span className="employee-event-meta-split" aria-hidden />
-            <span className="employee-event-meta-item">{heroTime}</span>
-          </div>
-        </div>
-      </header>
-    ) : null;
-
-  return (
-    <>
-      {layout === 'full' && onBackToEvents ? (
-        <div className="employee-event-page-nav">
-          <PageBackButton onClick={requestBackNavigation} ariaLabel={ec.backToEventsAria} />
-        </div>
-      ) : null}
-      {fullHero}
-      {reportSubmitting ? (
-        <p className="employee-submit-progress" aria-live="polite">
-          {ec.submitting}
-        </p>
-      ) : null}
-      {submitErrorMessage ? (
-        <div className="employee-submit-error-banner" role="alert">
-          <AlertCircle size={22} aria-hidden />
-          <div className="employee-submit-error-body">
-            <strong>{ec.submitFailTitle}</strong>
-            <p>{submitErrorMessage}</p>
-            <div className="employee-submit-error-actions">
-              <button type="button" className="btn primary" disabled={reportSubmitting} onClick={onRetrySubmit}>
-                <RefreshCw size={16} aria-hidden /> {ec.retry}
-              </button>
-              <button type="button" className="btn ghost" onClick={onDismissSubmitError}>
-                {ec.close}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <div
-        className={`employee-event-body${layout === 'embedded' ? ' employee-quick-report-body--embedded' : ''}`}
-        id={stackSectionId}
-      >
-        <div className={`employee-event-shell${isRevisionDraft ? ' employee-event-shell--revision' : ''}`}>
-              {!showReportingControls && latestResponse && !stackInitialReport ? (
-                <>
-                  <div className="employee-submit-success-banner">
-                    <CheckCircle2 className="employee-submit-success-ic" size={40} strokeWidth={2} aria-hidden />
-                    <div className="employee-submit-success-copy">
-                      <strong>Report Submitted</strong>
-                      <p>Your status has been shared with your emergency response team.</p>
-                    </div>
-                  </div>
-
-                  <article className="event-detail-card employee-status-overview-card">
-                    <h3 className="employee-section-title">
-                      <Users size={22} strokeWidth={1.75} className="employee-section-title-icon" aria-hidden />
-                      Your current status
-                    </h3>
-                    <div className="employee-status-overview-grid">
-                      <div
-                        className={`employee-status-slot ${latestResponse.status === 'safe' ? 'employee-status-slot--active-safe' : 'employee-status-slot--muted'}`}
-                      >
-                        {latestResponse.status === 'safe' ? (
-                          <span className="employee-status-slot-check" aria-hidden>
-                            <CheckCircle2 size={22} strokeWidth={2} />
-                          </span>
-                        ) : null}
-                        <ShieldCheck size={28} strokeWidth={1.5} aria-hidden />
-                        <div>
-                          <div className="employee-status-slot-title">I&apos;m Safe</div>
-                          <div className="employee-status-slot-hint">{latestResponse.status === 'safe' ? 'This is the status you submitted.' : 'Not selected.'}</div>
-                        </div>
-                      </div>
-                      <div
-                        className={`employee-status-slot ${latestResponse.status === 'need_help' ? 'employee-status-slot--active-help' : 'employee-status-slot--muted'}`}
-                      >
-                        {latestResponse.status === 'need_help' ? (
-                          <span className="employee-status-slot-check employee-status-slot-check--help" aria-hidden>
-                            <CheckCircle2 size={22} strokeWidth={2} />
-                          </span>
-                        ) : null}
-                        <LifeBuoy size={28} strokeWidth={1.5} aria-hidden />
-                        <div>
-                          <div className="employee-status-slot-title">I need help</div>
-                          <div className="employee-status-slot-hint">{latestResponse.status === 'need_help' ? 'This is the status you submitted.' : 'Not selected.'}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-
-                  <article className="event-detail-card employee-summary-card">
-                    <h3 className="employee-section-title">
-                      <ClipboardList size={22} strokeWidth={1.75} className="employee-section-title-icon" aria-hidden />
-                      Submitted summary
-                    </h3>
-                    <dl className="employee-summary-rows">
-                      <div className="employee-summary-row">
-                        <dt>Status</dt>
-                        <dd>
-                          <span className={latestResponse.status === 'safe' ? 'employee-pill-safe' : 'employee-pill-help'}>
-                            {latestResponse.status === 'safe' ? "I'm Safe" : 'I need help'}
-                          </span>
-                        </dd>
-                      </div>
-                      <div className="employee-summary-row">
-                        <dt>{ec.submittedAtLabel}</dt>
-                        <dd>
-                          {(() => {
-                            const t = new Date(latestResponse.updatedAt);
-                            const tag = locale === 'en' ? 'en-US' : 'zh-TW';
-                            return `${t.toLocaleTimeString(tag, { hour: 'numeric', minute: '2-digit' })} (${t.toLocaleTimeString(tag, {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit',
-                              hour12: true,
-                            })})`;
-                          })()}
-                        </dd>
-                      </div>
-                      <div className="employee-summary-row">
-                        <dt>{ec.locationLabel}</dt>
-                        <dd>{latestResponse.location?.trim() || '—'}</dd>
-                      </div>
-                      <div className="employee-summary-row">
-                        <dt>{ec.commentLabel}</dt>
-                        <dd>{latestResponse.comment?.trim() || '—'}</dd>
-                      </div>
-                      <div className="employee-summary-row employee-summary-row--files">
-                        <dt>{ec.attachTitle}</dt>
-                        <dd>
-                          {latestResponse.attachmentName ? (
-                            <span className="employee-file-chip">
-                              <FileImage size={18} strokeWidth={1.75} aria-hidden />
-                              <span>
-                                <strong>{latestResponse.attachmentName}</strong>
-                                <span className="employee-file-chip-meta">{formatFileSize(latestResponse.attachmentSizeBytes)}</span>
-                              </span>
-                            </span>
-                          ) : (
-                            '—'
-                          )}
-                        </dd>
-                      </div>
-                    </dl>
-
-                    <div className="employee-summary-actions">
-                      <button type="button" className="btn btn-navy-solid" onClick={enterRevisionMode}>
-                        <Pencil size={18} strokeWidth={2} aria-hidden /> {ec.editReport}
-                      </button>
-                      <button type="button" className="btn employee-btn-outline" onClick={() => onBackToEvents?.()}>
-                        {ec.done}
-                      </button>
-                    </div>
-                  </article>
-                </>
-              ) : null}
-              {!showReportingControls && latestResponse && stackInitialReport && !wantToUpdate ? (
-                <div className="member-initial-report-done">
-                  <CheckCircle2 size={36} strokeWidth={2} className="member-initial-report-done-ic" aria-hidden />
-                  <div className="member-initial-report-done-copy">
-                    <strong>{ec.reportSuccessTitle}</strong>
-                    <p className="muted-text">
-                      {latestResponse.status === 'safe' ? ec.statusDetailSafe : ec.statusDetailNeedHelp}
-                    </p>
-                    <p className="muted-text small">{ec.tapCardToEditHint}</p>
-                  </div>
-                </div>
-              ) : null}
-              {showReportingControls ? (
-                <>
-                  {isRevisionDraft ? (
-                    <aside className="employee-edit-alert" role="status">
-                      <Info size={22} strokeWidth={2} className="employee-edit-alert-icon" aria-hidden />
-                      <div>
-                        <strong>Editing submitted report</strong>
-                        <p>You can update your information and save your changes.</p>
-                      </div>
-                    </aside>
-                  ) : null}
-
-                  {stackInitialReport && !isRevisionDraft ? (
-                    <>
-                      <div className={`member-initial-report-actions${reportSubmitting ? ' is-disabled' : ''}`}>
-                        <button
-                          type="button"
-                          disabled={reportSubmitting}
-                          className={`employee-status-wide safe member-initial-report-btn${safeButtonDimmed ? ' is-dimmed' : ''}`}
-                          onClick={handleSubmitSafeTap}
-                        >
-                          <span className="employee-status-inner">
-                            <span className="employee-status-ic" aria-hidden>
-                              <ShieldCheck size={28} strokeWidth={1.65} />
-                            </span>
-                            <span className="employee-status-label">I&apos;m Safe</span>
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={reportSubmitting}
-                          className={`employee-status-wide need member-initial-report-btn${selectedNeedHelp ? ' is-selected' : ''}`}
-                          onClick={handleNeedHelpTap}
-                        >
-                          <span className="employee-status-inner">
-                            <span className="employee-status-ic" aria-hidden>
-                              <LifeBuoy size={28} strokeWidth={1.65} />
-                            </span>
-                            <span className="employee-status-label">I need help</span>
-                          </span>
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                  <article className="event-detail-card">
-                    <div className="event-detail-card-head">
-                      <span className="event-detail-card-icon">
-                        <Users size={22} strokeWidth={1.75} aria-hidden />
-                      </span>
-                      <h3>{ec.reportCardTitle}</h3>
-                    </div>
-                    <div className={`employee-status-row${isRevisionDraft ? ' employee-status-row--revision' : ''}`}>
-                      <button
-                        type="button"
-                        disabled={reportSubmitting}
-                        className={
-                          isRevisionDraft
-                            ? `employee-status-revision-btn employee-status-revision-btn--safe${pendingSubmission === 'safe' ? ' is-selected' : ''}`
-                            : `employee-status-wide safe ${safeButtonDimmed ? 'is-dimmed' : ''}`
-                        }
-                        onClick={handleSubmitSafeTap}
-                      >
-                        {isRevisionDraft && pendingSubmission === 'safe' ? (
-                          <span className="employee-revision-corner-badge employee-revision-corner-badge--safe" aria-hidden>
-                            <CheckCircle2 size={22} strokeWidth={2.25} />
-                          </span>
-                        ) : null}
-                        <span className="employee-status-inner">
-                          <span className="employee-status-ic" aria-hidden>
-                            <ShieldCheck size={28} strokeWidth={1.65} />
-                          </span>
-                          <span className="employee-status-label">I&apos;m Safe</span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={reportSubmitting}
-                        className={
-                          isRevisionDraft
-                            ? `employee-status-revision-btn employee-status-revision-btn--need${pendingSubmission === 'need_help' ? ' is-selected' : ''}`
-                            : `employee-status-wide need`
-                        }
-                        onClick={handleNeedHelpTap}
-                      >
-                        {isRevisionDraft && needFlowActive ? (
-                          <span className="employee-choice-check" aria-hidden>
-                            ✓
-                          </span>
-                        ) : null}
-                        {isRevisionDraft && pendingSubmission === 'need_help' ? (
-                          <span className="employee-revision-corner-badge employee-revision-corner-badge--need" aria-hidden>
-                            <CheckCircle2 size={22} strokeWidth={2.25} />
-                          </span>
-                        ) : null}
-                        <span className="employee-status-inner">
-                          <span className="employee-status-ic" aria-hidden>
-                            <LifeBuoy size={28} strokeWidth={1.65} />
-                          </span>
-                          <span className="employee-status-label">I need help</span>
-                        </span>
-                      </button>
-                    </div>
-                  </article>
-                  )}
-
-                  {!isRevisionDraft && showReportingControls && selectedNeedHelp ? (
-                    <div ref={helpDetailsRef} className="employee-help-details-panel">
-                      <article className="event-detail-card">
-                        <div className="event-detail-card-head">
-                          <span className="event-detail-card-icon">
-                            <ClipboardList size={22} strokeWidth={1.75} aria-hidden />
-                          </span>
-                          <h3>
-                            {ec.supplementaryTitle}{' '}
-                            <span className="employee-optional-hint">（{ec.optionalBadge}）</span>
-                          </h3>
-                        </div>
-                        <div className="employee-fields">
-                          <label className="employee-field-label" htmlFor={`emp-loc-${fieldId}`}>
-                            {ec.locationLabel}
-                          </label>
-                          <div className="input-with-leading-icon">
-                            <span className="input-leading-ic" aria-hidden>
-                              <MapPin size={19} strokeWidth={2} color="#3d5f85" />
-                            </span>
-                            <input
-                              id={`emp-loc-${fieldId}`}
-                              placeholder={ec.locationPlaceholder}
-                              disabled={reportSubmitting}
-                              value={employeeLocation}
-                              onChange={(e) => setEmployeeLocation(e.target.value)}
-                            />
-                          </div>
-
-                          <label className="employee-field-label" htmlFor={`emp-comment-${fieldId}`}>
-                            {ec.commentLabel}
-                          </label>
-                          <div className="textarea-with-leading-icon">
-                            <span className="input-leading-ic textarea-leading" aria-hidden>
-                              <MessageSquare size={19} strokeWidth={2} color="#3d5f85" />
-                            </span>
-                            <textarea
-                              id={`emp-comment-${fieldId}`}
-                              placeholder={ec.commentPlaceholder}
-                              disabled={reportSubmitting}
-                              value={employeeComment}
-                              maxLength={MAX_COMMENT_LEN}
-                              onChange={(e) => setEmployeeComment(e.target.value.slice(0, MAX_COMMENT_LEN))}
-                            />
-                            <span className="employee-char-count">{employeeComment.length}/{MAX_COMMENT_LEN}</span>
-                          </div>
-                        </div>
-                      </article>
-
-                      <article className="event-detail-card">
-                        <div className="event-detail-card-head">
-                          <span className="event-detail-card-icon">
-                            <Paperclip size={22} strokeWidth={1.75} aria-hidden />
-                          </span>
-                          <h3>
-                            {ec.attachTitle}{' '}
-                            <span className="employee-optional-hint">（{ec.optionalBadge}）</span>
-                          </h3>
-                        </div>
-                        <input
-                          ref={attachmentInputRef}
-                          id={`emp-file-${fieldId}`}
-                          type="file"
-                          className="visually-hidden-input"
-                          onChange={(e) => applyAttachment(e.target.files?.[0])}
-                        />
-                        <label
-                          htmlFor={`emp-file-${fieldId}`}
-                          className={`employee-drop-zone${dropActive ? ' is-dragging' : ''}${employeeAttachment ? ' has-file' : ''}`}
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            setDropActive(true);
-                          }}
-                          onDragLeave={() => setDropActive(false)}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            setDropActive(false);
-                            applyAttachment(e.dataTransfer.files?.[0]);
-                          }}
-                        >
-                          <span className="employee-drop-ic" aria-hidden>
-                            <CloudUpload size={46} strokeWidth={1.45} color="#1e5494" />
-                          </span>
-                          <span className="employee-drop-title">{ec.dropTitle}</span>
-                          <span className="employee-drop-hint">{ec.dropHint}</span>
-                          {employeeAttachment ? <span className="employee-drop-file">{employeeAttachment.name}</span> : null}
-                          {uploadNotice ? <span className="employee-drop-error">{uploadNotice}</span> : null}
-                        </label>
-                        {employeeAttachment ? (
-                          <button
-                            type="button"
-                            className="btn ghost btn-remove-att"
-                            onClick={() => {
-                              if (attachmentInputRef.current) attachmentInputRef.current.value = '';
-                              applyAttachment(null);
-                            }}
-                          >
-                            {ec.removeAttachment}
-                          </button>
-                        ) : null}
-                      </article>
-                      <button
-                        type="button"
-                        className="btn primary btn-block employee-submit-need-help"
-                        disabled={reportSubmitting}
-                        onClick={handleConfirmNeedHelp}
-                      >
-                        {ec.submitNeedHelp}
-                      </button>
-                    </div>
-                  ) : null}
-
-                  {isRevisionDraft && showHelpDetailsPanel ? (
-                    <div ref={helpDetailsRef} className="employee-help-details-panel">
-                    <article className="event-detail-card">
-                      <div className="event-detail-card-head">
-                        <span className="event-detail-card-icon">
-                          <ClipboardList size={22} strokeWidth={1.75} aria-hidden />
-                        </span>
-                        <h3>{ec.revisionDetailsHeading}</h3>
-                      </div>
-                      <div className="employee-fields">
-                        <label className="employee-field-label" htmlFor={`emp-loc-rev-${fieldId}`}>
-                          {ec.locationLabel}
-                        </label>
-                        <div className="input-with-leading-icon">
-                          <span className="input-leading-ic" aria-hidden>
-                            <MapPin size={19} strokeWidth={2} color="#3d5f85" />
-                          </span>
-                          <input
-                            id={`emp-loc-rev-${fieldId}`}
-                            placeholder={ec.locationPlaceholder}
-                            disabled={reportSubmitting}
-                            value={employeeLocation}
-                            onChange={(e) => setEmployeeLocation(e.target.value)}
-                          />
-                        </div>
-
-                        <label className="employee-field-label" htmlFor={`emp-comment-rev-${fieldId}`}>
-                          {ec.commentLabel}
-                        </label>
-                        <div className="textarea-with-leading-icon">
-                          <span className="input-leading-ic textarea-leading" aria-hidden>
-                            <MessageSquare size={19} strokeWidth={2} color="#3d5f85" />
-                          </span>
-                          <textarea
-                            id={`emp-comment-rev-${fieldId}`}
-                            placeholder={ec.commentPlaceholder}
-                            disabled={reportSubmitting}
-                            value={employeeComment}
-                            maxLength={MAX_COMMENT_LEN}
-                            onChange={(e) => setEmployeeComment(e.target.value.slice(0, MAX_COMMENT_LEN))}
-                          />
-                          <span className="employee-char-count">{employeeComment.length}/{MAX_COMMENT_LEN}</span>
-                        </div>
-                      </div>
-                    </article>
-
-                    <article className="event-detail-card">
-                      <div className="event-detail-card-head">
-                        <span className="event-detail-card-icon">
-                          <Paperclip size={22} strokeWidth={1.75} aria-hidden />
-                        </span>
-                        <h3>{ec.attachTitle}</h3>
-                      </div>
-                      {isRevisionDraft && latestResponse?.attachmentName && !employeeAttachment && !omitStoredAttachment ? (
-                        <div className="employee-attached-existing">
-                          <span className="employee-attached-thumb" aria-hidden />
-                          <div className="employee-attached-meta">
-                            <strong>{latestResponse.attachmentName}</strong>
-                            <span>{formatFileSize(latestResponse.attachmentSizeBytes)}</span>
-                          </div>
-                          <div className="employee-attached-actions">
-                            <button type="button" className="btn ghost btn-compact" onClick={() => attachmentInputRef.current?.click()}>
-                              {ec.replaceAttachment}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn ghost btn-icon-danger"
-                              aria-label={ec.removeAttachmentAria}
-                              onClick={() => setOmitStoredAttachment(true)}
-                            >
-                              <Trash2 size={18} strokeWidth={2} aria-hidden />
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                      <input ref={attachmentInputRef} id={`emp-file-rev-${fieldId}`} type="file" className="visually-hidden-input" onChange={(e) => applyAttachment(e.target.files?.[0])} />
-                      <label
-                        htmlFor={`emp-file-rev-${fieldId}`}
-                        className={`employee-drop-zone${dropActive ? ' is-dragging' : ''}${employeeAttachment ? ' has-file' : ''}`}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          setDropActive(true);
-                        }}
-                        onDragLeave={() => setDropActive(false)}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          setDropActive(false);
-                          applyAttachment(e.dataTransfer.files?.[0]);
-                        }}
-                      >
-                        <span className="employee-drop-ic" aria-hidden>
-                          <CloudUpload size={46} strokeWidth={1.45} color="#1e5494" />
-                        </span>
-                        <span className="employee-drop-title">{ec.dropTitle}</span>
-                        <span className="employee-drop-hint">{ec.dropHint}</span>
-                        {employeeAttachment ? <span className="employee-drop-file">{employeeAttachment.name}</span> : null}
-                        {uploadNotice ? <span className="employee-drop-error">{uploadNotice}</span> : null}
-                      </label>
-                      {employeeAttachment ? (
-                        <button
-                          type="button"
-                          className="btn ghost btn-remove-att"
-                          onClick={() => {
-                            if (attachmentInputRef.current) attachmentInputRef.current.value = '';
-                            applyAttachment(null);
-                          }}
-                        >
-                          {ec.removeAttachment}
-                        </button>
-                      ) : null}
-                    </article>
-                  </div>
-                  ) : null}
-                </>
-              ) : null}
-
-              {!hideEmergencyContact ? (
-              <article className="event-detail-card event-detail-card--emergency">
-                <div className="event-detail-card-head">
-                  <span className="event-detail-card-icon">
-                    <Phone size={22} strokeWidth={1.8} aria-hidden />
-                  </span>
-                  <h3>{ec.emergencyContactTitle}</h3>
-                </div>
-                <div className="emergency-inline emergency-inline--desktop">
-                  <a className="emergency-slot" href="tel:+886212345678">
-                    <span className="emergency-slot-ic emergency-slot-ic--headset" aria-hidden>
-                      <Headphones size={20} strokeWidth={2} />
-                    </span>
-                    <div>
-                      <div className="emergency-slot-title">Emergency Hotline</div>
-                      <div className="emergency-slot-num">+886 (2) 1234-5678</div>
-                    </div>
-                  </a>
-                  <span className="emergency-vrule" aria-hidden />
-                  <a className="emergency-slot" href="tel:+886298765432">
-                    <span className="emergency-slot-ic emergency-slot-ic--people" aria-hidden>
-                      <Users size={20} strokeWidth={2} />
-                    </span>
-                    <div>
-                      <div className="emergency-slot-title">HR Duty Line</div>
-                      <div className="emergency-slot-num">+886 (2) 9876-5432</div>
-                    </div>
-                  </a>
-                </div>
-                <div className="emergency-list emergency-list--narrow">
-                  <a className="emergency-row" href="tel:+886212345678">
-                    <span className="emergency-row-ic" aria-hidden>
-                      <Headphones size={20} strokeWidth={2} />
-                    </span>
-                    <div className="emergency-row-text">
-                      <div className="emergency-slot-title">Emergency Hotline</div>
-                      <div className="emergency-slot-num">+886 (2) 1234-5678</div>
-                    </div>
-                    <span className="emergency-row-chevron" aria-hidden>
-                      <ChevronRight size={20} strokeWidth={2} />
-                    </span>
-                  </a>
-                  <a className="emergency-row" href="tel:+886298765432">
-                    <span className="emergency-row-ic" aria-hidden>
-                      <Users size={20} strokeWidth={2} />
-                    </span>
-                    <div className="emergency-row-text">
-                      <div className="emergency-slot-title">HR Duty Line</div>
-                      <div className="emergency-slot-num">+886 (2) 9876-5432</div>
-                    </div>
-                    <span className="emergency-row-chevron" aria-hidden>
-                      <ChevronRight size={20} strokeWidth={2} />
-                    </span>
-                  </a>
-                </div>
-              </article>
-              ) : null}
-
-              <footer className={`employee-event-tagline${isRevisionDraft ? ' employee-event-tagline--revision' : ''}`}>
-                Stay safe. Stay connected. ♡
-              </footer>
-            </div>
-          </div>
-
-          {isRevisionDraft ? (
-            <footer className="employee-edit-sticky-bar">
-              <div className="employee-edit-sticky-inner">
-                <p className="employee-edit-sticky-meta">
-                  Last updated{' '}
-                  {latestResponse ? new Date(latestResponse.updatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '—'}
-                </p>
-                <div className="employee-edit-sticky-actions">
-                  <button type="button" className="btn employee-btn-outline-strong" onClick={requestCancelRevision}>
-                    Discard changes
-                  </button>
-                  <button type="button" className="btn btn-navy-solid" disabled={!isDraftDirty || reportSubmitting} onClick={handleSaveRevision}>
-                    Save changes
-                  </button>
-                </div>
-                <p className="employee-edit-sticky-tagline">Stay safe. Stay connected. ♡</p>
-              </div>
-            </footer>
-          ) : null}
-
-          <ConfirmModal
-            open={discardPromptAfter !== null}
-            title="Discard unsaved changes?"
-            description="You have unsaved changes to your report draft. If you leave now, those changes will be lost."
-            cancelText="Continue editing"
-            confirmText="Discard changes"
-            onCancel={() => setDiscardPromptAfter(null)}
-            onConfirm={confirmDiscardDraft}
-          />
-    </>
-  );
-}
 
 function MemberEmergencyContactsCollapsible() {
   const { locale } = useLocale();
@@ -1727,7 +985,7 @@ function MemberIdleHistoryList({
   submitErrorMessage,
   submitErrorEventId,
   onDismissSubmitError,
-}: {
+}: Readonly<{
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
   departments: Department[];
@@ -1742,7 +1000,7 @@ function MemberIdleHistoryList({
   submitErrorMessage: string | null;
   submitErrorEventId: string | null;
   onDismissSubmitError: () => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const ec = getStrings(locale).employee;
   const [editingRow, setEditingRow] = useState<MemberHomeRow | null>(null);
@@ -1837,7 +1095,7 @@ export function MemberReportHistoryPage({
   submitErrorEventId,
   onDismissSubmitError,
   onBack,
-}: {
+}: Readonly<{
   idleHistoryOngoing: MemberHomeRow[];
   idleHistoryClosed: MemberHomeRow[];
   departments: Department[];
@@ -1853,7 +1111,7 @@ export function MemberReportHistoryPage({
   submitErrorEventId: string | null;
   onDismissSubmitError: () => void;
   onBack: () => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const { layoutNav: ln } = getStrings(locale);
 
@@ -1895,7 +1153,7 @@ export function MemberPriorityHomePage({
   onDismissSupervisorNudge,
   onGoTeamDashboardFromNudge,
   onNavigateHistory,
-}: {
+}: Readonly<{
   priorityView: { kind: 'personal_stack' | 'idle'; rows: MemberHomeRow[] };
   draftUserId: string | null;
   userName: string;
@@ -1920,7 +1178,7 @@ export function MemberPriorityHomePage({
   onDismissSupervisorNudge: () => void;
   onGoTeamDashboardFromNudge: () => void;
   onNavigateHistory: () => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const { employee: ec, layoutNav } = getStrings(locale);
   const [editingRow, setEditingRow] = useState<MemberHomeRow | null>(null);
@@ -1954,7 +1212,7 @@ export function MemberPriorityHomePage({
     return (
       <section className="page-section employee-events-page member-priority-home member-priority-home--idle">
         {supervisorTeamNudge ? (
-          <div className="supervisor-team-nudge-banner" role="status">
+          <output className="supervisor-team-nudge-banner">
             <div className="supervisor-team-nudge-copy">
               <strong>{ec.supervisorNudgeTitle}</strong>
               <p>{ec.supervisorNudgeBody(supervisorTeamNudge.eventTitle, supervisorTeamNudge.pendingPct)}</p>
@@ -1967,7 +1225,7 @@ export function MemberPriorityHomePage({
                 {ec.close}
               </button>
             </div>
-          </div>
+          </output>
         ) : null}
 
         <div className="member-idle-complete">

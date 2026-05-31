@@ -3545,6 +3545,10 @@ button.member-event-shell.member-event-shell--team-only.member-event-team-fullbt
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
 }
 
 .member-team-pill {

@@ -22,6 +22,7 @@ import {
   MemberReportHistoryPage,
   type EmployeeReportFields,
   type MemberHomeRow,
+  type MemberMode,
 } from './features/member/memberScreens';
 import {
   clearAccessToken,
@@ -328,8 +329,8 @@ function App() {
   const hasDirectReports = subordinateUserIds.length > 0;
   const hasManager = Boolean(session.user?.managerId);
 
-  /** 1:僅個人回報 2:回報＋團隊 3:僅團隊 */
-  const memberHomeMode: 1 | 2 | 3 = !hasDirectReports ? 1 : hasManager ? 2 : 3;
+  /** @see MemberMode in memberTypes.ts */
+  const memberHomeMode: MemberMode = !hasDirectReports ? 1 : hasManager ? 2 : 3;
 
   const memberListRowsOngoing: MemberHomeRow[] = useMemo(() => {
     const uid = session.user?.id;
