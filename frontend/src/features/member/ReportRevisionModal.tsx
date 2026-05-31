@@ -139,13 +139,18 @@ export function ReportRevisionModal({
 
   return createPortal(
     <>
-      <div className="modal-backdrop report-revision-modal-backdrop" onClick={requestClose}>
-        <div
+      <div className="modal-backdrop report-revision-modal-backdrop">
+        <button
+          type="button"
+          className="report-revision-modal-backdrop-dismiss"
+          aria-label={ec.close}
+          onClick={requestClose}
+        />
+        <dialog
+          open
           className="modal report-revision-modal"
-          role="dialog"
           aria-modal="true"
           aria-labelledby="report-revision-modal-title"
-          onClick={(e) => e.stopPropagation()}
         >
           <header className="report-revision-modal-head">
             <div className="report-revision-modal-head-main">
@@ -343,7 +348,7 @@ export function ReportRevisionModal({
               </>
             )}
           </footer>
-        </div>
+        </dialog>
       </div>
 
       <ConfirmModal
