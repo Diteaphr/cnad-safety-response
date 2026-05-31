@@ -249,6 +249,35 @@ class UserRepository:
         )
         return db.execute(stmt).first() is not None
 
+    def list_employees_in_departments(
+        self, db: Session, department_ids: list[uuid.UUID], limit: int = 500, offset: int = 0
+    ) -> list[User]:
+        """Return active employees whose primary department is in department_ids, paginated."""
+        if not department_ids:
+            return []
+        stmt = (
+            select(User)
+            .join(UserRole, UserRole.user_id == User.user_id)
+            .join(Role, Role.role_id == UserRole.role_id)
+            .join(
+                UserDepartment,
+                (UserDepartment.user_id == User.user_id) & UserDepartment.is_primary.is_(True),
+            )
+            .where(
+                Role.role_name == "employee",
+                User.status == "active",
+                UserDepartment.department_id.in_(department_ids),
+            )
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.notification_preference),
+            )
+            .order_by(User.user_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(db.scalars(stmt).unique().all())
+
     def list_employees(
         self, db: Session, limit: int = 500, offset: int = 0
     ) -> list[User]:

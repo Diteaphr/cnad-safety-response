@@ -53,9 +53,19 @@ def scan_all_active_events(db) -> None:
 
     for event in active_events:
         total_sent = total_skipped = total = 0
+        target_dept_ids = (
+            [d.department_id for d in event.target_departments]
+            if event.target_departments else None
+        )
         offset = 0
         while True:
-            batch = user_repo.list_employees(db, limit=_EMPLOYEE_BATCH_SIZE, offset=offset)
+            if target_dept_ids is not None:
+                batch = user_repo.list_employees_in_departments(
+                    db, department_ids=target_dept_ids,
+                    limit=_EMPLOYEE_BATCH_SIZE, offset=offset,
+                )
+            else:
+                batch = user_repo.list_employees(db, limit=_EMPLOYEE_BATCH_SIZE, offset=offset)
             if not batch:
                 break
             stats = dispatch_reminders(db, event.event_id, batch)
