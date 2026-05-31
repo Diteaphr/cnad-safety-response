@@ -35,6 +35,9 @@ _scheduler: BackgroundScheduler | None = None
 # Scan logic — called by APScheduler (dev) or HTTP endpoint (prod)
 # ---------------------------------------------------------------------------
 
+_EMPLOYEE_BATCH_SIZE = 500
+
+
 def scan_all_active_events(db) -> None:
     from app.repositories.event_repository import EventRepository
     from app.repositories.user_repository import UserRepository
@@ -49,18 +52,22 @@ def scan_all_active_events(db) -> None:
         return
 
     for event in active_events:
-        all_users = user_repo.list_all(db)
+        total_sent = total_skipped = total = 0
+        offset = 0
+        while True:
+            batch = user_repo.list_employees(db, limit=_EMPLOYEE_BATCH_SIZE, offset=offset)
+            if not batch:
+                break
+            stats = dispatch_reminders(db, event.event_id, batch)
+            total_sent += stats["sent"]
+            total_skipped += stats["already_safe"]
+            total += stats["total"]
+            offset += _EMPLOYEE_BATCH_SIZE
 
-        def _is_employee(u) -> bool:
-            return any(ur.role.role_name == "employee" for ur in u.user_roles)
-
-        employees = [u for u in all_users if _is_employee(u)]
-
-        stats = dispatch_reminders(db, event.event_id, employees)
         logger.info(
             "Reminder scan: event %s (%s) → sent=%d already_safe=%d total=%d",
             event.event_id, event.title,
-            stats["sent"], stats["already_safe"], stats["total"],
+            total_sent, total_skipped, total,
         )
 
 

@@ -249,6 +249,25 @@ class UserRepository:
         )
         return db.execute(stmt).first() is not None
 
+    def list_employees(
+        self, db: Session, limit: int = 500, offset: int = 0
+    ) -> list[User]:
+        """Return active employees only, paginated — use for large-scale reminder scans."""
+        stmt = (
+            select(User)
+            .join(UserRole, UserRole.user_id == User.user_id)
+            .join(Role, Role.role_id == UserRole.role_id)
+            .where(Role.role_name == "employee", User.status == "active")
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.notification_preference),
+            )
+            .order_by(User.user_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(db.scalars(stmt).unique().all())
+
     def employee_no_exists(self, db: Session, employee_no: str) -> bool:
         stmt = select(User.user_id).where(User.employee_no == employee_no).limit(1)
         return db.execute(stmt).first() is not None
