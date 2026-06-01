@@ -2,17 +2,19 @@ import { AlertTriangle } from 'lucide-react';
 import { ResponseDistributionList } from '../../components/dashboard/ResponseDistributionList';
 import type { DashboardStrings } from '../../locale/strings';
 
+type SupervisorReportInsightCardProps = Readonly<{
+  stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
+  dash: DashboardStrings;
+  pendingRatioHigh: boolean;
+  onOpenPendingList: () => void;
+}>;
+
 export function SupervisorReportInsightCard({
   stats,
   dash,
   pendingRatioHigh,
   onOpenPendingList,
-}: {
-  stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
-  dash: DashboardStrings;
-  pendingRatioHigh: boolean;
-  onOpenPendingList: () => void;
-}) {
+}: SupervisorReportInsightCardProps) {
   return (
     <article className="dash-panel-elevated sv-insight-card">
       <header className="sv-insight-card-head">
@@ -31,10 +33,10 @@ export function SupervisorReportInsightCard({
           <span className="sv-insight-rate-label">{dash.responseRateCenter}</span>
         </div>
         {pendingRatioHigh ? (
-          <span className="sv-insight-warn-tag" role="status">
+          <output className="sv-insight-warn-tag">
             <AlertTriangle size={14} aria-hidden />
             {dash.supervisorHighPendingTag}
-          </span>
+          </output>
         ) : null}
       </div>
 

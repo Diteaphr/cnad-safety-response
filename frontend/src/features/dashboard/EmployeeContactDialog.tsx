@@ -4,42 +4,16 @@ import type { DashboardStrings } from '../../locale/strings';
 import type { SafetyStatus, ToastState } from '../../types';
 
 async function copyToClipboard(text: string): Promise<boolean> {
+  if (!globalThis.navigator?.clipboard?.writeText) return false;
   try {
-    await navigator.clipboard.writeText(text);
+    await globalThis.navigator.clipboard.writeText(text);
     return true;
   } catch {
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      return ok;
-    } catch {
-      return false;
-    }
+    return false;
   }
 }
 
-export function EmployeeContactDialog({
-  userId,
-  name,
-  department,
-  phone,
-  email,
-  note,
-  locationLine,
-  status,
-  contacted = false,
-  onToggleContacted,
-  open,
-  onClose,
-  dash,
-  showToast,
-}: {
+type EmployeeContactDialogProps = Readonly<{
   userId: string;
   name: string;
   department: string;
@@ -54,21 +28,38 @@ export function EmployeeContactDialog({
   onClose: () => void;
   dash: DashboardStrings;
   showToast: (t: ToastState) => void;
-}) {
+}>;
+
+export function EmployeeContactDialog(props: EmployeeContactDialogProps) {
+  const {
+    userId,
+    name,
+    department,
+    phone,
+    email,
+    note,
+    locationLine,
+    status,
+    contacted = false,
+    onToggleContacted,
+    open,
+    onClose,
+    dash,
+    showToast,
+  } = props;
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    const t = window.setTimeout(() => panelRef.current?.focus(), 0);
+    const dialog = dialogRef.current;
+    if (!dialog || !open) return undefined;
+    if (!dialog.open) dialog.showModal();
+    const t = globalThis.setTimeout(() => panelRef.current?.focus(), 0);
     return () => {
-      window.removeEventListener('keydown', onKey);
-      window.clearTimeout(t);
+      globalThis.clearTimeout(t);
+      if (dialog.open) dialog.close();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -90,18 +81,23 @@ export function EmployeeContactDialog({
   const showContactToggle = status === 'need_help' && onToggleContacted;
 
   return (
-    <div
-      className="modal-backdrop profile-settings-modal-root"
-      role="presentation"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <dialog
+      ref={dialogRef}
+      className="profile-settings-contact-dialog-root"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
       }}
     >
+      <button
+        type="button"
+        className="profile-settings-contact-dialog-scrim"
+        aria-label={dash.supervisorContactClose}
+        onClick={onClose}
+      />
       <div
         ref={panelRef}
         className="modal profile-settings-contact-dialog"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="employee-contact-title"
         tabIndex={-1}
       >
@@ -144,6 +140,6 @@ export function EmployeeContactDialog({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

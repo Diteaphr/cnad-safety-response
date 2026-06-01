@@ -2,15 +2,14 @@ import { useState } from 'react';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 
-export function LoginPage({
-  loading,
-  error,
-  onEmailLogin,
-}: {
+type LoginPageProps = Readonly<{
   loading: boolean;
   error: string | null;
   onEmailLogin: (email: string, password: string) => Promise<void>;
-}) {
+}>;
+
+export function LoginPage(props: LoginPageProps) {
+  const { loading, error, onEmailLogin } = props;
   const { locale } = useLocale();
   const auth = getStrings(locale).auth;
   const [email, setEmail] = useState('');

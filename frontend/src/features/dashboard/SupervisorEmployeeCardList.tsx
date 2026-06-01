@@ -23,15 +23,7 @@ function stripeClass(status: SafetyStatus): string {
   return 'pending';
 }
 
-export function SupervisorEmployeeCardList({
-  rows,
-  dash,
-  showToast,
-  contactedMap,
-  onToggleContacted,
-  emptyMessage,
-  showNeedHelpDivider = false,
-}: {
+type SupervisorEmployeeCardListProps = Readonly<{
   rows: SupervisorEmployeeRow[];
   dash: DashboardStrings;
   showToast: (t: ToastState) => void;
@@ -40,7 +32,18 @@ export function SupervisorEmployeeCardList({
   emptyMessage?: string;
   /** When true, insert a divider between need_help and safe rows (admin "all" tab). */
   showNeedHelpDivider?: boolean;
-}) {
+}>;
+
+export function SupervisorEmployeeCardList(props: SupervisorEmployeeCardListProps) {
+  const {
+    rows,
+    dash,
+    showToast,
+    contactedMap,
+    onToggleContacted,
+    emptyMessage,
+    showNeedHelpDivider = false,
+  } = props;
   const [contactRow, setContactRow] = useState<SupervisorEmployeeRow | null>(null);
 
   if (rows.length === 0) {
@@ -66,7 +69,7 @@ export function SupervisorEmployeeCardList({
         </div>
         <div className="sv-employee-card-aside">
           <StatusBadge status={row.status} />
-          {row.status !== 'safe' ? (
+          {row.status === 'safe' ? null : (
             <button
               type="button"
               className="sv-employee-card-contact-btn"
@@ -75,7 +78,7 @@ export function SupervisorEmployeeCardList({
             >
               <PhoneCall size={18} strokeWidth={2} aria-hidden />
             </button>
-          ) : null}
+          )}
         </div>
       </article>
     );
