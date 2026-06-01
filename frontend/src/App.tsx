@@ -14,9 +14,9 @@ import { SupervisorDashboardPage, type DashboardStatusFilter } from './features/
 import {
   GlobalNotificationInboxPage,
   UserManagementPage,
+  createInitialEventForm,
 } from './features/events/EventAndAdminPages';
 import { AdminEventCenterPage } from './features/events/AdminEventCenterPage';
-import { createInitialEventForm } from './features/events/EventAndAdminPages';
 import {
   MemberPriorityHomePage,
   MemberReportHistoryPage,
@@ -38,17 +38,34 @@ import {
   getSupervisorDashboardApi,
   getUsers,
   loginWithEmailApi,
-  updateFcmTokenApi,
-  PORTAL_ACCESS_TOKEN_STORAGE_KEY,
-  PORTAL_SURFACE_STORAGE_KEY,
   submitReportApi,
-  sendEventRemindersApi,
   type AdminDashboardApi,
   type PortalNotificationRow,
   type SupervisorDashboardApi,
 } from './api';
 import { deriveUserCapabilities, initialSurfaceFromRoles } from './lib/portalSessionRoles';
-import { appendReminderAudit, loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
+import {
+  applySupervisorNudgeAfterSubmit,
+  buildLocalSafetyResponse,
+  countTeamStatusForEvent,
+  enrichApiSafetyResponse,
+  latestResponseFor,
+  mergeReportsWithOptimistic,
+  mergeUserResponseList,
+  navKeyAfterSurfaceGuard,
+  newLocalId,
+  readPortalAccessToken,
+  readStoredPortalSurface,
+  resolveDetailEventId,
+  resolveMemberHomeMode,
+  resolveSupervisorTeamRowStatus,
+  shouldOpenSubmissionOverlay,
+  showForegroundPushNotification,
+  submissionSummaryFromResponse,
+  trimmedDashboardEventId,
+  writePortalSurface,
+} from './app/portalAppLib';
+import { loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
 import { stripRedundantStatusFromTitle } from './lib/adminEventDisplay';
 import { useLocale } from './locale/LocaleContext';
@@ -79,22 +96,6 @@ interface SessionState {
   surface: AppSurface;
   caps: UserCapabilities;
 }
-
-const ADMIN_ONLY_NAV: NavKey[] = ['admin-dashboard', 'admin-event-detail', 'user-management'];
-const MEMBER_EXCLUSIVE_NAV: NavKey[] = [
-  'member-home',
-  'member-report-history',
-  'team-dashboard-home',
-  'supervisor-event-detail',
-];
-
-/** 可切回員工／主管模式時，管理中心不顯示這些共用頁（改由主系統進入）。 */
-const STAFF_PORTAL_NAV: NavKey[] = [
-  'notifications',
-  'profile',
-  'profile-direct-reports-list',
-  'profile-direct-report-history',
-];
 
 function App() {
   const { locale } = useLocale();
@@ -206,15 +207,7 @@ function App() {
     void (async () => {
       await loadCatalogFromApi();
       if (cancelled) return;
-      let token: string | null = null;
-      try {
-        token =
-          typeof window !== 'undefined'
-            ? window.localStorage.getItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY)?.trim() ?? null
-            : null;
-      } catch {
-        token = null;
-      }
+      const token = readPortalAccessToken();
       if (!token) return;
       try {
         const user = await getMyProfileApi();
@@ -222,13 +215,8 @@ function App() {
         mergeUserIntoList(user);
         const capsNext = deriveUserCapabilities(user.roles);
         let surfaceNext = initialSurfaceFromRoles(user.roles);
-        try {
-          const stored =
-            typeof window !== 'undefined' ? window.localStorage.getItem(PORTAL_SURFACE_STORAGE_KEY) : null;
-          if (stored === 'adminCenter' && capsNext.canManage) surfaceNext = 'adminCenter';
-        } catch {
-          /* ignore */
-        }
+        const stored = readStoredPortalSurface();
+        if (stored === 'adminCenter' && capsNext.canManage) surfaceNext = 'adminCenter';
         setSession({
           isLoggedIn: true,
           user,
@@ -247,13 +235,7 @@ function App() {
 
   useEffect(() => {
     if (!session.isLoggedIn || useMockOfflineCatalog) return;
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(PORTAL_SURFACE_STORAGE_KEY, session.surface);
-      }
-    } catch {
-      /* ignore */
-    }
+    writePortalSurface(session.surface);
   }, [session.isLoggedIn, session.surface, useMockOfflineCatalog]);
 
   useEffect(() => {
@@ -282,11 +264,7 @@ function App() {
         const p = payload as { notification?: { title?: string; body?: string } };
         const title = p.notification?.title ?? '安全確認';
         const body = p.notification?.body ?? '';
-        if (Notification.permission === 'granted') {
-          navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js').then((reg) => {
-            reg?.showNotification(title, { body, icon: '/icon-192x192.png' });
-          });
-        }
+        showForegroundPushNotification(title, body);
       });
     });
     return () => unsub?.();
@@ -330,40 +308,22 @@ function App() {
   const hasManager = Boolean(session.user?.managerId);
 
   /** @see MemberMode in memberTypes.ts */
-  const memberHomeMode: MemberMode = !hasDirectReports ? 1 : hasManager ? 2 : 3;
+  const memberHomeMode: MemberMode = resolveMemberHomeMode(hasDirectReports, hasManager);
 
   const memberListRowsOngoing: MemberHomeRow[] = useMemo(() => {
     const uid = session.user?.id;
     if (!uid || !employeeDeptId) return [];
     const list = employeeAccessibleEvents.filter((e) => e.status === 'active');
     const enriched = list.map((event) => {
-      const latest = responses
-        .filter((r) => r.eventId === event.id && r.userId === uid)
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+      const latest = latestResponseFor(responses, event.id, uid);
 
-      let teamCounts:
-        | { total: number; safe: number; needHelp: number; pending: number }
-        | undefined;
-
-      if (subordinateUserIds.length > 0) {
-        let safe = 0;
-        let needHelp = 0;
-        let pending = 0;
-        for (const sid of subordinateUserIds) {
-          const lr = responses
-            .filter((r) => r.eventId === event.id && r.userId === sid)
-            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-          if (!lr) pending += 1;
-          else if (lr.status === 'safe') safe += 1;
-          else needHelp += 1;
-        }
-        teamCounts = {
-          total: subordinateUserIds.length,
-          safe,
-          needHelp,
-          pending,
-        };
-      }
+      const teamCounts =
+        subordinateUserIds.length > 0
+          ? (() => {
+              const t = countTeamStatusForEvent(responses, event.id, subordinateUserIds);
+              return { total: t.total, safe: t.safe, needHelp: t.needHelp, pending: t.pending };
+            })()
+          : undefined;
 
       return { event, latest, teamCounts };
     });
@@ -424,34 +384,20 @@ function App() {
     return { ongoing, closed };
   }, [employeeAccessibleEvents, responses, session.user?.id, employeeDeptId]);
 
-  type TeamDashRow = {
-    event: EventItem;
-    teamCounts: { total: number; safe: number; needHelp: number; pending: number };
-  };
-
   const supervisorEventListRows = useMemo((): AdminEventListRow[] => {
     if (!hasDirectReports) return [];
     return employeeAccessibleEvents
       .map((event) => {
-        let safe = 0;
-        let needHelp = 0;
-        let pending = 0;
-        for (const sid of subordinateUserIds) {
-          const lr = responses
-            .filter((r) => r.eventId === event.id && r.userId === sid)
-            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-          if (!lr) pending += 1;
-          else if (lr.status === 'safe') safe += 1;
-          else needHelp += 1;
-        }
-        const total = subordinateUserIds.length;
+        const { safe, needHelp, pending, total } = countTeamStatusForEvent(
+          responses,
+          event.id,
+          subordinateUserIds,
+        );
         const reported = safe + needHelp;
         const responseRate = total ? Math.round((reported / total) * 100) : 0;
         let lastTs = new Date(event.startAt ?? event.createdAt).getTime();
         for (const sid of subordinateUserIds) {
-          const lr = responses
-            .filter((r) => r.eventId === event.id && r.userId === sid)
-            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+          const lr = latestResponseFor(responses, event.id, sid);
           if (lr?.updatedAt) {
             const t = new Date(lr.updatedAt).getTime();
             if (t > lastTs) lastTs = t;
@@ -471,46 +417,6 @@ function App() {
       .filter((r) => r.total > 0)
       .sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
   }, [hasDirectReports, employeeAccessibleEvents, subordinateUserIds, responses]);
-
-  const supervisorTeamDashboardRows = useMemo(() => {
-    if (!hasDirectReports || !employeeDeptId) {
-      return { active: [] as TeamDashRow[], closed: [] as TeamDashRow[] };
-    }
-    const build = (status: 'active' | 'closed'): TeamDashRow[] =>
-      employeeAccessibleEvents
-        .filter((e) => e.status === status)
-        .map((event) => {
-          let safe = 0;
-          let needHelp = 0;
-          let pending = 0;
-          for (const sid of subordinateUserIds) {
-            const lr = responses
-              .filter((r) => r.eventId === event.id && r.userId === sid)
-              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-            if (!lr) pending += 1;
-            else if (lr.status === 'safe') safe += 1;
-            else needHelp += 1;
-          }
-          return {
-            event,
-            teamCounts: {
-              total: subordinateUserIds.length,
-              safe,
-              needHelp,
-              pending,
-            },
-          };
-        })
-        .filter((r) => r.teamCounts.total > 0);
-    const active = build('active').sort((a, b) => {
-      const ra = a.teamCounts.pending / Math.max(a.teamCounts.total, 1);
-      const rb = b.teamCounts.pending / Math.max(b.teamCounts.total, 1);
-      if (ra !== rb) return rb - ra;
-      return compareEventsByStartThenCreatedDesc(a.event, b.event);
-    });
-    const closed = build('closed').sort((a, b) => compareEventsByStartThenCreatedDesc(a.event, b.event));
-    return { active, closed };
-  }, [hasDirectReports, employeeDeptId, employeeAccessibleEvents, subordinateUserIds, responses]);
 
   const layoutNavKey = useMemo((): NavKey => {
     if (navKey === 'member-report-history') return 'member-home';
@@ -706,23 +612,8 @@ function App() {
 
   useEffect(() => {
     if (!session.isLoggedIn || !session.user) return;
-    const { surface, caps } = session;
-    const nk = navKey;
-    if (surface === 'member' && ADMIN_ONLY_NAV.includes(nk)) {
-      setNavKey('member-home');
-      return;
-    }
-    if (surface === 'adminCenter' && MEMBER_EXCLUSIVE_NAV.includes(nk)) {
-      setNavKey('admin-dashboard');
-      return;
-    }
-    if (surface === 'adminCenter' && caps.hasStaffPortal && STAFF_PORTAL_NAV.includes(nk)) {
-      setNavKey('admin-dashboard');
-      return;
-    }
-    if (surface === 'member' && !caps.canViewTeam && (nk === 'team-dashboard-home' || nk === 'supervisor-event-detail')) {
-      setNavKey('member-home');
-    }
+    const redirect = navKeyAfterSurfaceGuard(session.surface, session.caps, navKey);
+    if (redirect) setNavKey(redirect);
   }, [session.isLoggedIn, session.user, session.surface, session.caps.canViewTeam, session.caps.hasStaffPortal, navKey]);
 
   useEffect(() => {
@@ -744,20 +635,24 @@ function App() {
   const supervisorViewAligned =
     supervisorUi &&
     !!supervisorDashboard?.event?.id &&
-    supervisorDashboard!.event!.id === selectedSupervisorEventId;
-
-  const adminViewAligned =
-    adminUi && !!adminDashboard?.event?.id && adminDashboard!.event!.id === selectedAdminEventId;
+    supervisorDashboard.event.id === selectedSupervisorEventId;
 
   /** 不依後端快照、僅以前端快照彙總（事件或角色與 dashboard 對齊失敗時使用） */
   const scopedClientRows = useMemo(() => {
     if (!selectedSupervisorEvent && !selectedAdminEvent) return [];
-    const eventId = adminUi ? selectedAdminEvent?.id : supervisorUi ? selectedSupervisorEvent?.id : '';
+    const eventId = resolveDetailEventId(
+      adminUi,
+      supervisorUi,
+      selectedAdminEvent?.id,
+      selectedSupervisorEvent?.id,
+    );
     const myId = session.user?.id;
     if (!eventId || !myId) return [];
 
     /** 與後端 `list_line_reports` / API `managerId`（derived line manager）一致 */
-    const lineReportIds = users.filter((user) => user.managerId === myId).map((user) => user.id);
+    const lineReportIds = new Set(
+      users.filter((user) => user.managerId === myId).map((user) => user.id),
+    );
 
     const sourceUsers = users.filter((u) => {
       if (adminUi) {
@@ -765,19 +660,18 @@ function App() {
         const tids = selectedAdminEvent?.targetDepartmentIds ?? [];
         return tids.length === 0 ? true : tids.includes(u.departmentId);
       }
-      return lineReportIds.includes(u.id);
+      return lineReportIds.has(u.id);
     });
 
     return sourceUsers.map((u) => {
-      const latest = responses
-        .filter((r) => r.eventId === eventId && r.userId === u.id)
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+      const latest = latestResponseFor(responses, eventId, u.id);
       const locLine = latest?.location;
+      const status: 'safe' | 'need_help' | 'pending' = latest?.status ?? 'pending';
       return {
         id: u.id,
         name: u.name,
         department: departments.find((d) => d.id === u.departmentId)?.name ?? '-',
-        status: (latest?.status ?? 'pending') as 'safe' | 'need_help' | 'pending',
+        status,
         updatedAt: latest?.updatedAt,
         note: latest?.comment,
         phone: u.phone,
@@ -838,39 +732,35 @@ function App() {
   }, [events, users, responses]);
 
   const employeeRows = useMemo(() => {
-    if (supervisorUi && supervisorViewAligned && supervisorDashboard?.event?.id === selectedSupervisorEvent?.id) {
-      const eventId = supervisorDashboard!.event!.id;
-      return supervisorDashboard!.team.map((t) => {
+    const dash = supervisorDashboard;
+    if (
+      supervisorUi &&
+      supervisorViewAligned &&
+      dash?.event &&
+      dash.event.id === selectedSupervisorEvent?.id
+    ) {
+      const eventId = dash.event.id;
+      return dash.team.map((t) => {
         const uid = t.user_id;
-        const latest = responses
-          .filter((r) => r.eventId === eventId && r.userId === uid)
-          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-        const raw = t.status;
-        let st: 'safe' | 'need_help' | 'pending' = 'pending';
-        if (raw === 'safe' || raw === 'need_help' || raw === 'pending') {
-          st = raw;
-        } else if (t.sub_team_summary) {
-          const sub = t.sub_team_summary;
-          if (sub.need_help > 0) st = 'need_help';
-          else if (sub.pending > 0) st = 'pending';
-          else st = 'safe';
-        } else if (latest?.status === 'safe' || latest?.status === 'need_help') {
-          st = latest.status;
-        } else if (t.needs_follow_up === false) {
-          st = 'safe';
-        }
+        const latest = latestResponseFor(responses, eventId, uid);
+        const st = resolveSupervisorTeamRowStatus(
+          t.status ?? undefined,
+          latest,
+          t.sub_team_summary,
+          t.needs_follow_up,
+        );
         const uMeta = users.find((x) => x.id === uid);
         const noteMerge = latest ? [latest.location, latest.comment].filter(Boolean).join(' · ') : undefined;
         const portal = getStrings(locale).portal;
         const subNote =
-          t.sub_team_summary != null
-            ? portal.supervisorSubTeamNote(
+          t.sub_team_summary == null
+            ? undefined
+            : portal.supervisorSubTeamNote(
                 t.sub_team_summary.safe,
                 t.sub_team_summary.need_help,
                 t.sub_team_summary.pending,
                 t.sub_team_summary.total ?? 0,
-              )
-            : undefined;
+              );
         return {
           id: uid,
           name: t.is_supervisor ? `${t.name}（${portal.supervisorSubTeamLead}）` : t.name,
@@ -965,7 +855,7 @@ function App() {
 
   const showToast = useCallback((next: ToastState) => {
     setToast(next);
-    window.setTimeout(() => setToast(null), 2200);
+    globalThis.setTimeout(() => setToast(null), 2200);
   }, []);
 
   const handleBlockedNav = useCallback(
@@ -985,28 +875,7 @@ function App() {
       const [repFresh, evtFresh] = await Promise.all([getReports(), getEvents()]);
       // Merge any pending optimistic responses — the DB write is async (Pub/Sub),
       // so fresh GET data may not yet include a recently submitted report.
-      let merged = repFresh;
-      if (optimisticResponsesRef.current.size > 0) {
-        const result = [...repFresh];
-        for (const [key, optimistic] of optimisticResponsesRef.current) {
-          const confirmed = repFresh.find(
-            (r) =>
-              r.eventId === optimistic.eventId &&
-              r.userId === optimistic.userId &&
-              new Date(r.updatedAt) >= new Date(optimistic.updatedAt),
-          );
-          if (confirmed) {
-            optimisticResponsesRef.current.delete(key);
-          } else {
-            const idx = result.findIndex(
-              (r) => r.eventId === optimistic.eventId && r.userId === optimistic.userId,
-            );
-            if (idx >= 0) result[idx] = optimistic;
-            else result.push(optimistic);
-          }
-        }
-        merged = result;
-      }
+      const merged = mergeReportsWithOptimistic(repFresh, optimisticResponsesRef.current);
       setResponses(merged);
       setEvents(evtFresh);
     } catch {
@@ -1014,13 +883,13 @@ function App() {
     }
     try {
       if (session.surface === 'member' && session.caps.canViewTeam) {
-        const eid = supervisorDashEventIdRef.current.trim();
-        const sd = await getSupervisorDashboardApi(eid ? eid : undefined);
+        const sd = await getSupervisorDashboardApi(
+          trimmedDashboardEventId(supervisorDashEventIdRef.current),
+        );
         setSupervisorDashboard(sd);
       }
       if (session.surface === 'adminCenter') {
-        const eid = adminDashEventIdRef.current.trim();
-        const ad = await getAdminDashboardApi(eid ? eid : undefined);
+        const ad = await getAdminDashboardApi(trimmedDashboardEventId(adminDashEventIdRef.current));
         setAdminDashboard(ad);
       }
     } catch {
@@ -1047,10 +916,10 @@ function App() {
     };
     const onFocus = () => void refreshOperationalData();
     document.addEventListener('visibilitychange', bump);
-    window.addEventListener('focus', onFocus);
+    globalThis.addEventListener('focus', onFocus);
     return () => {
       document.removeEventListener('visibilitychange', bump);
-      window.removeEventListener('focus', onFocus);
+      globalThis.removeEventListener('focus', onFocus);
     };
   }, [session.isLoggedIn, refreshOperationalData]);
 
@@ -1112,8 +981,8 @@ function App() {
     const adminPaths = session.surface === 'adminCenter' && navKey === 'admin-event-detail';
     const watchNav = supervisorPaths || adminPaths || navKey === 'notifications';
     if (!watchNav) return undefined;
-    const tid = window.setInterval(() => void refreshOperationalData(), 28_000);
-    return () => window.clearInterval(tid);
+    const tid = globalThis.setInterval(() => void refreshOperationalData(), 28_000);
+    return () => globalThis.clearInterval(tid);
   }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, navKey, refreshOperationalData]);
 
   useEffect(() => {
@@ -1142,38 +1011,6 @@ function App() {
       setContactedByEvent((prev) => ({ ...prev, [eid]: nextMap }));
     },
     [contactedByEvent, selectedSupervisorEventId, selectedAdminEventId, supervisorUi, adminUi],
-  );
-
-  const dispatchRemindersForEvent = useCallback(
-    async (eventId: string) => {
-      if (useMockOfflineCatalog) {
-        showToast({ tone: 'info', message: 'Demo 模式：未呼叫後端發送提醒。' });
-        return;
-      }
-      try {
-        const out = await sendEventRemindersApi(eventId);
-        const rid =
-          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : `rem-${Date.now()}`;
-        appendReminderAudit({
-          id: rid,
-          eventId,
-          sentAt: new Date().toISOString(),
-          sent: out.sent,
-          alreadySafe: out.already_safe,
-          totalTeam: out.total_team,
-        });
-        showToast({
-          tone: 'success',
-          message: `${out.message}: dispatched ${out.sent} · skipped safe ${out.already_safe}`,
-        });
-        await refreshOperationalData();
-      } catch (e) {
-        showToast({ tone: 'danger', message: e instanceof Error ? e.message : '無法發送提醒' });
-      }
-    },
-    [refreshOperationalData, showToast, useMockOfflineCatalog],
   );
 
   const handleEmailLogin = async (email: string, password: string) => {
@@ -1226,80 +1063,50 @@ function App() {
     setReportSubmitError(null);
     setReportSubmitErrorEventId(null);
     setSubmittingReportEventId(eventId);
-    const prior = responses
-      .filter((r) => r.eventId === eventId && r.userId === uid)
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-    const keepPriorAttach = !(meta?.omitStoredAttachment ?? false);
+    const prior = latestResponseFor(responses, eventId, uid);
+    const keepPriorAttach = meta?.omitStoredAttachment !== true;
 
-    const maybeOpenSubmissionOverlay = (nextResponse: SafetyResponse) => {
-      if (prior && !meta?.showOverlay) return;
-      setSubmissionOverlay({
-        variant: status,
-        mode: prior ? 'revision' : 'initial',
-        eventTitle: stripRedundantStatusFromTitle(eventRow.title),
-        submittedSummary:
-          status === 'need_help'
-            ? {
-                location: nextResponse.location,
-                comment: nextResponse.comment,
-                attachmentName: nextResponse.attachmentName,
-              }
-            : undefined,
-      });
+    const finishSuccessfulSubmit = (nextResponse: SafetyResponse, demoSuffix: string) => {
+      const mergedResponses = mergeUserResponseList(responses, nextResponse);
+      setSupervisorTeamNudge(
+        applySupervisorNudgeAfterSubmit({
+          supervisorUi,
+          subordinateUserIds,
+          mergedResponses,
+          eventId,
+          eventTitle: eventRow.title,
+        }),
+      );
+      clearEmployeeReportDraft(uid, eventId);
+      setResponses(mergedResponses);
+      lastSubmitMetaRef.current = null;
+      if (shouldOpenSubmissionOverlay(prior, meta)) {
+        setSubmissionOverlay({
+          variant: status,
+          mode: prior ? 'revision' : 'initial',
+          eventTitle: stripRedundantStatusFromTitle(eventRow.title),
+          submittedSummary: submissionSummaryFromResponse(status, nextResponse),
+        });
+      }
+      if (prior && !meta?.showOverlay) {
+        showToast({
+          tone: 'success',
+          message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}${demoSuffix}`,
+        });
+      }
     };
+
     if (useMockOfflineCatalog) {
       try {
-        const rid =
-          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : `local-${Date.now()}`;
-        const nextResponse: SafetyResponse = {
-          id: rid,
+        const nextResponse = buildLocalSafetyResponse({
           eventId,
           userId: uid,
           status,
-          comment: fields.comment.trim() || undefined,
-          location: fields.location.trim() || undefined,
-          attachmentName:
-            fields.attachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined) ?? undefined,
-          attachmentSizeBytes:
-            fields.attachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined) ?? undefined,
-          updatedAt: new Date().toISOString(),
-        };
-        const mergedResponses: SafetyResponse[] = [
-          ...responses.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
-          nextResponse,
-        ];
-        if (supervisorUi && subordinateUserIds.length > 0) {
-          let pend = 0;
-          for (const sid of subordinateUserIds) {
-            const lr = mergedResponses
-              .filter((r) => r.eventId === eventId && r.userId === sid)
-              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-            if (!lr) pend += 1;
-          }
-          const teamTotal = subordinateUserIds.length;
-          if (pend > 0 && teamTotal > 0) {
-            setSupervisorTeamNudge({
-              pendingPct: Math.round((pend / teamTotal) * 100),
-              eventTitle: eventRow.title,
-            });
-          } else {
-            setSupervisorTeamNudge(null);
-          }
-        } else {
-          setSupervisorTeamNudge(null);
-        }
-        clearEmployeeReportDraft(uid, eventId);
-        setResponses(mergedResponses);
-        lastSubmitMetaRef.current = null;
-        maybeOpenSubmissionOverlay(nextResponse);
-        if (prior && !meta?.showOverlay) {
-          showToast({
-            tone: 'success',
-            message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}（Demo 本地）`,
-          });
-        }
+          fields,
+          prior,
+          keepPriorAttach,
+        });
+        finishSuccessfulSubmit(nextResponse, '（Demo 本地）');
       } finally {
         setSubmittingReportEventId(null);
       }
@@ -1313,51 +1120,9 @@ function App() {
         comment: fields.comment.trim() || undefined,
         location: fields.location.trim() || undefined,
       });
-      const raw = out.data;
-      const nextResponse: SafetyResponse = {
-        ...raw,
-        attachmentName:
-          fields.attachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined) ?? raw.attachmentName,
-        attachmentSizeBytes:
-          fields.attachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined) ?? raw.attachmentSizeBytes,
-      };
-      const mergedResponses: SafetyResponse[] = [
-        ...responses.filter((r) => !(r.eventId === nextResponse.eventId && r.userId === nextResponse.userId)),
-        nextResponse,
-      ];
-      if (supervisorUi && subordinateUserIds.length > 0) {
-        let pend = 0;
-        for (const sid of subordinateUserIds) {
-          const lr = mergedResponses
-            .filter((r) => r.eventId === eventId && r.userId === sid)
-            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-          if (!lr) pend += 1;
-        }
-        const teamTotal = subordinateUserIds.length;
-        if (pend > 0 && teamTotal > 0) {
-          setSupervisorTeamNudge({
-            pendingPct: Math.round((pend / teamTotal) * 100),
-            eventTitle: eventRow.title,
-          });
-        } else {
-          setSupervisorTeamNudge(null);
-        }
-      } else {
-        setSupervisorTeamNudge(null);
-      }
-      clearEmployeeReportDraft(uid, eventId);
-      // Register as optimistic so every subsequent refreshOperationalData call
-      // preserves this entry until the DB write (via Pub/Sub) is confirmed.
+      const nextResponse = enrichApiSafetyResponse(out.data, fields, prior, keepPriorAttach);
       optimisticResponsesRef.current.set(`${nextResponse.eventId}:${nextResponse.userId}`, nextResponse);
-      setResponses(mergedResponses);
-      lastSubmitMetaRef.current = null;
-      maybeOpenSubmissionOverlay(nextResponse);
-      if (prior && !meta?.showOverlay) {
-        showToast({
-          tone: 'success',
-          message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}`,
-        });
-      }
+      finishSuccessfulSubmit(nextResponse, '');
       void refreshOperationalData();
     } catch (e) {
       const msg =
@@ -1383,10 +1148,7 @@ function App() {
       return false;
     }
     if (useMockOfflineCatalog) {
-      const eid =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `e-local-${Date.now()}`;
+      const eid = newLocalId('e-local');
       const newEvent: EventItem = {
         id: eid,
         title: eventForm.title || 'Untitled Event',
