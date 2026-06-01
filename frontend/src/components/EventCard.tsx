@@ -17,7 +17,7 @@ function typeLabel(eventType: EventItem['type'], p: ReturnType<typeof getStrings
   }
 }
 
-export function EventCard({ event }: { event: EventItem }) {
+export function EventCard({ event }: Readonly<{ event: EventItem }>) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
   const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';

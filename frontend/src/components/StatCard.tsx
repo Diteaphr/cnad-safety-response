@@ -1,14 +1,16 @@
+type StatCardProps = Readonly<{
+  label: string;
+  value: string | number;
+  tone?: 'neutral' | 'safe' | 'danger' | 'warning' | 'primary';
+  subLabel?: string;
+}>;
+
 export function StatCard({
   label,
   value,
   tone = 'neutral',
   subLabel,
-}: {
-  label: string;
-  value: string | number;
-  tone?: 'neutral' | 'safe' | 'danger' | 'warning' | 'primary';
-  subLabel?: string;
-}) {
+}: StatCardProps) {
   return (
     <article className={`stat-card ${tone}`}>
       <p>{label}</p>

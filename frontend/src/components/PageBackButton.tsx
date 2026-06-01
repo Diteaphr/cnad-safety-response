@@ -1,15 +1,17 @@
 import { ArrowLeft } from 'lucide-react';
 
+type PageBackButtonProps = Readonly<{
+  onClick: () => void;
+  ariaLabel: string;
+  className?: string;
+}>;
+
 /** Unified content-area back control; hidden on narrow viewports (Layout mobile header handles back). */
 export function PageBackButton({
   onClick,
   ariaLabel,
   className = '',
-}: {
-  onClick: () => void;
-  ariaLabel: string;
-  className?: string;
-}) {
+}: PageBackButtonProps) {
   const classes = ['page-content-back', className].filter(Boolean).join(' ');
 
   return (

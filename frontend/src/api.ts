@@ -115,10 +115,19 @@ export const PORTAL_SURFACE_STORAGE_KEY = 'cnad_portal_surface';
 /** JWT；與 `localStorage` 同步（`setAccessToken` / `clearAccessToken`）。 */
 let accessToken: string | null = null;
 
-function readAccessTokenFromStorage(): void {
-  if (typeof window === 'undefined') return;
+function portalLocalStorage(): Storage | null {
   try {
-    const t = window.localStorage.getItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY)?.trim();
+    return globalThis.window?.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readAccessTokenFromStorage(): void {
+  const storage = portalLocalStorage();
+  if (!storage) return;
+  try {
+    const t = storage.getItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY)?.trim();
     accessToken = t || null;
   } catch {
     accessToken = null;
@@ -128,10 +137,11 @@ readAccessTokenFromStorage();
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+  const storage = portalLocalStorage();
+  if (!storage) return;
   try {
-    if (typeof window === 'undefined') return;
-    if (token) window.localStorage.setItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY, token);
-    else window.localStorage.removeItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY);
+    if (token) storage.setItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY, token);
+    else storage.removeItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY);
   } catch {
     /* private / quota */
   }
@@ -139,10 +149,11 @@ export function setAccessToken(token: string | null): void {
 
 export function clearAccessToken(): void {
   accessToken = null;
+  const storage = portalLocalStorage();
+  if (!storage) return;
   try {
-    if (typeof window === 'undefined') return;
-    window.localStorage.removeItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY);
-    window.localStorage.removeItem(PORTAL_SURFACE_STORAGE_KEY);
+    storage.removeItem(PORTAL_ACCESS_TOKEN_STORAGE_KEY);
+    storage.removeItem(PORTAL_SURFACE_STORAGE_KEY);
   } catch {
     /* ignore */
   }

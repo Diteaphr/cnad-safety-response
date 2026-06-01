@@ -12,7 +12,7 @@ export interface EmployeeRow {
   locationLine?: string;
 }
 
-export function EmployeeTable({ rows }: { rows: EmployeeRow[] }) {
+export function EmployeeTable({ rows }: Readonly<{ rows: EmployeeRow[] }>) {
   return (
     <div className="table-wrap">
       <table className="data-table">

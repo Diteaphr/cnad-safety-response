@@ -1,3 +1,14 @@
+type ConfirmModalProps = Readonly<{
+  open: boolean;
+  title: string;
+  description: string;
+  cancelText?: string;
+  confirmText: string;
+  confirmTone?: 'danger' | 'primary';
+  onCancel: () => void;
+  onConfirm: () => void;
+}>;
+
 export function ConfirmModal({
   open,
   title,
@@ -7,17 +18,10 @@ export function ConfirmModal({
   confirmTone = 'danger',
   onCancel,
   onConfirm,
-}: {
-  open: boolean;
-  title: string;
-  description: string;
-  cancelText?: string;
-  confirmText: string;
-  confirmTone?: 'danger' | 'primary';
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
+}: ConfirmModalProps) {
   if (!open) return null;
+
+  const confirmClass = confirmTone === 'primary' ? 'btn primary' : 'btn danger';
 
   return (
     <div className="modal-backdrop">
@@ -28,7 +32,7 @@ export function ConfirmModal({
           <button className="btn ghost" onClick={onCancel} type="button">
             {cancelText}
           </button>
-          <button className={confirmTone === 'primary' ? 'btn primary' : 'btn danger'} onClick={onConfirm} type="button">
+          <button className={confirmClass} onClick={onConfirm} type="button">
             {confirmText}
           </button>
         </div>
@@ -36,4 +40,3 @@ export function ConfirmModal({
     </div>
   );
 }
-
