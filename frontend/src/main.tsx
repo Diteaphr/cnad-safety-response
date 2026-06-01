@@ -42,8 +42,8 @@ function installNativeAppViewportGuards() {
   };
 
   lockDocumentWidth();
-  window.addEventListener('resize', lockDocumentWidth);
-  window.addEventListener('orientationchange', lockDocumentWidth);
+  globalThis.addEventListener('resize', lockDocumentWidth);
+  globalThis.addEventListener('orientationchange', lockDocumentWidth);
 }
 
 installNativeAppViewportGuards();
@@ -52,7 +52,7 @@ async function prepareClientShell() {
   if (import.meta.env.DEV && 'serviceWorker' in navigator) {
     const registrations = await navigator.serviceWorker.getRegistrations();
     await Promise.all(registrations.map((registration) => registration.unregister()));
-    if ('caches' in window) {
+    if ('caches' in globalThis.window) {
       const keys = await caches.keys();
       await Promise.all(keys.map((key) => caches.delete(key)));
     }

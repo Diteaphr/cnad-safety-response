@@ -19,7 +19,7 @@ import { useLocale } from '../locale/LocaleContext';
 import type { AppLocale } from '../locale/LocaleContext';
 import { getStrings, type ProfilePageStrings } from '../locale/strings';
 import type { Department, Role, ToastState, User } from '../types';
-import { getMyProfileApi, updateMyProfileApi, updateFcmTokenApi } from '../api';
+import { getMyProfileApi, updateMyProfileApi } from '../api';
 import { ManagerContactDialog } from './ManagerContactDialog';
 import { initialsFromName } from './utils';
 
@@ -37,15 +37,13 @@ function roleBadgeClass(role: Role): string {
   return 'profile-settings-badge profile-settings-badge--admin';
 }
 
-function ReportingPersonRow({
-  person,
-  departmentLabel,
-  onClick,
-}: {
+type ReportingPersonRowProps = Readonly<{
   person: User;
   departmentLabel: string;
   onClick?: () => void;
-}) {
+}>;
+
+function ReportingPersonRow({ person, departmentLabel, onClick }: ReportingPersonRowProps) {
   const inner = (
     <>
       <span className="profile-settings-person-avatar" aria-hidden>
@@ -72,18 +70,7 @@ function ReportingPersonRow({
   return <div className="profile-settings-person-row">{inner}</div>;
 }
 
-export function ProfileSettingsPage({
-  user,
-  departmentName,
-  allUsers,
-  departments,
-  showToast,
-  onLogout,
-  onProfileUpdated,
-  onNavigateToDirectReportsList,
-  onNavigateToSubordinateHistory,
-  offlineMockSession = false,
-}: {
+type ProfileSettingsPageProps = Readonly<{
   user: User;
   departmentName: string;
   allUsers: User[];
@@ -95,7 +82,20 @@ export function ProfileSettingsPage({
   onNavigateToSubordinateHistory: (userId: string) => void;
   /** 為 true 時不呼叫 GET/PUT /api/users/me（Demo 靜態資料模式）。 */
   offlineMockSession?: boolean;
-}) {
+}>;
+
+export function ProfileSettingsPage({
+  user,
+  departmentName,
+  allUsers,
+  departments,
+  showToast,
+  onLogout,
+  onProfileUpdated,
+  onNavigateToDirectReportsList,
+  onNavigateToSubordinateHistory,
+  offlineMockSession = false,
+}: ProfileSettingsPageProps) {
   const { locale, setLocale } = useLocale();
   const profileCopy = getStrings(locale).profile;
   const pp = getStrings(locale).profilePage;
@@ -343,7 +343,7 @@ export function ProfileSettingsPage({
                 </>
               )}
             </div>
-            {!profileEditing ? (
+            {profileEditing ? null : (
               <button
                 type="button"
                 className="btn ghost profile-settings-edit-btn"
@@ -356,7 +356,7 @@ export function ProfileSettingsPage({
                 <Pencil size={16} aria-hidden />
                 {pp.editProfile}
               </button>
-            ) : null}
+            )}
           </div>
         </article>
 

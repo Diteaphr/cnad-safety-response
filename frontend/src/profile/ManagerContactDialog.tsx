@@ -3,51 +3,36 @@ import { Copy } from 'lucide-react';
 import type { ToastState, User } from '../types';
 
 async function copyToClipboard(text: string): Promise<boolean> {
+  if (!globalThis.navigator?.clipboard?.writeText) return false;
   try {
-    await navigator.clipboard.writeText(text);
+    await globalThis.navigator.clipboard.writeText(text);
     return true;
   } catch {
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      return ok;
-    } catch {
-      return false;
-    }
+    return false;
   }
 }
 
-export function ManagerContactDialog({
-  manager,
-  open,
-  onClose,
-  showToast,
-}: {
+type ManagerContactDialogProps = Readonly<{
   manager: User;
   open: boolean;
   onClose: () => void;
   showToast: (t: ToastState) => void;
-}) {
+}>;
+
+export function ManagerContactDialog({ manager, open, onClose, showToast }: ManagerContactDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    const t = window.setTimeout(() => panelRef.current?.focus(), 0);
+    const dialog = dialogRef.current;
+    if (!dialog || !open) return undefined;
+    if (!dialog.open) dialog.showModal();
+    const t = globalThis.setTimeout(() => panelRef.current?.focus(), 0);
     return () => {
-      window.removeEventListener('keydown', onKey);
-      window.clearTimeout(t);
+      globalThis.clearTimeout(t);
+      if (dialog.open) dialog.close();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -62,18 +47,23 @@ export function ManagerContactDialog({
   };
 
   return (
-    <div
-      className="modal-backdrop profile-settings-modal-root"
-      role="presentation"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <dialog
+      ref={dialogRef}
+      className="profile-settings-contact-dialog-root"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
       }}
     >
+      <button
+        type="button"
+        className="profile-settings-contact-dialog-scrim"
+        aria-label="關閉"
+        onClick={onClose}
+      />
       <div
         ref={panelRef}
         className="modal profile-settings-contact-dialog"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="manager-contact-title"
         tabIndex={-1}
       >
@@ -103,6 +93,6 @@ export function ManagerContactDialog({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
