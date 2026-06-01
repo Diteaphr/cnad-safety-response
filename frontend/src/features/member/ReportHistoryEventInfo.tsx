@@ -4,15 +4,14 @@ import { formatEventImpactScope, stripRedundantStatusFromTitle } from '../../lib
 import type { Department, EventItem } from '../../types';
 import { formatEmployeeCardTime } from './memberFormat';
 
-export function ReportHistoryEventInfo({
-  event,
-  departments,
-  titleId,
-}: {
+type ReportHistoryEventInfoProps = Readonly<{
   event: EventItem;
   departments: Department[];
   titleId?: string;
-}) {
+}>;
+
+export function ReportHistoryEventInfo(props: ReportHistoryEventInfoProps) {
+  const { event, departments, titleId } = props;
   const { locale } = useLocale();
   const strings = getStrings(locale);
   const deptLabel = formatEventImpactScope(event, departments, strings.portal);

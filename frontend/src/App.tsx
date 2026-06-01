@@ -48,6 +48,7 @@ import {
   applySupervisorNudgeAfterSubmit,
   buildLocalSafetyResponse,
   countTeamStatusForEvent,
+  clearStoredPortalNav,
   enrichApiSafetyResponse,
   latestResponseFor,
   mergeReportsWithOptimistic,
@@ -55,14 +56,18 @@ import {
   navKeyAfterSurfaceGuard,
   newLocalId,
   readPortalAccessToken,
+  readStoredPortalNav,
   readStoredPortalSurface,
   resolveDetailEventId,
   resolveMemberHomeMode,
+  resolveRestoredEventSelection,
+  resolveRestoredNavKey,
   resolveSupervisorTeamRowStatus,
   shouldOpenSubmissionOverlay,
   showForegroundPushNotification,
   submissionSummaryFromResponse,
   trimmedDashboardEventId,
+  writePortalNav,
   writePortalSurface,
 } from './app/portalAppLib';
 import { loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
@@ -106,6 +111,7 @@ function App() {
     surface: 'member',
     caps: emptyCaps,
   });
+  const [sessionBootstrapping, setSessionBootstrapping] = useState(() => Boolean(readPortalAccessToken()));
   const [navKey, setNavKey] = useState<NavKey>('member-home');
   const [supervisorTeamNudge, setSupervisorTeamNudge] = useState<null | { pendingPct: number; eventTitle: string }>(null);
   const [supervisorOpenedDetailFrom, setSupervisorOpenedDetailFrom] = useState<'member-home' | 'team-dashboard-home'>(
@@ -205,27 +211,36 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      await loadCatalogFromApi();
-      if (cancelled) return;
-      const token = readPortalAccessToken();
-      if (!token) return;
       try {
+        await loadCatalogFromApi();
+        if (cancelled) return;
+        const token = readPortalAccessToken();
+        if (!token) return;
         const user = await getMyProfileApi();
         if (cancelled) return;
         mergeUserIntoList(user);
         const capsNext = deriveUserCapabilities(user.roles);
         let surfaceNext = initialSurfaceFromRoles(user.roles);
-        const stored = readStoredPortalSurface();
-        if (stored === 'adminCenter' && capsNext.canManage) surfaceNext = 'adminCenter';
+        const storedSurface = readStoredPortalSurface();
+        if (storedSurface === 'adminCenter' && capsNext.canManage) surfaceNext = 'adminCenter';
+        const storedNav = readStoredPortalNav();
         setSession({
           isLoggedIn: true,
           user,
           surface: surfaceNext,
           caps: capsNext,
         });
-        setNavKey(surfaceNext === 'adminCenter' ? 'admin-dashboard' : 'member-home');
+        setNavKey(resolveRestoredNavKey(surfaceNext, capsNext, storedNav));
+        if (storedNav?.supervisorOpenedDetailFrom) {
+          setSupervisorOpenedDetailFrom(storedNav.supervisorOpenedDetailFrom);
+        }
+        if (storedNav?.profileSubordinateUserId) {
+          setProfileSubordinateUserId(storedNav.profileSubordinateUserId);
+        }
       } catch {
         if (!cancelled) clearAccessToken();
+      } finally {
+        if (!cancelled) setSessionBootstrapping(false);
       }
     })();
     return () => {
@@ -239,12 +254,30 @@ function App() {
   }, [session.isLoggedIn, session.surface, useMockOfflineCatalog]);
 
   useEffect(() => {
+    if (!session.isLoggedIn) return;
+    writePortalNav({
+      navKey,
+      supervisorOpenedDetailFrom,
+      selectedSupervisorEventId: selectedSupervisorEventId || undefined,
+      selectedAdminEventId: selectedAdminEventId || undefined,
+      profileSubordinateUserId,
+    });
+  }, [
+    session.isLoggedIn,
+    navKey,
+    supervisorOpenedDetailFrom,
+    selectedSupervisorEventId,
+    selectedAdminEventId,
+    profileSubordinateUserId,
+  ]);
+
+  useEffect(() => {
     if (events.length === 0) return;
     if (eventsSelectionInitialized.current) return;
     eventsSelectionInitialized.current = true;
-    const id = events.find((e) => e.status === 'active')?.id ?? events[0].id;
-    setSelectedSupervisorEventId(id);
-    setSelectedAdminEventId(id);
+    const restored = resolveRestoredEventSelection(events, readStoredPortalNav());
+    setSelectedSupervisorEventId(restored.supervisorEventId);
+    setSelectedAdminEventId(restored.adminEventId);
   }, [events]);
 
   useEffect(() => {
@@ -1044,6 +1077,7 @@ function App() {
 
   const logout = () => {
     clearAccessToken();
+    clearStoredPortalNav();
     setSession({ isLoggedIn: false, user: null, surface: 'member', caps: emptyCaps });
     void loadCatalogFromApi();
     showToast({ tone: 'info', message: 'Logged out.' });
@@ -1226,7 +1260,11 @@ function App() {
     (supervisorUi || adminUi) && stats.total > 0 ? stats.pending / stats.total >= 0.3 : false;
   if (!session.isLoggedIn) {
     return (
-      <LoginPage loading={!catalogLoaded} error={catalogError} onEmailLogin={handleEmailLogin} />
+      <LoginPage
+        loading={sessionBootstrapping || !catalogLoaded}
+        error={catalogError}
+        onEmailLogin={handleEmailLogin}
+      />
     );
   }
 

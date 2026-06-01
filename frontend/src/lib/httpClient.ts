@@ -16,7 +16,7 @@ export function isProbablyTransientNetworkError(err: unknown): boolean {
 export async function fetchWithTimeout(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
   const { timeoutMs = DEFAULT_MS, signal: outer, ...rest } = init;
   const ctrl = new AbortController();
-  const to = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  const to = globalThis.setTimeout(() => ctrl.abort(), timeoutMs);
 
   try {
     if (outer) {
@@ -28,7 +28,7 @@ export async function fetchWithTimeout(url: string, init: RequestInit & { timeou
     }
     return await fetch(url, { ...rest, signal: ctrl.signal });
   } finally {
-    window.clearTimeout(to);
+    globalThis.clearTimeout(to);
   }
 }
 
@@ -46,7 +46,7 @@ export async function withRetries<T>(
       last = e;
       const ok = opts.shouldRetry?.(e) ?? isProbablyTransientNetworkError(e);
       if (!ok || i === attempts - 1) throw e;
-      await new Promise((r) => window.setTimeout(r, delayMs * (i + 1)));
+      await new Promise((r) => globalThis.setTimeout(r, delayMs * (i + 1)));
     }
   }
   throw last;

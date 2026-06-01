@@ -1,3 +1,5 @@
+import { portalLocalStorage } from './browserStorage';
+
 const PREFIX = 'cnad-employee-report-draft:v1';
 
 export type StoredEmployeeDraft = {
@@ -12,8 +14,10 @@ export function employeeReportDraftKey(userId: string, eventId: string): string 
 }
 
 export function loadEmployeeReportDraft(userId: string, eventId: string): StoredEmployeeDraft | null {
+  const storage = portalLocalStorage();
+  if (!storage) return null;
   try {
-    const raw = window.localStorage.getItem(employeeReportDraftKey(userId, eventId));
+    const raw = storage.getItem(employeeReportDraftKey(userId, eventId));
     if (!raw) return null;
     const j = JSON.parse(raw) as Partial<StoredEmployeeDraft>;
     if (typeof j.comment !== 'string' || typeof j.location !== 'string' || typeof j.selectedNeedHelp !== 'boolean')
@@ -30,20 +34,24 @@ export function loadEmployeeReportDraft(userId: string, eventId: string): Stored
 }
 
 export function saveEmployeeReportDraft(userId: string, eventId: string, draft: Omit<StoredEmployeeDraft, 'updatedAt'>): void {
+  const storage = portalLocalStorage();
+  if (!storage) return;
   try {
     const payload: StoredEmployeeDraft = {
       ...draft,
       updatedAt: new Date().toISOString(),
     };
-    window.localStorage.setItem(employeeReportDraftKey(userId, eventId), JSON.stringify(payload));
+    storage.setItem(employeeReportDraftKey(userId, eventId), JSON.stringify(payload));
   } catch {
     /* quota */
   }
 }
 
 export function clearEmployeeReportDraft(userId: string, eventId: string): void {
+  const storage = portalLocalStorage();
+  if (!storage) return;
   try {
-    window.localStorage.removeItem(employeeReportDraftKey(userId, eventId));
+    storage.removeItem(employeeReportDraftKey(userId, eventId));
   } catch {
     /* noop */
   }

@@ -129,9 +129,13 @@ export function useEmployeeQuickReport({
     if (latestResponse) return;
 
     const stored = loadEmployeeReportDraft(draftUserId, eid);
-    setEmployeeComment(stored?.comment ?? '');
-    setEmployeeLocation(stored?.location ?? '');
-    setSelectedNeedHelp(false);
+    const comment = stored?.comment ?? '';
+    const location = stored?.location ?? '';
+    const needHelp =
+      stored?.selectedNeedHelp ?? Boolean(comment.trim() || location.trim());
+    setEmployeeComment(comment);
+    setEmployeeLocation(location);
+    setSelectedNeedHelp(needHelp);
   }, [selectedEvent?.id, draftUserId, latestResponse?.id]);
 
   useEffect(() => {
@@ -141,17 +145,23 @@ export function useEmployeeQuickReport({
 
   useEffect(() => {
     if (!draftUserId || !selectedEvent?.id || Boolean(latestResponse) || wantToUpdate) return;
-    if (stackInitialReport) return;
-    if (persistDraftTimer.current) globalThis.clearTimeout(persistDraftTimer.current);
-    persistDraftTimer.current = globalThis.setTimeout(() => {
+
+    const persistDraft = () => {
       saveEmployeeReportDraft(draftUserId, selectedEvent.id, {
         comment: employeeComment,
         location: employeeLocation,
         selectedNeedHelp,
       });
-    }, 420);
+    };
+
+    if (persistDraftTimer.current) globalThis.clearTimeout(persistDraftTimer.current);
+    persistDraftTimer.current = globalThis.setTimeout(persistDraft, 420);
     return () => {
-      if (persistDraftTimer.current) globalThis.clearTimeout(persistDraftTimer.current);
+      if (persistDraftTimer.current) {
+        globalThis.clearTimeout(persistDraftTimer.current);
+        persistDraftTimer.current = null;
+      }
+      persistDraft();
     };
   }, [
     draftUserId,
@@ -161,7 +171,6 @@ export function useEmployeeQuickReport({
     employeeComment,
     employeeLocation,
     selectedNeedHelp,
-    stackInitialReport,
   ]);
 
   useEffect(() => {

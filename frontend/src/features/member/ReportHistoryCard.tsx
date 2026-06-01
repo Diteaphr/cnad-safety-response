@@ -4,19 +4,16 @@ import { getStrings } from '../../locale/strings';
 import type { Department, EventItem, SafetyResponse } from '../../types';
 import { ReportHistoryEventInfo } from './ReportHistoryEventInfo';
 
-export function ReportHistoryCard({
-  event,
-  latest,
-  departments,
-  editable = false,
-  onEdit,
-}: {
+type ReportHistoryCardProps = Readonly<{
   event: EventItem;
   latest: SafetyResponse;
   departments: Department[];
   editable?: boolean;
   onEdit?: () => void;
-}) {
+}>;
+
+export function ReportHistoryCard(props: ReportHistoryCardProps) {
+  const { event, latest, departments, editable = false, onEdit } = props;
   const { locale } = useLocale();
   const strings = getStrings(locale);
   const isSafe = latest.status === 'safe';

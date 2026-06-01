@@ -1,4 +1,5 @@
 import type { NotificationRecord, NotificationSummary } from '../types';
+import { portalLocalStorage, portalSessionStorage } from './browserStorage';
 
 const CONTACT_KEY_PREFIX = 'cnad-contacted-need-help:v1:';
 const CONTACT_LEGACY_SS = CONTACT_KEY_PREFIX; // formerly sessionStorage — migrate once
@@ -13,17 +14,38 @@ function readLsJson<T>(raw: string | null): T | null {
   }
 }
 
+function isBooleanRecord(value: unknown): value is Record<string, boolean> {
+  if (!value || typeof value !== 'object') return false;
+  return Object.values(value).every((v) => typeof v === 'boolean');
+}
+
+function isReminderAuditEntry(value: unknown): value is ReminderAuditEntry {
+  if (!value || typeof value !== 'object') return false;
+  const e = value as Partial<ReminderAuditEntry>;
+  return (
+    typeof e.id === 'string' &&
+    typeof e.eventId === 'string' &&
+    typeof e.sentAt === 'string' &&
+    typeof e.sent === 'number' &&
+    typeof e.alreadySafe === 'number' &&
+    typeof e.totalTeam === 'number'
+  );
+}
+
 /** 從舊版 sessionStorage 遷移聯繫狀態到 localStorage（跨重新整理保留）。 */
 function migrateContactsFromSessionIfNeeded(eventId: string): void {
+  const session = portalSessionStorage();
+  const storage = portalLocalStorage();
+  if (!session || !storage) return;
   try {
     const key = CONTACT_LEGACY_SS + eventId;
-    const legacy = sessionStorage.getItem(key);
+    const legacy = session.getItem(key);
     if (!legacy) return;
     const lsKey = CONTACT_KEY_PREFIX + eventId;
-    if (!window.localStorage.getItem(lsKey)) {
-      window.localStorage.setItem(lsKey, legacy);
+    if (!storage.getItem(lsKey)) {
+      storage.setItem(lsKey, legacy);
     }
-    sessionStorage.removeItem(key);
+    session.removeItem(key);
   } catch {
     /* ignore */
   }
@@ -31,19 +53,22 @@ function migrateContactsFromSessionIfNeeded(eventId: string): void {
 
 export function loadContactedMap(eventId: string): Record<string, boolean> {
   migrateContactsFromSessionIfNeeded(eventId);
+  const storage = portalLocalStorage();
+  if (!storage) return {};
   try {
-    const raw = window.localStorage.getItem(CONTACT_KEY_PREFIX + eventId);
+    const raw = storage.getItem(CONTACT_KEY_PREFIX + eventId);
     const j = readLsJson<unknown>(raw);
-    if (!j || typeof j !== 'object') return {};
-    return j as Record<string, boolean>;
+    return isBooleanRecord(j) ? j : {};
   } catch {
     return {};
   }
 }
 
 export function saveContactedMap(eventId: string, map: Record<string, boolean>): void {
+  const storage = portalLocalStorage();
+  if (!storage) return;
   try {
-    window.localStorage.setItem(CONTACT_KEY_PREFIX + eventId, JSON.stringify(map));
+    storage.setItem(CONTACT_KEY_PREFIX + eventId, JSON.stringify(map));
   } catch {
     /* ignore quota */
   }
@@ -59,26 +84,31 @@ export type ReminderAuditEntry = {
 };
 
 function readReminderAuditEntries(): ReminderAuditEntry[] {
+  const storage = portalLocalStorage();
+  const session = portalSessionStorage();
+  if (!storage) return [];
   try {
-    const raw = window.localStorage.getItem(REMINDER_AUDIT_KEY);
-    const legacySs = typeof window.sessionStorage !== 'undefined' ? window.sessionStorage.getItem(REMINDER_AUDIT_KEY) : null;
+    const raw = storage.getItem(REMINDER_AUDIT_KEY);
+    const legacySs = session?.getItem(REMINDER_AUDIT_KEY) ?? null;
     if (!raw && legacySs) {
-      window.localStorage.setItem(REMINDER_AUDIT_KEY, legacySs);
-      window.sessionStorage.removeItem(REMINDER_AUDIT_KEY);
+      storage.setItem(REMINDER_AUDIT_KEY, legacySs);
+      session?.removeItem(REMINDER_AUDIT_KEY);
     }
-    const j = readLsJson<unknown>(window.localStorage.getItem(REMINDER_AUDIT_KEY));
+    const j = readLsJson<unknown>(storage.getItem(REMINDER_AUDIT_KEY));
     if (!Array.isArray(j)) return [];
-    return j as ReminderAuditEntry[];
+    return j.filter(isReminderAuditEntry);
   } catch {
     return [];
   }
 }
 
 export function appendReminderAudit(entry: ReminderAuditEntry): void {
+  const storage = portalLocalStorage();
+  if (!storage) return;
   const prev = readReminderAuditEntries();
   const next = [entry, ...prev].slice(0, 120);
   try {
-    window.localStorage.setItem(REMINDER_AUDIT_KEY, JSON.stringify(next));
+    storage.setItem(REMINDER_AUDIT_KEY, JSON.stringify(next));
   } catch {
     /* ignore */
   }
@@ -96,19 +126,26 @@ export function reminderHistoryForEvent(eventId: string): NotificationRecord[] {
     }));
 }
 
+function isReminderChannel(channel: string): boolean {
+  const lower = channel.toLowerCase();
+  return channel.includes('reminder') || lower.includes('fcm');
+}
+
+function isSmsChannel(channel: string): boolean {
+  return channel.toLowerCase().includes('sms');
+}
+
 export function buildNotificationPageSummary(input: {
   reminderHistory: NotificationRecord[];
   apiRowsSameUser: Array<{ channel: string; status: string }>;
   targetedEmployeeCountForEvent: number;
   responsesCountForEvent: number;
 }): NotificationSummary {
-  const reminders = input.apiRowsSameUser.filter(
-    (r) => String(r.channel).includes('reminder') || String(r.channel).toLowerCase().includes('fcm'),
-  );
+  const reminders = input.apiRowsSameUser.filter((r) => isReminderChannel(r.channel));
   const pushSent = reminders.filter((r) => r.status === 'sent').length;
   const derivedPending = Math.max(0, input.targetedEmployeeCountForEvent - input.responsesCountForEvent);
   const pushFailed = reminders.filter((r) => r.status === 'failed').length || (pushSent === 0 ? derivedPending : 0);
-  const smsFallbackSent = reminders.filter((r) => String(r.channel).toLowerCase().includes('sms')).length;
+  const smsFallbackSent = reminders.filter((r) => isSmsChannel(r.channel)).length;
 
   return {
     pushSent: pushSent || Math.min(input.targetedEmployeeCountForEvent, input.responsesCountForEvent),

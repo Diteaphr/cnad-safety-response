@@ -10,28 +10,32 @@ export function stripRedundantStatusFromTitle(title: string): string {
 }
 
 /** Impact scope line aligned with admin event list (`AdminEventCenterPage`). */
-export function formatEventImpactScope(ev: EventItem, departments: Department[], p: PortalStrings): string {
+export function formatEventImpactScope(
+  ev: EventItem,
+  departments: Department[],
+  portalStrings: PortalStrings,
+): string {
   const tids = ev.targetDepartmentIds ?? [];
-  if (tids.length === 0) return p.adminScopeAllEmployees;
+  if (tids.length === 0) return portalStrings.adminScopeAllEmployees;
   if (ev.cardDepartment?.trim()) return ev.cardDepartment.trim();
   const names = tids
     .map((id) => departments.find((d) => d.id === id)?.name)
-    .filter(Boolean) as string[];
+    .filter((name): name is string => Boolean(name));
   if (names.length === 0) return '—';
   if (names.length <= 2) return names.join('、');
   return `${names[0]} · +${names.length - 1}`;
 }
 
-export function formatAdminEventTypeLabel(evType: string, p: PortalStrings): string {
+export function formatAdminEventTypeLabel(evType: string, portalStrings: PortalStrings): string {
   switch (evType) {
     case 'Earthquake':
-      return p.eventTypeEarthquake;
+      return portalStrings.eventTypeEarthquake;
     case 'Typhoon':
-      return p.eventTypeTyphoon;
+      return portalStrings.eventTypeTyphoon;
     case 'Fire':
-      return p.eventTypeFire;
+      return portalStrings.eventTypeFire;
     case 'Other':
-      return p.eventTypeOther;
+      return portalStrings.eventTypeOther;
     default:
       return evType;
   }

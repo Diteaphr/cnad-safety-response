@@ -2,14 +2,18 @@ import type { AppSurface, Role, UserCapabilities } from '../types';
 
 const KNOWN: ReadonlySet<Role> = new Set(['employee', 'supervisor', 'admin']);
 
+function isKnownRole(value: string): value is Role {
+  return KNOWN.has(value as Role);
+}
+
 /** 將 API 任意 `roles` 轉成小寫並過濾成已知 Role，避免異常／大小寫導致邏輯失效。 */
 export function sanitizedRolesFromApi(raw: unknown): Role[] {
   if (!Array.isArray(raw)) return [];
   const out: Role[] = [];
   for (const entry of raw) {
     if (typeof entry !== 'string') continue;
-    const norm = entry.trim().toLowerCase() as Role;
-    if (KNOWN.has(norm)) out.push(norm);
+    const norm = entry.trim().toLowerCase();
+    if (isKnownRole(norm)) out.push(norm);
   }
   return [...new Set(out)];
 }

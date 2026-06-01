@@ -52,6 +52,107 @@ export function writePortalSurface(surface: AppSurface): void {
   }
 }
 
+export const PORTAL_NAV_STORAGE_KEY = 'cnad_portal_nav:v1';
+
+const VALID_NAV_KEYS = new Set<NavKey>([
+  'member-home',
+  'member-report-history',
+  'team-dashboard-home',
+  'supervisor-event-detail',
+  'admin-dashboard',
+  'admin-event-detail',
+  'user-management',
+  'notifications',
+  'profile',
+  'profile-direct-reports-list',
+  'profile-direct-report-history',
+]);
+
+export type PortalNavSnapshot = {
+  navKey: NavKey;
+  supervisorOpenedDetailFrom?: 'member-home' | 'team-dashboard-home';
+  selectedSupervisorEventId?: string;
+  selectedAdminEventId?: string;
+  profileSubordinateUserId?: string | null;
+};
+
+function isNavKey(value: string): value is NavKey {
+  return VALID_NAV_KEYS.has(value as NavKey);
+}
+
+function parsePortalNavSnapshot(raw: string | null): PortalNavSnapshot | null {
+  if (!raw) return null;
+  try {
+    const j = JSON.parse(raw) as Partial<PortalNavSnapshot>;
+    if (typeof j.navKey !== 'string' || !isNavKey(j.navKey)) return null;
+    const snapshot: PortalNavSnapshot = { navKey: j.navKey };
+    if (j.supervisorOpenedDetailFrom === 'member-home' || j.supervisorOpenedDetailFrom === 'team-dashboard-home') {
+      snapshot.supervisorOpenedDetailFrom = j.supervisorOpenedDetailFrom;
+    }
+    if (typeof j.selectedSupervisorEventId === 'string' && j.selectedSupervisorEventId.trim()) {
+      snapshot.selectedSupervisorEventId = j.selectedSupervisorEventId;
+    }
+    if (typeof j.selectedAdminEventId === 'string' && j.selectedAdminEventId.trim()) {
+      snapshot.selectedAdminEventId = j.selectedAdminEventId;
+    }
+    if (typeof j.profileSubordinateUserId === 'string') {
+      snapshot.profileSubordinateUserId = j.profileSubordinateUserId;
+    }
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+export function readStoredPortalNav(): PortalNavSnapshot | null {
+  try {
+    return parsePortalNavSnapshot(globalThis.window?.localStorage?.getItem(PORTAL_NAV_STORAGE_KEY) ?? null);
+  } catch {
+    return null;
+  }
+}
+
+export function writePortalNav(snapshot: PortalNavSnapshot): void {
+  try {
+    globalThis.window?.localStorage?.setItem(PORTAL_NAV_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearStoredPortalNav(): void {
+  try {
+    globalThis.window?.localStorage?.removeItem(PORTAL_NAV_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function resolveRestoredNavKey(
+  surface: AppSurface,
+  caps: { canViewTeam: boolean; hasStaffPortal: boolean },
+  stored: PortalNavSnapshot | null,
+): NavKey {
+  const fallback: NavKey = surface === 'adminCenter' ? 'admin-dashboard' : 'member-home';
+  if (!stored) return fallback;
+  const guarded = navKeyAfterSurfaceGuard(surface, caps, stored.navKey);
+  if (guarded) return guarded;
+  return stored.navKey;
+}
+
+export function resolveRestoredEventSelection(
+  events: Array<{ id: string; status: string }>,
+  stored: PortalNavSnapshot | null,
+): { supervisorEventId: string; adminEventId: string } {
+  const defaultId = events.find((e) => e.status === 'active')?.id ?? events[0]?.id ?? '';
+  const pick = (storedId: string | undefined) =>
+    storedId && events.some((e) => e.id === storedId) ? storedId : defaultId;
+  return {
+    supervisorEventId: pick(stored?.selectedSupervisorEventId),
+    adminEventId: pick(stored?.selectedAdminEventId),
+  };
+}
+
 export function resolveMemberHomeMode(hasDirectReports: boolean, hasManager: boolean): MemberMode {
   if (!hasDirectReports) return 1;
   if (hasManager) return 2;
