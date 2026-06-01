@@ -1,4 +1,11 @@
 import type { AppLocale } from './LocaleContext';
+import {
+  formatAdminPriorityBannerEn,
+  formatAdminPriorityBannerZh,
+  formatAllAccountedBodyEn,
+  formatAllAccountedBodyZh,
+  zhCredentialWord,
+} from './stringFormatters';
 
 export type EventUiStatus = 'active' | 'resolved' | 'monitoring' | 'escalated';
 
@@ -602,8 +609,7 @@ const dashZh: DashboardStrings = {
   },
   responseRateCenter: '回報率',
   allAccountedTitle: '轄下皆已回報',
-  allAccountedBody: (n, safe, help) =>
-    `${n} 位轄下中，${safe} 位平安${help > 0 ? `，${help} 位需要協助` : '，無需協助'}。`,
+  allAccountedBody: formatAllAccountedBodyZh,
   needHelpTitle: '需要立即關注',
   needHelpBody: (n) => `有 ${n} 位同仁標記為需要協助，請儘速聯繫。`,
   pendingTitle: '仍有未回報',
@@ -675,8 +681,7 @@ const dashZh: DashboardStrings = {
   adminCloseEventConfirmAnyway: '仍要結束事件',
   adminCloseEventConfirmOk: '確認結束',
   adminEventDetailTitle: '事件詳情',
-  adminPriorityBanner: (needHelp, uncontacted) =>
-    `${needHelp} 人需要協助${uncontacted > 0 ? `，其中 ${uncontacted} 人尚未聯繫` : ''}`,
+  adminPriorityBanner: formatAdminPriorityBannerZh,
   adminDeptReportSectionTitle: '部門回報狀況',
   adminDeptViewRosterLink: '查看完整名單 ›',
   adminDeptNeedHelpHint: (n) => `⚠ ${n} 人需協助`,
@@ -735,8 +740,7 @@ const dashEn: DashboardStrings = {
   },
   responseRateCenter: 'Response rate',
   allAccountedTitle: 'All employees accounted for',
-  allAccountedBody: (n, safe, help) =>
-    `${safe} of ${n} reported safe${help > 0 ? `; ${help} need help` : '; no assistance required'}.`,
+  allAccountedBody: formatAllAccountedBodyEn,
   needHelpTitle: 'Immediate attention required',
   needHelpBody: (n) => `${n} employee(s) marked Need help — contact them now.`,
   pendingTitle: 'Missing responses',
@@ -808,8 +812,7 @@ const dashEn: DashboardStrings = {
   adminCloseEventConfirmAnyway: 'Close anyway',
   adminCloseEventConfirmOk: 'Confirm close',
   adminEventDetailTitle: 'Event detail',
-  adminPriorityBanner: (needHelp, uncontacted) =>
-    `${needHelp} employee(s) need assistance${uncontacted > 0 ? `; ${uncontacted} not yet contacted` : ''}`,
+  adminPriorityBanner: formatAdminPriorityBannerEn,
   adminDeptReportSectionTitle: 'Department reporting status',
   adminDeptViewRosterLink: 'View full roster ›',
   adminDeptNeedHelpHint: (n) => `⚠ ${n} need help`,
@@ -923,18 +926,18 @@ const profilePageZh: ProfilePageStrings = {
   profileCancelEdit: '取消',
   profileUpdatedToast: '個人資料已更新。',
   profileSaveError: '無法儲存，請稍後再試。',
-  forcePasswordTitle: '請設定新密碼',
-  forcePasswordSubtitle: '首次登入須變更密碼。請使用管理員提供的員工編號作為「目前密碼」。',
-  forcePasswordCurrentLabel: '目前密碼（員工編號）',
-  forcePasswordNewLabel: '新密碼',
-  forcePasswordConfirmLabel: '確認新密碼',
-  forcePasswordHint: '新密碼至少 8 個字元。',
+  forcePasswordTitle: `請設定新${zhCredentialWord}`,
+  forcePasswordSubtitle: `首次登入須變更${zhCredentialWord}。請使用管理員提供的員工編號作為「目前${zhCredentialWord}」。`,
+  forcePasswordCurrentLabel: `目前${zhCredentialWord}（員工編號）`,
+  forcePasswordNewLabel: `新${zhCredentialWord}`,
+  forcePasswordConfirmLabel: `確認新${zhCredentialWord}`,
+  forcePasswordHint: `新${zhCredentialWord}至少 8 個字元。`,
   forcePasswordSubmit: '儲存並繼續',
-  forcePasswordRequired: '請填寫目前密碼與新密碼。',
-  forcePasswordMinLength: '新密碼至少 8 個字元。',
-  forcePasswordMismatch: '兩次輸入的新密碼不一致。',
-  forcePasswordSuccess: '密碼已更新。',
-  forcePasswordError: '無法變更密碼，請確認目前密碼是否正確。',
+  forcePasswordRequired: `請填寫目前${zhCredentialWord}與新${zhCredentialWord}。`,
+  forcePasswordMinLength: `新${zhCredentialWord}至少 8 個字元。`,
+  forcePasswordMismatch: `兩次輸入的新${zhCredentialWord}不一致。`,
+  forcePasswordSuccess: `${zhCredentialWord}已更新。`,
+  forcePasswordError: `無法變更${zhCredentialWord}，請確認目前${zhCredentialWord}是否正確。`,
   historySubtitle: '顯示其部門相關事件回報；未回報顯示為未回應。',
   historyFilterAll: '全部',
   historyFilterSafe: '平安',
