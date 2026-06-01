@@ -65,10 +65,18 @@ export type FailedNotificationRow = {
  * 後端 API 路徑皆以 `/api/...` 開頭；基底請填 **服務根網址**（不含 `/api`）。
  * 若誤設成 `http://localhost:8000/api`，會造成 `/api/api/events` → 404，這裡會自動去掉尾端 `/api`。
  */
+function stripTrailingSlashes(value: string): string {
+  let b = value;
+  while (b.endsWith('/')) {
+    b = b.slice(0, -1);
+  }
+  return b;
+}
+
 function normalizeApiBase(raw: string): string {
-  let b = raw.trim().replace(/\/+$/, '');
+  let b = stripTrailingSlashes(raw.trim());
   if (b.toLowerCase().endsWith('/api')) {
-    b = b.slice(0, -4).replace(/\/+$/, '');
+    b = stripTrailingSlashes(b.slice(0, -4));
   }
   return b;
 }

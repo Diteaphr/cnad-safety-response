@@ -1,12 +1,33 @@
 import type { PortalStrings } from '../locale/strings';
 import type { Department, EventItem } from '../types';
 
+const ZH_STATUS_SUFFIXES = ['（進行中）', '（已結案）', '（已結束）'] as const;
+const EN_STATUS_SUFFIXES = ['(In progress)', '(Closed)', '(Resolved)'] as const;
+
+function stripTrailingEnStatusSuffix(title: string): string {
+  let result = title.trim();
+  let removed = true;
+  while (removed) {
+    removed = false;
+    const lower = result.toLowerCase();
+    for (const suffix of EN_STATUS_SUFFIXES) {
+      const marker = suffix.toLowerCase();
+      if (!lower.endsWith(marker)) continue;
+      result = result.slice(0, -suffix.length).trimEnd();
+      removed = true;
+      break;
+    }
+  }
+  return result;
+}
+
 /** Remove redundant lifecycle suffixes often duplicated in titles. */
 export function stripRedundantStatusFromTitle(title: string): string {
-  return title
-    .replace(/（進行中）|（已結案）|（已結束）/g, '')
-    .replace(/\s*\(In progress\)\s*|\s*\(Closed\)\s*|\s*\(Resolved\)\s*/gi, '')
-    .trim();
+  let result = title;
+  for (const suffix of ZH_STATUS_SUFFIXES) {
+    result = result.split(suffix).join('');
+  }
+  return stripTrailingEnStatusSuffix(result);
 }
 
 /** Impact scope line aligned with admin event list (`AdminEventCenterPage`). */
