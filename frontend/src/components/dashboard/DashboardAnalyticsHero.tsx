@@ -1,5 +1,15 @@
 import type { DashboardStrings } from '../../locale/strings';
 
+type DashboardAnalyticsHeroProps = Readonly<{
+  responseRate: number;
+  safe: number;
+  needHelp: number;
+  pending: number;
+  total: number;
+  rateLabel: string;
+  strings: DashboardStrings;
+}>;
+
 /** Donut left; KPI counts right (label left, value right) — replaces duplicate summary + bottom card grid. */
 export function DashboardAnalyticsHero({
   responseRate,
@@ -9,15 +19,7 @@ export function DashboardAnalyticsHero({
   total,
   rateLabel,
   strings: s,
-}: {
-  responseRate: number;
-  safe: number;
-  needHelp: number;
-  pending: number;
-  total: number;
-  rateLabel: string;
-  strings: DashboardStrings;
-}) {
+}: DashboardAnalyticsHeroProps) {
   const t = Math.max(total, 1);
   const pctSafe = (safe / t) * 100;
   const pctNeed = (needHelp / t) * 100;

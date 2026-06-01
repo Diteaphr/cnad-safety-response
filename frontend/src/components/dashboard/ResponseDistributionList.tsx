@@ -7,6 +7,16 @@ type DistRow = {
   pct: number;
 };
 
+type ResponseDistributionListProps = Readonly<{
+  safe: number;
+  needHelp: number;
+  pending: number;
+  strings: DashboardStrings;
+  showStackedBar?: boolean;
+  /** Hide pending from legend/breakdown rows; bar still uses all three segments vs total headcount. */
+  hidePending?: boolean;
+}>;
+
 /** Vertical status breakdown with optional stacked bar — no horizontal scroll. */
 export function ResponseDistributionList({
   safe,
@@ -15,15 +25,7 @@ export function ResponseDistributionList({
   strings,
   showStackedBar = false,
   hidePending = false,
-}: {
-  safe: number;
-  needHelp: number;
-  pending: number;
-  strings: DashboardStrings;
-  showStackedBar?: boolean;
-  /** Hide pending from legend/breakdown rows; bar still uses all three segments vs total headcount. */
-  hidePending?: boolean;
-}) {
+}: ResponseDistributionListProps) {
   const totalSum = Math.max(safe + needHelp + pending, 1);
   const ps = Math.round((safe / totalSum) * 1000) / 10;
   const pn = Math.round((needHelp / totalSum) * 1000) / 10;

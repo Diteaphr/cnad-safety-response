@@ -1,6 +1,15 @@
 import { AlertTriangle } from 'lucide-react';
 import type { DashboardStrings } from '../../locale/strings';
 
+type AdminEventKpiPanelProps = Readonly<{
+  stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
+  dash: DashboardStrings;
+  safeLabel: string;
+  uncontactedNeedHelp: number;
+  syncedLine: string;
+  reportedOfTotal: (reported: number, total: number) => string;
+}>;
+
 export function AdminEventKpiPanel({
   stats,
   dash,
@@ -8,23 +17,16 @@ export function AdminEventKpiPanel({
   uncontactedNeedHelp,
   syncedLine,
   reportedOfTotal,
-}: {
-  stats: { total: number; safe: number; needHelp: number; pending: number; responseRate: number };
-  dash: DashboardStrings;
-  safeLabel: string;
-  uncontactedNeedHelp: number;
-  syncedLine: string;
-  reportedOfTotal: (reported: number, total: number) => string;
-}) {
+}: AdminEventKpiPanelProps) {
   const reported = stats.safe + stats.needHelp;
 
   return (
     <article className="dash-panel-elevated admin-event-kpi-panel">
       {stats.needHelp > 0 ? (
-        <div className="admin-event-kpi-banner" role="status">
+        <output className="admin-event-kpi-banner">
           <AlertTriangle size={16} aria-hidden />
           <span>{dash.adminPriorityBanner(stats.needHelp, uncontactedNeedHelp)}</span>
-        </div>
+        </output>
       ) : null}
 
       <div className="admin-event-stat-row">

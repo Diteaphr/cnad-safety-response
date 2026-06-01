@@ -2,6 +2,17 @@ import type { ReactNode } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { PageBackButton } from '../PageBackButton';
 
+type DashboardShellHeaderProps = Readonly<{
+  brandName: string;
+  navActions?: ReactNode;
+  backLabel: string;
+  onBack: () => void;
+  lastSyncedFormatted: string | null;
+  syncOk?: boolean;
+  /** Team home list omits event back affordance — top bar stays for sync/branding only. */
+  showBack?: boolean;
+}>;
+
 /** Reusable supervisor/admin dashboard top bar — values driven by props. */
 export function DashboardShellHeader({
   brandName,
@@ -11,16 +22,7 @@ export function DashboardShellHeader({
   lastSyncedFormatted,
   syncOk,
   showBack = true,
-}: {
-  brandName: string;
-  navActions?: ReactNode;
-  backLabel: string;
-  onBack: () => void;
-  lastSyncedFormatted: string | null;
-  syncOk?: boolean;
-  /** Team home list omits event back affordance — top bar stays for sync/branding only. */
-  showBack?: boolean;
-}) {
+}: DashboardShellHeaderProps) {
   return (
     <header className="dash-shell-header">
       <div className="dash-shell-header-brand">

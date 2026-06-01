@@ -8,6 +8,17 @@ const STATUS_CLASS: Record<EventUiStatus, string> = {
   escalated: 'dash-event-status dash-event-status--escalated',
 };
 
+type EventOverviewCardProps = Readonly<{
+  icon?: ReactNode;
+  typeLabel: string;
+  title: string;
+  uiStatus: EventUiStatus;
+  statusLabel: string;
+  description: string;
+  lastUpdatedFormatted: string | null;
+  tailNote?: string;
+}>;
+
 /** Event summary ribbon — typography aligned with supervisor reference. */
 export function EventOverviewCard({
   icon,
@@ -18,16 +29,7 @@ export function EventOverviewCard({
   description,
   lastUpdatedFormatted,
   tailNote,
-}: {
-  icon?: ReactNode;
-  typeLabel: string;
-  title: string;
-  uiStatus: EventUiStatus;
-  statusLabel: string;
-  description: string;
-  lastUpdatedFormatted: string | null;
-  tailNote?: string;
-}) {
+}: EventOverviewCardProps) {
   return (
     <article className="dash-event-overview">
       <div className="dash-event-overview-inner">

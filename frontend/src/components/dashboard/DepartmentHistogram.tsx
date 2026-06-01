@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import type { DashboardStrings } from '../../locale/strings';
 import { aggregateByDepartment, type DeptStatRow } from './deptAggregation';
 
-function DeptStackBar({ dept }: { dept: DeptStatRow }) {
+function DeptStackBar({ dept }: Readonly<{ dept: DeptStatRow }>) {
   const total = Math.max(dept.total, 1);
   const wNeed = `${(dept.needHelp / total) * 100}%`;
   const wPending = `${(dept.pending / total) * 100}%`;
@@ -28,6 +28,15 @@ function pct(count: number, total: number): number {
   return total ? Math.round((count / total) * 100) : 0;
 }
 
+type DepartmentHistogramProps = Readonly<{
+  rows: Array<{ department: string; status: 'safe' | 'need_help' | 'pending' }>;
+  dash: DashboardStrings;
+  selectedDept: string | null;
+  onSelectDept: (deptName: string) => void;
+  onClearDept: () => void;
+  onScrollToRoster: () => void;
+}>;
+
 export function DepartmentHistogram({
   rows,
   dash,
@@ -35,14 +44,7 @@ export function DepartmentHistogram({
   onSelectDept,
   onClearDept,
   onScrollToRoster,
-}: {
-  rows: Array<{ department: string; status: 'safe' | 'need_help' | 'pending' }>;
-  dash: DashboardStrings;
-  selectedDept: string | null;
-  onSelectDept: (deptName: string) => void;
-  onClearDept: () => void;
-  onScrollToRoster: () => void;
-}) {
+}: DepartmentHistogramProps) {
   const depts = useMemo(() => aggregateByDepartment(rows), [rows]);
 
   if (depts.length <= 1) return null;

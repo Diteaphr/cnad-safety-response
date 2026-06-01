@@ -17,7 +17,7 @@ const ICONS: Record<DashboardMetricTone, typeof Users> = {
 };
 
 /** KPI strip driven by metric array (reference colored metric cards). */
-export function KpiMetricGrid({ metrics }: { metrics: DashboardMetric[] }) {
+export function KpiMetricGrid({ metrics }: Readonly<{ metrics: DashboardMetric[] }>) {
   return (
     <div className="dash-kpi-grid">
       {metrics.map((m) => {
