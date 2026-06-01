@@ -130,7 +130,7 @@ class UserRepository:
             UserDepartment.is_primary.is_(True),
         )
         rows = db.execute(stmt).all()
-        m = {uid: None for uid in user_ids}
+        m = dict.fromkeys(user_ids)
         for uid, did in rows:
             m[uid] = did
         return m

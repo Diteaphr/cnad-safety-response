@@ -11,12 +11,12 @@ export function DirectReportsListPage({
   departments,
   onBack,
   onSelectSubordinate,
-}: {
+}: Readonly<{
   directReports: User[];
   departments: Department[];
   onBack: () => void;
   onSelectSubordinate: (userId: string) => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const { profilePage: pp } = getStrings(locale);
   const deptLabel = (id: string) => departments.find((d) => d.id === id)?.name ?? '';

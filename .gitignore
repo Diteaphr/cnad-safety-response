@@ -20,6 +20,10 @@ dist/
 dev-dist/
 build/
 coverage/
+backend/coverage.xml
+backend/junit.xml
+backend/.coverage
+frontend/coverage/lcov-sonar.info
 
 # Docker volumes
 postgres_data/

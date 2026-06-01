@@ -5,6 +5,7 @@ Portal API — business logic for frontend SPA (three-layer: called only from AP
 from __future__ import annotations
 
 import logging
+import secrets
 import uuid
 from datetime import datetime, timezone
 
@@ -38,6 +39,11 @@ from app.schemas.response import SafetyResponseCreate
 from app.services.integrations.mock_notification_channels import send_fcm_mock
 from app.services.notification_service import NotificationService
 from app.services.safety_response_service import SafetyResponseService
+
+_ERR_USER_NOT_FOUND = "User not found"
+_ERR_ADMIN_ONLY = "Admin only"
+_ERR_EVENT_NOT_FOUND = "Event not found"
+_ERR_DEPT_NOT_FOUND = "Department not found"
 
 
 def _needs_profile_completion(user: User) -> bool:
@@ -103,7 +109,7 @@ class PortalService:
             "managerId": str(d.manager_id) if d.manager_id else None,
         }
 
-    def _event_out(self, event: Event, name_map: dict[uuid.UUID, str]) -> dict[str, Any]:
+    def _event_out(self, event: Event) -> dict[str, Any]:
         def _iso(dt: datetime | None) -> str | None:
             if dt is None:
                 return None
@@ -161,8 +167,7 @@ class PortalService:
         return [self._user_out(db, u) for u in self._users.list_all(db)]
 
     def list_events(self, db: Session) -> list[dict[str, Any]]:
-        nm = self._depts.name_map(db)
-        return [self._event_out(e, nm) for e in self._events.list_all(db)]
+        return [self._event_out(e) for e in self._events.list_all(db)]
 
     def list_responses(self, db: Session) -> list[dict[str, Any]]:
         return [self._response_out(r) for r in self._responses.list_all(db)]
@@ -200,8 +205,7 @@ class PortalService:
     def bootstrap(self, db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         user = self._users.get_by_id(db, user_id)
         if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        nm = self._depts.name_map(db)
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         events = [e for e in self._events.list_all(db) if e.status == "active"]
         events.sort(key=lambda e: e.created_at, reverse=True)
         active = events[0] if events else None
@@ -213,7 +217,7 @@ class PortalService:
         roles = _role_names(user)
         return {
             "current_user": self._user_out(db, user),
-            "active_event": self._event_out(active, nm) if active else None,
+            "active_event": self._event_out(active) if active else None,
             "my_active_report": my_report,
             "capabilities": {
                 "can_report": "employee" in roles,
@@ -242,7 +246,7 @@ class PortalService:
         self, db: Session, *, actor_id: uuid.UUID, payload: CreateEventIn
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         try:
             st = _parse_iso(payload.startAt)
         except ValueError as e:
@@ -267,19 +271,18 @@ class PortalService:
             target_department_ids=target_dept_ids,
         )
         db.commit()
-        nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, ev.event_id)
         assert full is not None
-        return {"message": "Event created", "event": self._event_out(full, nm)}
+        return {"message": "Event created", "event": self._event_out(full)}
 
     def update_event(
         self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID, payload: CreateEventIn
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         ev = self._events.get_by_id(db, event_id)
         if ev is None:
-            raise HTTPException(status_code=404, detail="Event not found")
+            raise HTTPException(status_code=404, detail=_ERR_EVENT_NOT_FOUND)
         if ev.status != "active":
             raise HTTPException(
                 status_code=409, detail="Only active events can be edited"
@@ -308,17 +311,16 @@ class PortalService:
         )
         db.commit()
         db.expire_all()
-        nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, event_id)
         assert full is not None
-        return {"message": "Event updated", "event": self._event_out(full, nm)}
+        return {"message": "Event updated", "event": self._event_out(full)}
 
     def activate_event(self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID):
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         ev = self._events.get_by_id(db, event_id)
         if ev is None:
-            raise HTTPException(status_code=404, detail="Event not found")
+            raise HTTPException(status_code=404, detail=_ERR_EVENT_NOT_FOUND)
         if ev.status == "closed":
             raise HTTPException(status_code=400, detail="Cannot activate a closed event")
         dispatched = False
@@ -326,7 +328,6 @@ class PortalService:
             self._events.set_status(db, event_id, "active")
             dispatched = True
         db.commit()
-        nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, event_id)
         assert full is not None
 
@@ -336,22 +337,21 @@ class PortalService:
         # layer free of transport concerns.
         return {
             "message": "Event activated" if dispatched else "Already active",
-            "event": self._event_out(full, nm),
+            "event": self._event_out(full),
             "dispatched": dispatched,
         }
 
     def close_event(self, db: Session, *, actor_id: uuid.UUID, event_id: uuid.UUID):
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         ev = self._events.get_by_id(db, event_id)
         if ev is None:
-            raise HTTPException(status_code=404, detail="Event not found")
+            raise HTTPException(status_code=404, detail=_ERR_EVENT_NOT_FOUND)
         self._events.set_status(db, event_id, "closed")
         db.commit()
-        nm = self._depts.name_map(db)
         full = self._events.get_by_id(db, event_id)
         assert full is not None
-        return {"message": "Event closed", "event": self._event_out(full, nm)}
+        return {"message": "Event closed", "event": self._event_out(full)}
 
     def submit_report(self, db: Session, payload: ReportIn) -> dict[str, Any]:
         try:
@@ -360,9 +360,9 @@ class PortalService:
         except ValueError as e:
             raise HTTPException(status_code=400, detail="Invalid uuid") from e
         if self._users.get_by_id(db, uid) is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if self._events.get_by_id(db, eid) is None:
-            raise HTTPException(status_code=404, detail="Event not found")
+            raise HTTPException(status_code=404, detail=_ERR_EVENT_NOT_FOUND)
 
         if settings.use_gcp and settings.pubsub_report_topic:
             # Async path: publish to Pub/Sub; consumer writes to DB.
@@ -408,9 +408,86 @@ class PortalService:
 
     def reports_for_user(self, db: Session, user_id: uuid.UUID) -> list[dict[str, Any]]:
         if self._users.get_by_id(db, user_id) is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         rows = self._responses.list_for_user(db, user_id)
         return [self._response_out(r) for r in rows]
+
+    def _supervisor_target_manager_id(
+        self, db: Session, user_id: uuid.UUID, view_as: uuid.UUID | None
+    ) -> uuid.UUID:
+        if view_as is None:
+            return user_id
+        target = self._users.get_by_id(db, view_as)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Target user not found")
+        if not self._users.is_subordinate_of(db, actor_id=user_id, target_id=view_as):
+            raise HTTPException(status_code=403, detail="Cannot view this team")
+        return view_as
+
+    def _dashboard_active_event(
+        self, db: Session, event_id: uuid.UUID | None
+    ) -> Event | None:
+        if event_id is not None:
+            active_event = self._events.get_by_id(db, event_id)
+            if active_event is None:
+                raise HTTPException(status_code=404, detail=_ERR_EVENT_NOT_FOUND)
+            return active_event
+        events = [e for e in self._events.list_all(db) if e.status == "active"]
+        events.sort(key=lambda e: e.created_at, reverse=True)
+        return events[0] if events else None
+
+    @staticmethod
+    def _rollup_supervisor_only(user: User) -> bool:
+        roles = _role_names(user)
+        return "supervisor" in roles and "employee" not in roles
+
+    def _supervisor_team_rows(
+        self,
+        db: Session,
+        active_event: Event,
+        direct_reports: list[User],
+        dept_names: dict[uuid.UUID, str],
+    ) -> list[dict[str, Any]]:
+        employee_ids = [
+            u.user_id for u in direct_reports if not self._rollup_supervisor_only(u)
+        ]
+        latest_responses = self._responses.latest_for_users(
+            db, active_event.event_id, employee_ids
+        )
+        prim = self._users.primary_department_map(db, [u.user_id for u in direct_reports])
+        team: list[dict[str, Any]] = []
+        for user in direct_reports:
+            dept_id = prim.get(user.user_id)
+            dept_name = dept_names.get(dept_id, "-") if dept_id else "-"
+            if self._rollup_supervisor_only(user):
+                sub_kpis = self._responses.kpi_for_manager_subordinates(
+                    db, event_id=active_event.event_id, manager_id=user.user_id
+                )
+                team.append({
+                    "user_id": str(user.user_id),
+                    "name": user.name,
+                    "department": dept_name,
+                    "is_supervisor": True,
+                    "status": None,
+                    "reported_at": None,
+                    "needs_follow_up": sub_kpis["pending"] > 0 or sub_kpis["need_help"] > 0,
+                    "phone": user.phone,
+                    "sub_team_summary": sub_kpis,
+                })
+                continue
+            latest = latest_responses.get(user.user_id)
+            team.append({
+                "user_id": str(user.user_id),
+                "name": user.name,
+                "department": dept_name,
+                "is_supervisor": False,
+                "status": latest.status if latest else "pending",
+                "reported_at": latest.responded_at.isoformat() if latest else None,
+                "needs_follow_up": latest is None or latest.status == "need_help",
+                "phone": user.phone,
+                "sub_team_summary": None,
+            })
+        return team
 
     def supervisor_dashboard(
         self,
@@ -421,30 +498,13 @@ class PortalService:
     ) -> dict[str, Any]:
         actor = self._users.get_by_id(db, user_id)
         if actor is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if "supervisor" not in _role_names(actor):
             raise HTTPException(status_code=403, detail="Supervisor only")
 
-        # view_as: allow drilling into a subordinate manager's team
-        if view_as is not None:
-            target = self._users.get_by_id(db, view_as)
-            if target is None:
-                raise HTTPException(status_code=404, detail="Target user not found")
-            if not self._users.is_subordinate_of(db, actor_id=user_id, target_id=view_as):
-                raise HTTPException(status_code=403, detail="Cannot view this team")
-            target_manager_id = view_as
-        else:
-            target_manager_id = user_id
-
-        nm = self._depts.name_map(db)
-        if event_id is not None:
-            active_event = self._events.get_by_id(db, event_id)
-            if active_event is None:
-                raise HTTPException(status_code=404, detail="Event not found")
-        else:
-            events = [e for e in self._events.list_all(db) if e.status == "active"]
-            events.sort(key=lambda e: e.created_at, reverse=True)
-            active_event = events[0] if events else None
+        target_manager_id = self._supervisor_target_manager_id(db, user_id, view_as)
+        dept_names = self._depts.name_map(db)
+        active_event = self._dashboard_active_event(db, event_id)
 
         if active_event is None:
             return {
@@ -460,60 +520,14 @@ class PortalService:
         if cached is not None:
             return cached
 
-        # KPI: SQL aggregate over ALL recursive subordinates — no User objects loaded
         kpis = self._responses.kpi_for_manager_subordinates(
             db, event_id=active_event.event_id, manager_id=target_manager_id
         )
-
-        # Team: line reports (same rule as API managerId / derived_manager_id), not raw dept.manager_id membership
         direct_reports = self._users.list_line_reports(db, target_manager_id)
-        # 僅「純主管列」走轉下屬匯總；具 employee 身分之副主管／組長仍應顯示本人回報狀態
-        def _rollup_supervisor_only(u: User) -> bool:
-            r = _role_names(u)
-            return "supervisor" in r and "employee" not in r
-
-        employee_ids = [u.user_id for u in direct_reports if not _rollup_supervisor_only(u)]
-        latest_responses = self._responses.latest_for_users(
-            db, active_event.event_id, employee_ids
-        )
-
-        prim = self._users.primary_department_map(db, [u.user_id for u in direct_reports])
-        team = []
-        for u in direct_reports:
-            u_roles = _role_names(u)
-            did = prim.get(u.user_id)
-            dname = nm.get(did, "-") if did else "-"
-            if _rollup_supervisor_only(u):
-                sub_kpis = self._responses.kpi_for_manager_subordinates(
-                    db, event_id=active_event.event_id, manager_id=u.user_id
-                )
-                team.append({
-                    "user_id": str(u.user_id),
-                    "name": u.name,
-                    "department": dname,
-                    "is_supervisor": True,
-                    "status": None,
-                    "reported_at": None,
-                    "needs_follow_up": sub_kpis["pending"] > 0 or sub_kpis["need_help"] > 0,
-                    "phone": u.phone,
-                    "sub_team_summary": sub_kpis,
-                })
-            else:
-                lr = latest_responses.get(u.user_id)
-                team.append({
-                    "user_id": str(u.user_id),
-                    "name": u.name,
-                    "department": dname,
-                    "is_supervisor": False,
-                    "status": lr.status if lr else "pending",
-                    "reported_at": lr.responded_at.isoformat() if lr else None,
-                    "needs_follow_up": lr is None or lr.status == "need_help",
-                    "phone": u.phone,
-                    "sub_team_summary": None,
-                })
+        team = self._supervisor_team_rows(db, active_event, direct_reports, dept_names)
 
         result = {
-            "event": self._event_out(active_event, nm),
+            "event": self._event_out(active_event),
             "kpis": kpis,
             "team": sorted(team, key=lambda x: (not x["needs_follow_up"], x["name"])),
             "view_as": str(view_as) if view_as else None,
@@ -526,14 +540,13 @@ class PortalService:
     ) -> dict[str, Any]:
         user = self._users.get_by_id(db, user_id)
         if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if "admin" not in _role_names(user):
-            raise HTTPException(status_code=403, detail="Admin only")
-        nm = self._depts.name_map(db)
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         if event_id is not None:
             active_event = self._events.get_by_id(db, event_id)
             if active_event is None:
-                raise HTTPException(status_code=404, detail="Event not found")
+                raise HTTPException(status_code=404, detail=_ERR_EVENT_NOT_FOUND)
         else:
             active_event = self._events.latest_active(db)
         if active_event is None:
@@ -552,7 +565,7 @@ class PortalService:
         kpis = self._responses.admin_kpi(db, event_id=active_event.event_id)
         departments = self._responses.admin_dept_stats(db, event_id=active_event.event_id)
         result = {
-            "event": self._event_out(active_event, nm),
+            "event": self._event_out(active_event),
             "kpis": kpis,
             "departments": departments,
         }
@@ -587,15 +600,15 @@ class PortalService:
     def get_profile(self, db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         user = self._users.get_by_id(db, user_id)
         if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         return self._profile_out(db, user)
 
     def update_profile(
         self, db: Session, user_id: uuid.UUID, payload: ProfileUpdateIn
     ) -> dict[str, Any]:
         if self._users.get_by_id(db, user_id) is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        user = self._users.update_profile(
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
+        self._users.update_profile(
             db,
             user_id,
             name=payload.name.strip(),
@@ -646,7 +659,7 @@ class PortalService:
     ) -> dict[str, Any]:
         user = self._users.get_by_id(db, user_id)
         if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if not user.password_hash or not verify_password(payload.currentPassword, user.password_hash):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         self._users.update_password(db, user_id, new_hash=hash_password(payload.newPassword))
@@ -669,12 +682,12 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         if actor_id == user_id:
             raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
         user = self._users.get_by_id(db, user_id)
         if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if user.status == "inactive":
             raise HTTPException(status_code=409, detail="Account is already inactive")
         self._users.set_status(db, user_id, status="inactive")
@@ -685,10 +698,10 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         user = self._users.get_by_id(db, user_id)
         if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if user.status == "active":
             raise HTTPException(status_code=409, detail="Account is already active")
         self._users.set_status(db, user_id, status="active")
@@ -699,13 +712,13 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         if self._users.get_by_id(db, user_id) is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        default_password = "Welcome@1234"
-        self._users.update_password(db, user_id, new_hash=hash_password(default_password))
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
+        temporary_password = secrets.token_urlsafe(12)
+        self._users.update_password(db, user_id, new_hash=hash_password(temporary_password))
         db.commit()
-        return {"message": "Password reset.", "temporaryPassword": default_password}
+        return {"message": "Password reset.", "temporaryPassword": temporary_password}
 
     # ------------------------------------------------------------------
     # Admin: event type management
@@ -715,7 +728,7 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, payload: EventTypeCreateIn
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         name = payload.name.strip()
         if self._event_types.get_by_label(db, name) is not None:
             raise HTTPException(status_code=409, detail="Event type already exists")
@@ -731,7 +744,7 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, payload: DepartmentCreateIn
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         parent_id = self._parse_optional_uuid(payload.parentId, field="parentId")
         if parent_id and self._depts.get_by_id(db, parent_id) is None:
             raise HTTPException(status_code=400, detail="Parent department not found")
@@ -743,9 +756,9 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID, payload: DepartmentUpdateIn
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         if self._depts.get_by_id(db, dept_id) is None:
-            raise HTTPException(status_code=404, detail="Department not found")
+            raise HTTPException(status_code=404, detail=_ERR_DEPT_NOT_FOUND)
         parent_id = self._parse_optional_uuid(payload.parentId, field="parentId")
         if parent_id:
             if self._depts.get_by_id(db, parent_id) is None:
@@ -760,9 +773,9 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, dept_id: uuid.UUID
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         if self._depts.get_by_id(db, dept_id) is None:
-            raise HTTPException(status_code=404, detail="Department not found")
+            raise HTTPException(status_code=404, detail=_ERR_DEPT_NOT_FOUND)
         if self._depts.has_members(db, dept_id):
             raise HTTPException(status_code=409, detail="Department still has members")
         if self._depts.has_sub_departments(db, dept_id):
@@ -780,11 +793,11 @@ class PortalService:
         page_size: int = 50,
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
         offset = (page - 1) * page_size
         if dept_id is not None:
             if self._depts.get_by_id(db, dept_id) is None:
-                raise HTTPException(status_code=404, detail="Department not found")
+                raise HTTPException(status_code=404, detail=_ERR_DEPT_NOT_FOUND)
             total = self._users.count_by_department(db, dept_id)
             users = self._users.list_by_department(db, dept_id, limit=page_size, offset=offset)
         else:
@@ -801,7 +814,7 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, payload: AdminUserCreateIn
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
 
         email = payload.email.strip().lower()
         if self._users.get_by_email(db, email):
@@ -809,7 +822,7 @@ class PortalService:
 
         dept_id = self._parse_optional_uuid(payload.departmentId, field="departmentId")
         if dept_id and self._depts.get_by_id(db, dept_id) is None:
-            raise HTTPException(status_code=400, detail="Department not found")
+            raise HTTPException(status_code=400, detail=_ERR_DEPT_NOT_FOUND)
 
         emp_no = payload.employeeNo.strip()
         if self._users.employee_no_exists(db, emp_no):
@@ -846,14 +859,14 @@ class PortalService:
         self, db: Session, actor_id: uuid.UUID, user_id: uuid.UUID, payload: AdminUserUpdateIn
     ) -> dict[str, Any]:
         if not self._users.user_has_role(db, actor_id, "admin"):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
 
         if self._users.get_by_id(db, user_id) is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
 
         dept_id = self._parse_optional_uuid(payload.departmentId, field="departmentId")
         if dept_id and self._depts.get_by_id(db, dept_id) is None:
-            raise HTTPException(status_code=400, detail="Department not found")
+            raise HTTPException(status_code=400, detail=_ERR_DEPT_NOT_FOUND)
 
         self._users.update_user_admin(
             db,
@@ -888,7 +901,7 @@ class PortalService:
                     status_code=400, detail="Invalid department id"
                 ) from e
             if self._depts.get_by_id(db, dept_uuid) is None:
-                raise HTTPException(status_code=400, detail="Department not found")
+                raise HTTPException(status_code=400, detail=_ERR_DEPT_NOT_FOUND)
 
         if payload.employeeNo and payload.employeeNo.strip():
             emp_no = payload.employeeNo.strip()
@@ -992,7 +1005,7 @@ class PortalService:
         self, db: Session, user_id: uuid.UUID
     ) -> list[dict[str, Any]]:
         if self._users.get_by_id(db, user_id) is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         rows = self._notifications.list_for_user(db, user_id)
         out: list[dict[str, Any]] = []
         for r in rows:
@@ -1007,13 +1020,13 @@ class PortalService:
     ) -> list[dict[str, Any]]:
         actor = self._users.get_by_id(db, actor_id)
         if actor is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if "admin" not in _role_names(actor):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
 
         ev = self._events.get_by_id(db, event_id)
         if ev is None:
-            raise HTTPException(status_code=404, detail="Event not found")
+            raise HTTPException(status_code=404, detail=_ERR_EVENT_NOT_FOUND)
 
         rows = self._notifications.list_failed_for_event(db, event_id, channel_contains="reminder")
         out: list[dict[str, Any]] = []
@@ -1038,9 +1051,9 @@ class PortalService:
     ) -> dict[str, Any]:
         actor = self._users.get_by_id(db, actor_id)
         if actor is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if "admin" not in _role_names(actor):
-            raise HTTPException(status_code=403, detail="Admin only")
+            raise HTTPException(status_code=403, detail=_ERR_ADMIN_ONLY)
 
         row = self._notifications.get_by_id(db, notification_id)
         if row is None:
@@ -1082,13 +1095,13 @@ class PortalService:
     ) -> dict[str, Any]:
         actor = self._users.get_by_id(db, actor_id)
         if actor is None:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail=_ERR_USER_NOT_FOUND)
         if "supervisor" not in _role_names(actor):
             raise HTTPException(status_code=403, detail="Supervisor only")
 
         ev = self._events.get_by_id(db, event_id)
         if ev is None:
-            raise HTTPException(status_code=404, detail="Event not found")
+            raise HTTPException(status_code=404, detail=_ERR_EVENT_NOT_FOUND)
         if ev.status != "active":
             raise HTTPException(status_code=400, detail="Event is not active")
 

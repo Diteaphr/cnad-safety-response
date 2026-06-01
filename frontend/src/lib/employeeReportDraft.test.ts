@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   clearEmployeeReportDraft,
-  employeeReportDraftKey,
   loadEmployeeReportDraft,
   saveEmployeeReportDraft,
 } from './employeeReportDraft';
@@ -9,27 +8,9 @@ import {
 const USER = 'user-1';
 const EVENT = 'event-1';
 
-function installLocalStorageMock() {
-  const store = new Map<string, string>();
-  const storage = {
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      store.set(key, value);
-    },
-    removeItem: (key: string) => {
-      store.delete(key);
-    },
-    clear: () => {
-      store.clear();
-    },
-  };
-  vi.stubGlobal('window', { localStorage: storage });
-  return store;
-}
-
 describe('employeeReportDraft', () => {
   beforeEach(() => {
-    installLocalStorageMock();
+    localStorage.clear();
   });
 
   it('persists and restores draft fields', () => {
@@ -49,13 +30,12 @@ describe('employeeReportDraft', () => {
   });
 
   it('clears draft after successful submit flow', () => {
-    const store = installLocalStorageMock();
     saveEmployeeReportDraft(USER, EVENT, {
       comment: 'x',
       location: 'y',
       selectedNeedHelp: false,
     });
     clearEmployeeReportDraft(USER, EVENT);
-    expect(store.has(employeeReportDraftKey(USER, EVENT))).toBe(false);
+    expect(loadEmployeeReportDraft(USER, EVENT)).toBeNull();
   });
 });

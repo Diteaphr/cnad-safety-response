@@ -8,11 +8,11 @@ export function ProfileOnboardingPage({
   user,
   showToast,
   onCompleted,
-}: {
+}: Readonly<{
   user: User;
   showToast: (t: ToastState) => void;
   onCompleted: (next: User) => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const pp = getStrings(locale).profilePage;
   const [name, setName] = useState(user.name);

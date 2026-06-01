@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from app.models.user_notification_preference import UserNotificationPreference
     from app.models.user_role import UserRole
 
+_CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -34,14 +36,14 @@ class User(Base):
     department_memberships: Mapped[list["UserDepartment"]] = relationship(
         "UserDepartment",
         back_populates="user",
-        cascade="all, delete-orphan",
+        cascade=_CASCADE_ALL_DELETE_ORPHAN,
     )
     user_roles: Mapped[list["UserRole"]] = relationship(  # type: ignore[name-defined]
-        "UserRole", back_populates="user", cascade="all, delete-orphan"
+        "UserRole", back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN
     )
     notification_preference: Mapped["UserNotificationPreference | None"] = relationship(
         "UserNotificationPreference",
         back_populates="user",
         uselist=False,
-        cascade="all, delete-orphan",
+        cascade=_CASCADE_ALL_DELETE_ORPHAN,
     )

@@ -13,12 +13,12 @@ export function DirectReportEventHistoryPage({
   events,
   responses,
   onBack,
-}: {
+}: Readonly<{
   subordinate: User;
   events: EventItem[];
   responses: SafetyResponse[];
   onBack: () => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const { profilePage: pp } = getStrings(locale);
   const [filter, setFilter] = useState<'all' | 'safe' | 'need_help' | 'pending'>('all');

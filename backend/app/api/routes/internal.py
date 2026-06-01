@@ -29,6 +29,7 @@ import base64
 import json
 import logging
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -45,24 +46,39 @@ from app.services.safety_response_service import SafetyResponseService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/internal", tags=["internal"])
+router = APIRouter(
+    prefix="/api/internal",
+    tags=["internal"],
+    responses={400: {"description": "Invalid request payload"}},
+)
 
 _response_svc = SafetyResponseService()
 
+DbSession = Annotated[Session, Depends(get_db)]
+PubsubAuth = Annotated[None, Depends(verify_pubsub_oidc)]
+SchedulerAuth = Annotated[None, Depends(verify_scheduler_oidc)]
 
-@router.post("/notifications/dispatch")
+_ERR_INVALID_PUBSUB = "Invalid Pub/Sub message"
+_ERR_INVALID_EVENT_ID = "Missing or invalid event_id"
+_ERR_INVALID_EVENT_OR_USER_IDS = "Missing or invalid event_id/user_id"
+
+
+@router.post(
+    "/notifications/dispatch",
+    responses={400: {"description": "Invalid Pub/Sub message or payload fields"}},
+)
 def dispatch_notifications(
     request: Request,
     body: dict,
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_pubsub_oidc),
+    db: DbSession,
+    _: PubsubAuth,
 ):
     try:
         message = body.get("message", {})
         data_b64 = message.get("data", "")
         payload = json.loads(base64.b64decode(data_b64 + "==").decode("utf-8"))
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid Pub/Sub message") from exc
+        raise HTTPException(status_code=400, detail=_ERR_INVALID_PUBSUB) from exc
 
     kind = payload.get("kind")
 
@@ -72,7 +88,7 @@ def dispatch_notifications(
         try:
             event_id = uuid.UUID(payload["event_id"])
         except (KeyError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="Missing or invalid event_id") from exc
+            raise HTTPException(status_code=400, detail=_ERR_INVALID_EVENT_ID) from exc
         count = dispatch_activation_notifications(db, event_id)
         logger.info("Pub/Sub dispatch: activation event %s → %d notified", event_id, count)
 
@@ -82,9 +98,7 @@ def dispatch_notifications(
             event_id = uuid.UUID(payload["event_id"])
             user_id = uuid.UUID(payload["user_id"])
         except (KeyError, ValueError) as exc:
-            raise HTTPException(
-                status_code=400, detail="Missing or invalid event_id/user_id"
-            ) from exc
+            raise HTTPException(status_code=400, detail=_ERR_INVALID_EVENT_OR_USER_IDS) from exc
 
         token = payload.get("token", "")
         phone = payload.get("phone")
@@ -110,9 +124,7 @@ def dispatch_notifications(
             event_id = uuid.UUID(payload["event_id"])
             employee_user_id = uuid.UUID(payload["user_id"])
         except (KeyError, ValueError) as exc:
-            raise HTTPException(
-                status_code=400, detail="Missing or invalid event_id/user_id"
-            ) from exc
+            raise HTTPException(status_code=400, detail=_ERR_INVALID_EVENT_OR_USER_IDS) from exc
 
         dispatch_supervisor_alert(db, event_id=event_id, employee_user_id=employee_user_id)
         logger.info(
@@ -126,9 +138,7 @@ def dispatch_notifications(
             event_id = uuid.UUID(payload["event_id"])
             user_id = uuid.UUID(payload["user_id"])
         except (KeyError, ValueError) as exc:
-            raise HTTPException(
-                status_code=400, detail="Missing or invalid event_id/user_id"
-            ) from exc
+            raise HTTPException(status_code=400, detail=_ERR_INVALID_EVENT_OR_USER_IDS) from exc
 
         _response_svc.submit_response(
             db,
@@ -155,11 +165,14 @@ def dispatch_notifications(
     return {"status": "ok"}
 
 
-@router.post("/scheduler/reminder-scan")
+@router.post(
+    "/scheduler/reminder-scan",
+    responses={500: {"description": "Reminder scan failed"}},
+)
 def trigger_reminder_scan(
     request: Request,
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_scheduler_oidc),
+    db: DbSession,
+    _: SchedulerAuth,
 ):
     """Cloud Scheduler calls this every 15 min to trigger reminder fan-out."""
     from app.services.scheduler_service import scan_all_active_events

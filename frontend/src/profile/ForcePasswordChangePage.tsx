@@ -7,10 +7,10 @@ import type { ToastState, User } from '../types';
 export function ForcePasswordChangePage({
   showToast,
   onCompleted,
-}: {
+}: Readonly<{
   showToast: (t: ToastState) => void;
   onCompleted: (user: User) => void;
-}) {
+}>) {
   const { locale } = useLocale();
   const pp = getStrings(locale).profilePage;
   const [currentPassword, setCurrentPassword] = useState('');

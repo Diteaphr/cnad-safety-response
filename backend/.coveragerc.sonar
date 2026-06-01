@@ -1,8 +1,8 @@
 [run]
-source = app
+source = backend/app
 relative_files = true
 omit =
-    app/seeding/seed_demo.py
+    backend/app/seeding/seed_demo.py
 
 [report]
 precision = 0

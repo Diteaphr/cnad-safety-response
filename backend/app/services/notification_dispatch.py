@@ -295,6 +295,54 @@ def dispatch_supervisor_alert(
     )
 
 
+def _latest_report_by_user(reports: list[SafetyResponse]) -> dict[uuid.UUID, SafetyResponse]:
+    latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
+    for report in reports:
+        prev = latest_by_user.get(report.user_id)
+        if prev is None or report.responded_at > prev.responded_at:
+            latest_by_user[report.user_id] = report
+    return latest_by_user
+
+
+def _reminder_scan_window(now: datetime) -> str:
+    return f"{now.strftime('%Y%m%d_%H')}{(now.minute // 15) * 15:02d}"
+
+
+def _send_reminder_to_user(
+    db: Session,
+    event,
+    user: User,
+    scan_window: str,
+) -> None:
+    sms_body = f"【安全確認提醒】{event.title} 請回報您的安全狀態。"
+    if _has_real_fcm_token(user):
+        _notif_svc.deliver_with_fallback(
+            db,
+            event_id=event.event_id,
+            user_id=user.user_id,
+            primary_channel=f"fcm_reminder_{scan_window}",
+            primary_send_fn=lambda u=user: send_fcm_mock(
+                device_token=u.fcm_token,
+                title="安全確認提醒",
+                body=f"請盡快回報您的安全狀態：{event.title}",
+                data={"event_id": str(event.event_id)},
+            ),
+            fallback_channel=f"sms_reminder_{scan_window}" if user.phone else None,
+            fallback_send_fn=(
+                lambda u=user: send_twilio_sms_mock(to_e164=u.phone, body=sms_body)
+            ) if user.phone else None,
+        )
+        return
+    if user.phone:
+        _notif_svc.deliver_with_fallback(
+            db,
+            event_id=event.event_id,
+            user_id=user.user_id,
+            primary_channel=f"sms_reminder_{scan_window}",
+            primary_send_fn=lambda u=user: send_twilio_sms_mock(to_e164=u.phone, body=sms_body),
+        )
+
+
 def dispatch_reminders(
     db: Session,
     event_id: uuid.UUID,
@@ -313,17 +361,12 @@ def dispatch_reminders(
         return {"sent": 0, "already_safe": 0, "total": 0}
 
     reports = _response_repo.list_for_event(db, event_id)
-    latest_by_user: dict[uuid.UUID, SafetyResponse] = {}
-    for r in reports:
-        prev = latest_by_user.get(r.user_id)
-        if prev is None or r.responded_at > prev.responded_at:
-            latest_by_user[r.user_id] = r
+    latest_by_user = _latest_report_by_user(reports)
 
     # Channel key includes the 15-minute scan window so each scan cycle is a
     # fresh idempotency key — employees who haven't reported get reminded every
     # 15 minutes until they respond (not just once).
-    now = datetime.now(timezone.utc)
-    scan_window = f"{now.strftime('%Y%m%d_%H')}{(now.minute // 15) * 15:02d}"
+    scan_window = _reminder_scan_window(datetime.now(timezone.utc))
 
     sent = already_safe = 0
     for user in employees:
@@ -332,39 +375,7 @@ def dispatch_reminders(
             already_safe += 1
             continue
 
-        if _has_real_fcm_token(user):
-            # Has PWA token: try FCM first, SMS fallback if FCM fails and has phone.
-            _notif_svc.deliver_with_fallback(
-                db,
-                event_id=event_id,
-                user_id=user.user_id,
-                primary_channel=f"fcm_reminder_{scan_window}",
-                primary_send_fn=lambda u=user: send_fcm_mock(
-                    device_token=u.fcm_token,
-                    title="安全確認提醒",
-                    body=f"請盡快回報您的安全狀態：{event.title}",
-                    data={"event_id": str(event_id)},
-                ),
-                fallback_channel=f"sms_reminder_{scan_window}" if user.phone else None,
-                fallback_send_fn=(
-                    lambda u=user: send_twilio_sms_mock(
-                        to_e164=u.phone,
-                        body=f"【安全確認提醒】{event.title} 請回報您的安全狀態。",
-                    )
-                ) if user.phone else None,
-            )
-        elif user.phone:
-            # No PWA token but has phone: go directly to SMS.
-            _notif_svc.deliver_with_fallback(
-                db,
-                event_id=event_id,
-                user_id=user.user_id,
-                primary_channel=f"sms_reminder_{scan_window}",
-                primary_send_fn=lambda u=user: send_twilio_sms_mock(
-                    to_e164=u.phone,
-                    body=f"【安全確認提醒】{event.title} 請回報您的安全狀態。",
-                ),
-            )
+        _send_reminder_to_user(db, event, user, scan_window)
         sent += 1
 
     return {"sent": sent, "already_safe": already_safe, "total": len(employees)}

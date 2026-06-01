@@ -17,11 +17,20 @@ from app.services.portal_service import PortalService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["portal"])
+router = APIRouter(
+    prefix="/api",
+    tags=["portal"],
+    responses={
+        400: {"description": "Invalid request"},
+        403: {"description": "Forbidden"},
+        404: {"description": "Not found"},
+    },
+)
 
 _portal = PortalService()
 
 CurrentUser = Annotated[uuid.UUID, Depends(get_current_user)]
+DbSession = Annotated[Session, Depends(get_db)]
 
 
 def _parse_uuid(s: str, *, name: str) -> uuid.UUID:
@@ -36,27 +45,27 @@ def _parse_uuid(s: str, *, name: str) -> uuid.UUID:
 # ------------------------------------------------------------------
 
 @router.get("/departments")
-def get_departments(db: Session = Depends(get_db)):
+def get_departments(db: DbSession):
     return {"departments": _portal.list_departments(db)}
 
 
 @router.get("/event-types")
-def list_event_types(db: Session = Depends(get_db)):
+def list_event_types(db: DbSession):
     return {"eventTypes": _portal.list_event_types(db)}
 
 
 @router.get("/users")
-def get_users(db: Session = Depends(get_db)):
+def get_users(db: DbSession):
     return {"users": _portal.list_users(db)}
 
 
 @router.get("/events")
-def get_events(db: Session = Depends(get_db)):
+def get_events(db: DbSession):
     return {"events": _portal.list_events(db)}
 
 
 @router.get("/reports")
-def get_all_reports(db: Session = Depends(get_db)):
+def get_all_reports(db: DbSession):
     return {"reports": _portal.list_responses(db)}
 
 
@@ -66,22 +75,25 @@ def demo_accounts():
 
 
 @router.post("/auth/register")
-def register_account(payload: RegisterIn, db: Session = Depends(get_db)):
+def register_account(payload: RegisterIn, db: DbSession):
     raise HTTPException(status_code=403, detail="Registration is disabled.")
 
 
 @router.post("/auth/login")
-def login_with_email(payload: LoginIn, db: Session = Depends(get_db)):
+def login_with_email(payload: LoginIn, db: DbSession):
     return _portal.login(db, payload)
 
 
 @router.post("/auth/logout")
-def logout(token_payload: Annotated[dict, Depends(get_token_payload)], db: Session = Depends(get_db)):
+def logout(
+    token_payload: Annotated[dict, Depends(get_token_payload)],
+    db: DbSession,
+):
     return _portal.logout(db, token_payload)
 
 
 @router.post("/auth/demo-login")
-def demo_login(payload: DemoLoginIn, db: Session = Depends(get_db)):
+def demo_login(payload: DemoLoginIn, db: DbSession):
     return _portal.issue_demo_login_token(db, user_id_str=payload.userId.strip())
 
 
@@ -90,7 +102,7 @@ def demo_login(payload: DemoLoginIn, db: Session = Depends(get_db)):
 # ------------------------------------------------------------------
 
 @router.get("/bootstrap")
-def bootstrap(actor: CurrentUser, db: Session = Depends(get_db)):
+def bootstrap(actor: CurrentUser, db: DbSession):
     return _portal.bootstrap(db, actor)
 
 
@@ -120,7 +132,7 @@ def create_event(
     payload: CreateEventIn,
     actor: CurrentUser,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     result = _portal.create_event(db, actor_id=actor, payload=payload)
     eid = _parse_uuid(result["event"]["id"], name="event_id")
@@ -133,7 +145,7 @@ def update_event(
     event_id: str,
     payload: CreateEventIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     eid = _parse_uuid(event_id, name="event_id")
     return _portal.update_event(db, actor_id=actor, event_id=eid, payload=payload)
@@ -144,7 +156,7 @@ def activate_event(
     event_id: str,
     actor: CurrentUser,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: DbSession,
     body: Optional[EventActionIn] = None,
 ):
     eid = _parse_uuid(event_id, name="event_id")
@@ -158,7 +170,7 @@ def activate_event(
 def close_event(
     event_id: str,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     eid = _parse_uuid(event_id, name="event_id")
     return _portal.close_event(db, actor_id=actor, event_id=eid)
@@ -168,7 +180,7 @@ def close_event(
 def send_reminders(
     event_id: str,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     eid = _parse_uuid(event_id, name="event_id")
     return _portal.send_reminders(db, actor_id=actor, event_id=eid)
@@ -178,20 +190,20 @@ def send_reminders(
 def create_report(
     payload: ReportIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return _portal.submit_report(db, payload)
 
 
 @router.get("/reports/me")
-def my_reports(actor: CurrentUser, db: Session = Depends(get_db)):
+def my_reports(actor: CurrentUser, db: DbSession):
     return {"reports": _portal.reports_for_user(db, actor)}
 
 
 @router.get("/dashboard/supervisor")
 def supervisor_dashboard(
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
     event_id: Optional[str] = Query(default=None),
     view_as: Optional[str] = Query(default=None),
 ):
@@ -203,7 +215,7 @@ def supervisor_dashboard(
 @router.get("/dashboard/admin")
 def admin_dashboard(
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
     event_id: Optional[str] = Query(default=None),
 ):
     eid = _parse_uuid(event_id, name="event_id") if event_id else None
@@ -214,7 +226,7 @@ def admin_dashboard(
 def admin_create_event_type(
     payload: EventTypeCreateIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return _portal.admin_create_event_type(db, actor, payload)
 
@@ -223,7 +235,7 @@ def admin_create_event_type(
 def admin_create_department(
     payload: DepartmentCreateIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return _portal.admin_create_department(db, actor, payload)
 
@@ -233,7 +245,7 @@ def admin_update_department(
     dept_id: str,
     payload: DepartmentUpdateIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     did = _parse_uuid(dept_id, name="dept_id")
     return _portal.admin_update_department(db, actor, did, payload)
@@ -243,7 +255,7 @@ def admin_update_department(
 def admin_delete_department(
     dept_id: str,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     did = _parse_uuid(dept_id, name="dept_id")
     return _portal.admin_delete_department(db, actor, did)
@@ -252,7 +264,7 @@ def admin_delete_department(
 @router.get("/admin/users")
 def admin_list_users(
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
     dept_id: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
@@ -265,7 +277,7 @@ def admin_list_users(
 def admin_create_user(
     payload: AdminUserCreateIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return _portal.admin_create_user(db, actor, payload)
 
@@ -275,14 +287,14 @@ def admin_update_user(
     user_id: str,
     payload: AdminUserUpdateIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     uid = _parse_uuid(user_id, name="user_id")
     return _portal.admin_update_user(db, actor, uid, payload)
 
 
 @router.get("/users/me")
-def get_my_profile(actor: CurrentUser, db: Session = Depends(get_db)):
+def get_my_profile(actor: CurrentUser, db: DbSession):
     return _portal.get_profile(db, actor)
 
 
@@ -290,7 +302,7 @@ def get_my_profile(actor: CurrentUser, db: Session = Depends(get_db)):
 def update_my_profile(
     payload: ProfileUpdateIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return _portal.update_profile(db, actor, payload)
 
@@ -298,7 +310,7 @@ def update_my_profile(
 @router.get("/users/me/fcm-token")
 def get_fcm_token_debug(
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return _portal.get_fcm_token_debug(db, actor)
 
@@ -307,7 +319,7 @@ def get_fcm_token_debug(
 def update_fcm_token(
     payload: FcmTokenIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return _portal.update_fcm_token(db, actor, payload.token)
 
@@ -316,7 +328,7 @@ def update_fcm_token(
 def change_my_password(
     payload: ChangePasswordIn,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return _portal.change_password(db, actor, payload)
 
@@ -325,7 +337,7 @@ def change_my_password(
 def admin_reset_password(
     user_id: str,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     uid = _parse_uuid(user_id, name="user_id")
     return _portal.admin_reset_password(db, actor, uid)
@@ -335,7 +347,7 @@ def admin_reset_password(
 def admin_deactivate_user(
     user_id: str,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     uid = _parse_uuid(user_id, name="user_id")
     return _portal.admin_deactivate_user(db, actor, uid)
@@ -345,14 +357,14 @@ def admin_deactivate_user(
 def admin_activate_user(
     user_id: str,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     uid = _parse_uuid(user_id, name="user_id")
     return _portal.admin_activate_user(db, actor, uid)
 
 
 @router.get("/notifications/me")
-def my_notifications(actor: CurrentUser, db: Session = Depends(get_db)):
+def my_notifications(actor: CurrentUser, db: DbSession):
     return {"notifications": _portal.notifications_for_user(db, actor)}
 
 
@@ -360,7 +372,7 @@ def my_notifications(actor: CurrentUser, db: Session = Depends(get_db)):
 def failed_notifications_for_event(
     event_id: str,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     eid = _parse_uuid(event_id, name="event_id")
     return {"rows": _portal.failed_notifications_for_event(db, actor_id=actor, event_id=eid)}
@@ -370,7 +382,7 @@ def failed_notifications_for_event(
 def retry_notification(
     notification_id: str,
     actor: CurrentUser,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     nid = _parse_uuid(notification_id, name="notification_id")
     return {"notification": _portal.retry_failed_notification(db, actor_id=actor, notification_id=nid)}

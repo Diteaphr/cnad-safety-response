@@ -16,7 +16,7 @@ import type { ToastState, User } from '../types';
 
 const STEP_COUNT = 3;
 
-function IosShareSheetMock({ sg }: { sg: ReturnType<typeof getStrings>['setupGuide'] }) {
+function IosShareSheetMock({ sg }: Readonly<{ sg: ReturnType<typeof getStrings>['setupGuide'] }>) {
   const rows: { label: string; icon: ReactNode; highlight?: boolean }[] = [
     { label: sg.iosShareSheetReadingList, icon: <Glasses size={18} aria-hidden /> },
     { label: sg.iosShareSheetBookmark, icon: <Bookmark size={18} aria-hidden /> },
@@ -47,6 +47,39 @@ function IosShareSheetMock({ sg }: { sg: ReturnType<typeof getStrings>['setupGui
   );
 }
 
+type FirstLoginWizardProps = Readonly<{
+  user: User;
+  mustChangePassword: boolean;
+  showToast: (t: ToastState) => void;
+  onCompleted: (user: User) => void;
+  onUserUpdated: (user: User) => void;
+}>;
+
+function computeCanNext(
+  step: number,
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string,
+  passwordSubmitting: boolean,
+): boolean {
+  if (step === 0) {
+    return Boolean(currentPassword && newPassword && confirmPassword) && !passwordSubmitting;
+  }
+  return step === 1;
+}
+
+function computeNextLabel(
+  step: number,
+  passwordSubmitting: boolean,
+  submitLabel: string,
+  nextLabel: string,
+): string {
+  if (step !== 0) {
+    return nextLabel;
+  }
+  return passwordSubmitting ? '…' : submitLabel;
+}
+
 /** First login: ① password → ② language + push → ③ Add to Home Screen */
 export function FirstLoginWizard({
   user,
@@ -54,13 +87,7 @@ export function FirstLoginWizard({
   showToast,
   onCompleted,
   onUserUpdated,
-}: {
-  user: User;
-  mustChangePassword: boolean;
-  showToast: (t: ToastState) => void;
-  onCompleted: (user: User) => void;
-  onUserUpdated: (user: User) => void;
-}) {
+}: FirstLoginWizardProps) {
   const { locale, setLocale } = useLocale();
   const { setupGuide: sg, profilePage: pp } = getStrings(locale);
 
@@ -174,7 +201,6 @@ export function FirstLoginWizard({
       }
       setLocale(draftLocale);
       setStep(2);
-      return;
     }
   };
 
@@ -211,15 +237,22 @@ export function FirstLoginWizard({
 
   const stepLabel = sg.stepIndicator(step + 1, STEP_COUNT);
 
-  const canNext =
-    step === 0
-      ? Boolean(currentPassword && newPassword && confirmPassword) && !passwordSubmitting
-      : step === 1
-        ? true
-        : false;
+  const canNext = computeCanNext(
+    step,
+    currentPassword,
+    newPassword,
+    confirmPassword,
+    passwordSubmitting,
+  );
 
-  const nextLabel =
-    step === 0 ? (passwordSubmitting ? '…' : pp.forcePasswordSubmit) : sg.next;
+  const nextLabel = computeNextLabel(
+    step,
+    passwordSubmitting,
+    pp.forcePasswordSubmit,
+    sg.next,
+  );
+
+  const showBackButton = step > (mustChangePassword ? 0 : 1);
 
   return (
     <div className="auth-shell setup-guide-shell">
@@ -375,7 +408,7 @@ export function FirstLoginWizard({
         </div>
 
         <div className="setup-guide-actions">
-          {step > (mustChangePassword ? 0 : 1) ? (
+          {showBackButton ? (
             <button
               type="button"
               className="btn ghost"

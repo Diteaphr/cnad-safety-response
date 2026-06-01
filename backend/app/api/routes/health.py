@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Any
+from typing import Annotated, Any
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -12,6 +12,8 @@ from app.core.config import BASE_DIR, settings
 from app.core.database import get_db
 
 router = APIRouter(tags=["health"])
+
+DbSession = Annotated[Session, Depends(get_db)]
 
 REQUIRED_TABLES = (
     "departments",
@@ -82,7 +84,7 @@ def live_check() -> dict[str, str]:
 
 
 @router.get("/ready")
-def ready_check(db: Session = Depends(get_db)) -> JSONResponse:
+def ready_check(db: DbSession) -> JSONResponse:
     """Readiness check: dependencies needed to serve normal traffic are reachable."""
     result: dict[str, Any] = {
         "status": "ok",
@@ -107,13 +109,13 @@ def ready_check(db: Session = Depends(get_db)) -> JSONResponse:
 
 
 @router.get("/health")
-def health_check(db: Session = Depends(get_db)) -> JSONResponse:
+def health_check(db: DbSession) -> JSONResponse:
     """Backward-compatible readiness endpoint used by existing docs and scripts."""
     return ready_check(db)
 
 
 @router.get("/health/db")
-def database_health_check(db: Session = Depends(get_db)) -> JSONResponse:
+def database_health_check(db: DbSession) -> JSONResponse:
     result: dict[str, Any] = {
         "status": "ok",
         "database": "unknown",
@@ -142,7 +144,7 @@ def database_health_check(db: Session = Depends(get_db)) -> JSONResponse:
 
 
 @router.get("/health/deep")
-def deep_health_check(db: Session = Depends(get_db)) -> JSONResponse:
+def deep_health_check(db: DbSession) -> JSONResponse:
     """Operational diagnostic check for schema and migration state."""
     expected_heads: list[str] = []
     expected_head: Any = "unknown"

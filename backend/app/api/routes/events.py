@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import List
+from typing import Annotated, List
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -18,12 +18,15 @@ router = APIRouter(prefix="/events", tags=["events"])
 _event_service = EventService()
 _response_service = SafetyResponseService()
 
+DbSession = Annotated[Session, Depends(get_db)]
+ActorUserId = Annotated[uuid.UUID, Depends(get_actor_user_id)]
+
 
 @router.post("", response_model=EventOut)
 def create_event(
     payload: EventCreate,
-    db: Session = Depends(get_db),
-    actor_user_id: uuid.UUID = Depends(get_actor_user_id),
+    db: DbSession,
+    actor_user_id: ActorUserId,
 ):
     event = _event_service.create_event(db, actor_user_id=actor_user_id, payload=payload)
     return event
@@ -33,8 +36,8 @@ def create_event(
 def submit_response(
     event_id: uuid.UUID,
     payload: SafetyResponseCreate,
-    db: Session = Depends(get_db),
-    actor_user_id: uuid.UUID = Depends(get_actor_user_id),
+    db: DbSession,
+    actor_user_id: ActorUserId,
 ):
     return _response_service.submit_response(
         db,
@@ -45,6 +48,6 @@ def submit_response(
 
 
 @router.get("/{event_id}/responses", response_model=List[SafetyResponseOut])
-def list_responses(event_id: uuid.UUID, db: Session = Depends(get_db)):
+def list_responses(event_id: uuid.UUID, db: DbSession):
     rows = _response_service.list_responses(db, event_id)
     return rows

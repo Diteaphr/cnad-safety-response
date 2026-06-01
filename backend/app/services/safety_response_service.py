@@ -25,7 +25,7 @@ class SafetyResponseService:
         payload: SafetyResponseCreate,
     ):
         try:
-            row = self._responses.upsert(
+            self._responses.upsert(
                 db,
                 event_id=event_id,
                 user_id=user_id,

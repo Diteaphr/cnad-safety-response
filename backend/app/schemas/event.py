@@ -38,8 +38,8 @@ class EventOut(BaseModel):
     event_type_id: uuid.UUID
     title: str
     event_type: str
-    description: Optional[str]
+    description: Optional[str] = None
     status: str
     created_by: uuid.UUID
-    start_time: Optional[datetime]
+    start_time: Optional[datetime] = None
     created_at: datetime

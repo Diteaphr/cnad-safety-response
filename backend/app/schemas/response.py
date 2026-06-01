@@ -20,6 +20,6 @@ class SafetyResponseOut(BaseModel):
     event_id: uuid.UUID
     user_id: uuid.UUID
     status: str
-    comment: Optional[str]
-    location: Optional[str]
+    comment: Optional[str] = None
+    location: Optional[str] = None
     responded_at: datetime
