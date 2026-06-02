@@ -74,6 +74,7 @@ gcloud run jobs execute "$JOB_NAME" --region "$REGION" --wait
 echo ""
 echo "Done. Check logs if needed:"
 echo "  gcloud run jobs executions list --job=$JOB_NAME --region=$REGION --limit=1"
+echo "  gcloud beta run jobs executions logs read <EXECUTION_NAME> --region=$REGION --limit=100"
 echo ""
 echo "Verify API:"
 echo "  curl -sS https://safety-response-api-zc5lsyet2q-de.a.run.app/health"

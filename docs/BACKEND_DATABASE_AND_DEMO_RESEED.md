@@ -225,6 +225,20 @@ gcloud run jobs execute demo-reseed --region asia-east1 --wait
 gcloud run jobs executions list --job=demo-reseed --region=asia-east1 --limit=1
 ```
 
+查看該次執行 log（**不要**加 `--job`，執行名稱放第一個參數）：
+
+```bash
+gcloud beta run jobs executions logs read demo-reseed-t7929 --region=asia-east1 --limit=100
+```
+
+若 beta 仍不可用，用 Cloud Logging：
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_job" AND resource.labels.job_name="demo-reseed" AND labels."run.googleapis.com/execution_name"="demo-reseed-t7929"' \
+  --project=cnad-safety-response --limit=100 --format='table(timestamp,textPayload)'
+```
+
 ---
 
 ## 與「空庫自動種子」的差異
