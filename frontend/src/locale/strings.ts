@@ -75,6 +75,10 @@ export type DashboardStrings = {
   employeeTableFootnote: (shown: number, total: number) => string;
   /** Supervisor roster — shown count vs scope total (excludes pending from list) */
   supervisorRosterFootnote: (shown: number, total: number) => string;
+  /** Roster footnote when filter tab is 需協助 */
+  rosterFootnoteNeedHelp: (n: number) => string;
+  /** Roster footnote when filter tab is 平安 */
+  rosterFootnoteSafe: (n: number) => string;
   /** Explains the stacked bar under 回報分布 */
   distributionHint: string;
   /** Shorter hint when verbose copy is hidden (admin detail compact strip). */
@@ -656,6 +660,8 @@ const dashZh: DashboardStrings = {
   asOf: '資料時間',
   employeeTableFootnote: (shown, total) => `顯示 ${shown} / ${total} 位`,
   supervisorRosterFootnote: (shown, total) => `已回報 ${shown} / ${total} 位`,
+  rosterFootnoteNeedHelp: (n) => `需協助 ${n} 位`,
+  rosterFootnoteSafe: (n) => `平安 ${n} 位`,
   distributionHint:
     '色塊長度＝各狀態人數占「總人數」的比例；下方列出人數與百分比（與上方圓餅右側數字一致）。',
   distributionCompactHint: '下方為各狀態人數與占比。',
@@ -787,6 +793,8 @@ const dashEn: DashboardStrings = {
   asOf: 'As of',
   employeeTableFootnote: (shown, total) => `Showing ${shown} of ${total} employees`,
   supervisorRosterFootnote: (shown, total) => `Reported ${shown} / ${total}`,
+  rosterFootnoteNeedHelp: (n) => `${n} need help`,
+  rosterFootnoteSafe: (n) => `${n} safe`,
   distributionHint:
     'Bar length is each status count as a share of total people in scope; numbers below match the KPI column.',
   distributionCompactHint: 'Counts and percentages by status are listed below.',

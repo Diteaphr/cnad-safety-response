@@ -19,6 +19,19 @@ import type { Department, EventItem, ToastState } from '../../types';
 
 export type DashboardStatusFilter = 'all' | 'safe' | 'need_help' | 'pending';
 
+function rosterFootnoteLabel(
+  dash: DashboardStrings,
+  isAdmin: boolean,
+  filter: DashboardStatusFilter,
+  shown: number,
+  total: number,
+): string {
+  if (filter === 'need_help') return dash.rosterFootnoteNeedHelp(shown);
+  if (filter === 'safe') return dash.rosterFootnoteSafe(shown);
+  if (isAdmin) return dash.adminRosterPriorityNote(shown, total);
+  return dash.supervisorRosterFootnote(shown, total);
+}
+
 type AdminPersonRow = {
   id: string;
   name: string;
@@ -219,9 +232,7 @@ export function SupervisorDashboardPage({ // NOSONAR
       ) : null}
       {rosterToolbar}
       <p className="sv-roster-footnote">
-        {isAdmin && filter === 'all'
-          ? dash.adminRosterPriorityNote(tableRows.length, rows.length)
-          : dash.supervisorRosterFootnote(tableRows.length, rows.length)}
+        {rosterFootnoteLabel(dash, isAdmin, filter, tableRows.length, rows.length)}
       </p>
       <SupervisorEmployeeCardList
         rows={tableRows}
