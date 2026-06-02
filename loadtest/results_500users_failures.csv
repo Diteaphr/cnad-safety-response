@@ -1,0 +1,4 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+POST,POST /api/reports,CatchResponseError('HTTP 500: Internal Server Error'),547,2026-05-29T03:14:15Z,2026-05-29T03:15:36Z
+GET,GET /api/reports/me,CatchResponseError('HTTP 500'),142,2026-05-29T03:14:15Z,2026-05-29T03:15:36Z
+GET,GET /dashboard/supervisor,CatchResponseError('HTTP 500'),167,2026-05-29T03:14:15Z,2026-05-29T03:15:31Z

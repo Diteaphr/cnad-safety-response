@@ -1,5 +1,6 @@
 import { useLocale } from '../locale/LocaleContext';
 import { getStrings } from '../locale/strings';
+import { formatLocaleDateTime } from '../lib/localTime';
 import type { EventItem } from '../types';
 
 function typeLabel(eventType: EventItem['type'], p: ReturnType<typeof getStrings>['portal']): string {
@@ -20,7 +21,6 @@ function typeLabel(eventType: EventItem['type'], p: ReturnType<typeof getStrings
 export function EventCard({ event }: Readonly<{ event: EventItem }>) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
-  const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
   const chipLabel = event.status === 'active' ? p.eventChipActive : p.eventChipClosed;
   const body = event.description?.trim() ? event.description.trim() : p.noDescription;
 
@@ -39,10 +39,7 @@ export function EventCard({ event }: Readonly<{ event: EventItem }>) {
           <span>
             {p.eventLabelStart}:{' '}
             {event.startAt != null && event.startAt !== ''
-              ? new Date(event.startAt).toLocaleString(localeTag, {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                })
+              ? formatLocaleDateTime(event.startAt, locale, { dateStyle: 'medium', timeStyle: 'short' })
               : '—'}
           </span>
         </div>

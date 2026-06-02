@@ -23,6 +23,7 @@ import { ConfirmModal } from '../../components/ConfirmModal';
 import { PageBackButton } from '../../components/PageBackButton';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
+import { formatLocaleDateTime, formatLocaleTime } from '../../lib/localTime';
 import { formatFileSize } from './memberFormat';
 import {
   heroSublineText,
@@ -94,7 +95,7 @@ export function EmployeeQuickReportPanel(props: EmployeeQuickReportPanelProps) {
 
   const fieldId = selectedEvent.id.replace(/[^a-zA-Z0-9_-]/g, '');
   const heroTimeSource = selectedEvent.startAt ?? selectedEvent.createdAt;
-  const heroTime = new Date(heroTimeSource).toLocaleTimeString(undefined, {
+  const heroTime = formatLocaleDateTime(heroTimeSource, locale, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -228,16 +229,12 @@ export function EmployeeQuickReportPanel(props: EmployeeQuickReportPanelProps) {
                       <div className="employee-summary-row">
                         <dt>{ec.submittedAtLabel}</dt>
                         <dd>
-                          {(() => {
-                            const t = new Date(latestResponse.updatedAt);
-                            const tag = locale === 'en' ? 'en-US' : 'zh-TW';
-                            return `${t.toLocaleTimeString(tag, { hour: 'numeric', minute: '2-digit' })} (${t.toLocaleTimeString(tag, {
+                          {`${formatLocaleTime(latestResponse.updatedAt, locale, { hour: 'numeric', minute: '2-digit' })} (${formatLocaleTime(latestResponse.updatedAt, locale, {
                               hour: '2-digit',
                               minute: '2-digit',
                               second: '2-digit',
                               hour12: true,
-                            })})`;
-                          })()}
+                            })})`}
                         </dd>
                       </div>
                       <div className="employee-summary-row">
@@ -689,7 +686,7 @@ export function EmployeeQuickReportPanel(props: EmployeeQuickReportPanelProps) {
               <div className="employee-edit-sticky-inner">
                 <p className="employee-edit-sticky-meta">
                   Last updated{' '}
-                  {latestResponse ? new Date(latestResponse.updatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '—'}
+                  {latestResponse ? formatLocaleTime(latestResponse.updatedAt, locale, { hour: 'numeric', minute: '2-digit' }) : '—'}
                 </p>
                 <div className="employee-edit-sticky-actions">
                   <button type="button" className="btn employee-btn-outline-strong" onClick={requestCancelRevision}>

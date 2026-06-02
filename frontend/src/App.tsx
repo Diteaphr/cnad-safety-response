@@ -72,6 +72,7 @@ import {
 } from './app/portalAppLib';
 import { loadContactedMap, saveContactedMap } from './lib/eventLocalPersist';
 import { clearEmployeeReportDraft } from './lib/employeeReportDraft';
+import { datetimeLocalToUtcIso, formatLocaleTime, nowMs, nowUtcIso } from './lib/localTime';
 import { stripRedundantStatusFromTitle } from './lib/adminEventDisplay';
 import { useLocale } from './locale/LocaleContext';
 import { getStrings } from './locale/strings';
@@ -901,7 +902,7 @@ function App() {
   const refreshOperationalData = useCallback(async () => {
     if (!session.isLoggedIn) return;
     if (useMockOfflineCatalog) {
-      setDashboardUpdatedAt(Date.now());
+      setDashboardUpdatedAt(nowMs());
       return;
     }
     try {
@@ -934,7 +935,7 @@ function App() {
     } catch {
       /* optional */
     }
-    setDashboardUpdatedAt(Date.now());
+    setDashboardUpdatedAt(nowMs());
   }, [session.isLoggedIn, session.surface, session.caps.canViewTeam, useMockOfflineCatalog]);
 
   useEffect(() => {
@@ -1125,7 +1126,7 @@ function App() {
       if (prior && !meta?.showOverlay) {
         showToast({
           tone: 'success',
-          message: `Report received at ${new Date(nextResponse.updatedAt).toLocaleTimeString()}${demoSuffix}`,
+          message: `Report received at ${formatLocaleTime(nextResponse.updatedAt, locale)}${demoSuffix}`,
         });
       }
     };
@@ -1190,8 +1191,8 @@ function App() {
         description: eventForm.description,
         targetDepartmentIds: [],
         status: 'active',
-        startAt: new Date(eventForm.startAt).toISOString(),
-        createdAt: new Date().toISOString(),
+        startAt: datetimeLocalToUtcIso(eventForm.startAt),
+        createdAt: nowUtcIso(),
         cardDepartment: undefined,
         venue: undefined,
       };
@@ -1204,7 +1205,7 @@ function App() {
         title: eventForm.title || 'Untitled Event',
         type: eventForm.type,
         description: eventForm.description,
-        startAt: new Date(eventForm.startAt).toISOString(),
+        startAt: datetimeLocalToUtcIso(eventForm.startAt),
         targetDepartmentIds: eventForm.targetDepartmentIds,
         ...(eventForm.location.trim() ? { location: eventForm.location.trim() } : {}),
       });

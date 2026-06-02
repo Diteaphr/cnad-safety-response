@@ -1,4 +1,5 @@
 import { portalLocalStorage } from './browserStorage';
+import { nowUtcIso } from './localTime';
 
 const PREFIX = 'cnad-employee-report-draft:v1';
 
@@ -26,7 +27,7 @@ export function loadEmployeeReportDraft(userId: string, eventId: string): Stored
       comment: j.comment,
       location: j.location,
       selectedNeedHelp: j.selectedNeedHelp,
-      updatedAt: typeof j.updatedAt === 'string' ? j.updatedAt : new Date().toISOString(),
+      updatedAt: typeof j.updatedAt === 'string' ? j.updatedAt : nowUtcIso(),
     };
   } catch {
     return null;
@@ -39,7 +40,7 @@ export function saveEmployeeReportDraft(userId: string, eventId: string, draft: 
   try {
     const payload: StoredEmployeeDraft = {
       ...draft,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowUtcIso(),
     };
     storage.setItem(employeeReportDraftKey(userId, eventId), JSON.stringify(payload));
   } catch {

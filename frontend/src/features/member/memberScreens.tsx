@@ -23,6 +23,8 @@ import { PageHeader } from '../../components/PageHeader';
 import { useLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import { stripRedundantStatusFromTitle } from '../../lib/adminEventDisplay';
+import { formatLocaleDateTime, formatLocaleTime } from '../../lib/localTime';
+import type { AppLocale } from '../../locale/LocaleContext';
 import type { Department, EventItem, SafetyResponse } from '../../types';
 import { formatEmployeeCardTime } from './memberFormat';
 import { ReportHistoryCard } from './ReportHistoryCard';
@@ -256,17 +258,14 @@ function EmployeePersonalMiniStatus({
   );
 }
 
-function formatCardRespondedTime(latest: SafetyResponse | undefined, pending: boolean, localeTag: string): string {
+function formatCardRespondedTime(latest: SafetyResponse | undefined, pending: boolean, locale: AppLocale): string {
   if (!latest || pending) return '';
-  return new Date(latest.updatedAt).toLocaleTimeString(localeTag, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return formatLocaleTime(latest.updatedAt, locale, { hour: 'numeric', minute: '2-digit' });
 }
 
-function formatCardClosedTime(latest: SafetyResponse | undefined, isClosedTab: boolean, localeTag: string): string {
+function formatCardClosedTime(latest: SafetyResponse | undefined, isClosedTab: boolean, locale: AppLocale): string {
   if (!latest || !isClosedTab) return '';
-  return new Date(latest.updatedAt).toLocaleString(localeTag, {
+  return formatLocaleDateTime(latest.updatedAt, locale, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -294,9 +293,8 @@ function EmployeeEventListCard({
   const isOngoingTab = filterTab === 'ongoing';
   const pending = !latest && isOngoingTab;
   const stripeClass = personalEventStripeClass(isOngoingTab, pending, latest);
-  const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
-  const respondedTimeStr = formatCardRespondedTime(latest, pending, localeTag);
-  const closedDetailTime = formatCardClosedTime(latest, filterTab === 'closed', localeTag);
+  const respondedTimeStr = formatCardRespondedTime(latest, pending, locale);
+  const closedDetailTime = formatCardClosedTime(latest, filterTab === 'closed', locale);
 
   const ongoingStatusBlock = isOngoingTab ? (
     <EmployeeOngoingStatusBlock pending={pending} latest={latest} ec={ec} respondedTimeStr={respondedTimeStr} />

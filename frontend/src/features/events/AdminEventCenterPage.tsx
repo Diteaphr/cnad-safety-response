@@ -17,7 +17,7 @@ import {
   useState,
 } from 'react';
 import type { AdminEventListRow, Department } from '../../types';
-import { useLocale } from '../../locale/LocaleContext';
+import { useLocale, type AppLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import {
   AdminQuickCreateFormFields,
@@ -30,6 +30,7 @@ import {
   stripRedundantStatusFromTitle,
 } from '../../lib/adminEventDisplay';
 import { formatEmployeeCardTime } from '../member/memberFormat';
+import { formatLocaleDateTime } from '../../lib/localTime';
 
 function TypeIcon({ type }: Readonly<{ type: string }>) {
   const common = { size: 22 as const, strokeWidth: 2.1 as const, 'aria-hidden': true as const };
@@ -48,10 +49,9 @@ function TypeIcon({ type }: Readonly<{ type: string }>) {
 }
 
 /** 事件開始時間（後端 start_time）；未設定時顯示 — */
-function formatEventStart(iso: string | null, locale: string): string {
+function formatEventStart(iso: string | null, locale: AppLocale): string {
   if (iso == null || iso === '') return '—';
-  const loc = locale === 'en' ? 'en-US' : 'zh-TW';
-  return new Date(iso).toLocaleString(loc, { dateStyle: 'short', timeStyle: 'short' });
+  return formatLocaleDateTime(iso, locale, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function SupervisorStackedProgressBar({

@@ -1,10 +1,11 @@
 import { StatCard } from '../../components/StatCard';
 import { PageBackButton } from '../../components/PageBackButton';
 import { PageHeader } from '../../components/PageHeader';
-import { useLocale } from '../../locale/LocaleContext';
+import { useLocale, type AppLocale } from '../../locale/LocaleContext';
 import { getStrings } from '../../locale/strings';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminCreateEventTypeApi, adminCreateUserApi, type PortalNotificationRow, type FailedNotificationRow } from '../../api';
+import { formatLocaleDateTime, localDateTimeLocalInputValue, nowMs } from '../../lib/localTime';
 import type { Department, EventItem, NotificationSummary, User } from '../../types';
 
 export type EventFormState = {
@@ -23,7 +24,7 @@ export function createInitialEventForm(): EventFormState {
     type: '',
     customType: '',
     description: '',
-    startAt: new Date().toISOString().slice(0, 16),
+    startAt: localDateTimeLocalInputValue(),
     location: '',
     targetDepartmentIds: [],
   };
@@ -621,7 +622,7 @@ export function UserManagementPage({
         const uid =
           typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
             ? crypto.randomUUID()
-            : `u-mock-${Date.now()}`;
+            : `u-mock-${nowMs()}`;
         const newUser: User = {
           id: uid,
           name,
@@ -936,7 +937,6 @@ function UserMgmtAddAccountForm({
 export function GlobalNotificationInboxPage({ rows }: Readonly<{ rows: PortalNotificationRow[] }>) {
   const { locale } = useLocale();
   const p = getStrings(locale).portal;
-  const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
   const sorted = useMemo(
     () =>
       [...rows].sort((a, b) => {
@@ -962,7 +962,7 @@ export function GlobalNotificationInboxPage({ rows }: Readonly<{ rows: PortalNot
                   {p.notificationInboxChannelLabel}: {row.channel} · {p.notificationInboxStatusLabel}: {row.status}
                 </p>
                 <p className="muted-text">
-                  {row.sentAt ? new Date(row.sentAt).toLocaleString(localeTag) : p.notSentYet}
+                  {row.sentAt ? formatLocaleDateTime(row.sentAt, locale) : p.notSentYet}
                 </p>
               </div>
             </article>
@@ -982,13 +982,12 @@ function FailedDeliveriesList({
   onRetryFailed,
 }: Readonly<{
   p: ReturnType<typeof getStrings>['portal'];
-  locale: string;
+  locale: AppLocale;
   loadingFailed?: boolean;
   failedRows: FailedNotificationRow[];
   canManageFailed?: boolean;
   onRetryFailed: (notificationId: string) => void;
 }>) {
-  const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
   if (loadingFailed) {
     return <p className="muted-text">{p.loading}</p>;
   }
@@ -1004,7 +1003,7 @@ function FailedDeliveriesList({
             <p>
               {(row.department ?? p.na)} · {row.channel}
             </p>
-            <p>{row.sentAt ? new Date(row.sentAt).toLocaleString(localeTag) : p.notSentYet}</p>
+            <p>{row.sentAt ? formatLocaleDateTime(row.sentAt, locale) : p.notSentYet}</p>
           </div>
           {canManageFailed ? (
             <button type="button" className="btn warning btn-sm" onClick={() => onRetryFailed(row.id)}>
@@ -1097,17 +1096,14 @@ export function NotificationPage({
             {summary.reminderHistory.length === 0 ? (
               <p className="empty">{p.noReminderRecords}</p>
             ) : (
-              summary.reminderHistory.map((item) => {
-                const localeTag = locale === 'en' ? 'en-US' : 'zh-TW';
-                return (
+              summary.reminderHistory.map((item) => (
                   <article className="list-item" key={item.id}>
                     <div>
                       <strong>{item.note}</strong>
-                      <p>{new Date(item.sentAt).toLocaleString(localeTag)}</p>
+                      <p>{formatLocaleDateTime(item.sentAt, locale)}</p>
                     </div>
                   </article>
-                );
-              })
+                ))
             )}
           </div>
         </section>

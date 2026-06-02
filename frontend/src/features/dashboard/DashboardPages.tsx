@@ -12,17 +12,12 @@ import {
   stripRedundantStatusFromTitle,
 } from '../../lib/adminEventDisplay';
 import { formatEmployeeCardTime } from '../member/memberFormat';
+import { formatLastSyncedLabel, formatLocaleDateTime } from '../../lib/localTime';
 import { SupervisorEmployeeCardList } from './SupervisorEmployeeCardList';
 import { SupervisorReportInsightCard } from './SupervisorReportInsightCard';
 import type { Department, EventItem, ToastState } from '../../types';
 
 export type DashboardStatusFilter = 'all' | 'safe' | 'need_help' | 'pending';
-
-function formatSynced(strings: DashboardStrings, ts: number | null, locale: string): string | null {
-  if (ts === null) return null;
-  const d = new Date(ts);
-  return `${strings.lastSynced}: ${d.toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')}`;
-}
 
 type AdminPersonRow = {
   id: string;
@@ -111,13 +106,10 @@ export function SupervisorDashboardPage({ // NOSONAR
   const eventTitle = event ? stripRedundantStatusFromTitle(event.title) : '—';
   const typeDisplay = event ? formatAdminEventTypeLabel(event.type, portalStrings) : '—';
   const eventImpactScope = event ? formatEventImpactScope(event, deptList, portalStrings) : '—';
-  const updatedLine = Array.isArray(dashboardFreshAt) || !dashboardFreshAt
-    ? null
-    : (() => {
-        const freshDate = new Date(dashboardFreshAt);
-        const locStr = locale === 'en' ? 'en-US' : 'zh-TW';
-        return freshDate.toLocaleString(locStr);
-      })();
+  const updatedLine =
+    Array.isArray(dashboardFreshAt) || !dashboardFreshAt
+      ? null
+      : formatLocaleDateTime(dashboardFreshAt, locale);
   const createdSource = event?.startAt ?? event?.createdAt ?? null;
   const createdLine = formatEmployeeCardTime(createdSource, locale);
   const syncedLine = updatedLine ?? '—';
@@ -336,7 +328,7 @@ export function SupervisorDashboardPage({ // NOSONAR
           brandName={dash.brand}
           backLabel={dash.backToEvents}
           onBack={onBackToEvents}
-          lastSyncedFormatted={formatSynced(dash, dashboardFreshAt, locale)}
+          lastSyncedFormatted={formatLastSyncedLabel(dash.lastSynced, dashboardFreshAt, locale)}
           syncOk
         />
         <p className="empty">{dash.noRows}</p>
@@ -353,7 +345,7 @@ export function SupervisorDashboardPage({ // NOSONAR
           brandName={dash.brand}
           backLabel={dash.backToEvents}
           onBack={onBackToEvents}
-          lastSyncedFormatted={formatSynced(dash, dashboardFreshAt, locale)}
+          lastSyncedFormatted={formatLastSyncedLabel(dash.lastSynced, dashboardFreshAt, locale)}
           syncOk
         />
 
@@ -424,7 +416,7 @@ export function SupervisorDashboardPage({ // NOSONAR
         brandName={dash.brand}
         backLabel={dash.backToEvents}
         onBack={onBackToEvents}
-        lastSyncedFormatted={formatSynced(dash, dashboardFreshAt, locale)}
+        lastSyncedFormatted={formatLastSyncedLabel(dash.lastSynced, dashboardFreshAt, locale)}
         syncOk
       />
 

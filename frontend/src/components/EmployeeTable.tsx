@@ -1,3 +1,5 @@
+import { useLocale } from '../locale/LocaleContext';
+import { formatLocaleTime } from '../lib/localTime';
 import type { SafetyStatus } from '../types';
 import { StatusBadge } from './StatusBadge';
 
@@ -13,6 +15,7 @@ export interface EmployeeRow {
 }
 
 export function EmployeeTable({ rows }: Readonly<{ rows: EmployeeRow[] }>) {
+  const { locale } = useLocale();
   return (
     <div className="table-wrap">
       <table className="data-table">
@@ -33,7 +36,7 @@ export function EmployeeTable({ rows }: Readonly<{ rows: EmployeeRow[] }>) {
               <td>
                 <StatusBadge status={row.status} />
               </td>
-              <td>{row.updatedAt ? new Date(row.updatedAt).toLocaleTimeString() : '-'}</td>
+              <td>{row.updatedAt ? formatLocaleTime(row.updatedAt, locale) : '-'}</td>
               <td>
                 {[
                   row.phone ? `電話 ${row.phone}` : null,

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Employee Safety Response — 壓力測試分析報告</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --surface2: #242840;
+    --border: #2e3250;
+    --text: #e8eaf0;
+    --muted: #8b90a8;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #8b5cf6;
+    --cyan: #06b6d4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 1100px; margin: 0 auto; padding: 48px 24px 80px; }
+  section { margin-bottom: 52px; }
+
+  /* ── Typography ── */
+  h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.5px; }
+  h2 { font-size: 1.25rem; font-weight: 700; color: var(--cyan); margin-bottom: 16px;
+       display: flex; align-items: center; gap: 8px; }
+  h2::before { content: ''; display: inline-block; width: 4px; height: 20px;
+               background: var(--cyan); border-radius: 2px; }
+  h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+  p  { color: var(--muted); font-size: 0.92rem; }
+
+  /* ── Header ── */
+  .header { padding: 36px 40px; background: linear-gradient(135deg, #1a1d2e 0%, #0f1117 100%);
+            border: 1px solid var(--border); border-radius: 16px; margin-bottom: 40px; }
+  .header h1 span { color: var(--cyan); }
+  .header-meta { display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
+  .header-meta span { font-size: 0.82rem; color: var(--muted);
+    background: var(--surface2); border-radius: 6px; padding: 3px 10px; }
+
+  /* ── Stage Cards ── */
+  .stage-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .stage-card { background: var(--surface); border: 1px solid var(--border);
+                border-radius: 12px; padding: 20px 24px; position: relative; overflow: hidden; }
+  .stage-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0;
+                        height: 3px; border-radius: 12px 12px 0 0; }
+  .stage-card.ok::before   { background: var(--green); }
+  .stage-card.warn::before { background: var(--yellow); }
+  .stage-card.bad::before  { background: var(--red); }
+  .stage-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+  .stage-users { font-size: 2.2rem; font-weight: 800; line-height: 1; }
+  .stage-users small { font-size: 1rem; font-weight: 400; color: var(--muted); }
+  .stage-metrics { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .metric { background: var(--surface2); border-radius: 8px; padding: 8px 10px; }
+  .metric-val { font-size: 1.1rem; font-weight: 700; }
+  .metric-label { font-size: 0.7rem; color: var(--muted); margin-top: 1px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 20px;
+           padding: 3px 10px; font-size: 0.75rem; font-weight: 700; margin-top: 10px; }
+  .badge.ok   { background: rgba(34,197,94,.15);  color: var(--green); }
+  .badge.warn { background: rgba(245,158,11,.15); color: var(--yellow); }
+  .badge.bad  { background: rgba(239,68,68,.15);  color: var(--red); }
+
+  /* ── Charts ── */
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .chart-box { background: var(--surface); border: 1px solid var(--border);
+               border-radius: 12px; padding: 20px 24px; }
+  .chart-box.wide { grid-column: 1 / -1; }
+  .chart-title { font-size: 0.82rem; font-weight: 600; color: var(--muted);
+                 text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap.tall { height: 280px; }
+
+  /* ── Table ── */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .data-table th { text-align: left; padding: 10px 14px; color: var(--muted);
+                   font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+                   letter-spacing: 0.5px; border-bottom: 1px solid var(--border);
+                   background: var(--surface); }
+  .data-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .data-table tr:hover td { background: var(--surface2); }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table .good { color: var(--green); font-weight: 600; }
+  .data-table .warn { color: var(--yellow); font-weight: 600; }
+  .data-table .bad  { color: var(--red); font-weight: 600; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border);
+                border-radius: 12px; overflow: hidden; }
+
+  /* ── Scenario box ── */
+  .scenario { background: var(--surface); border: 1px solid var(--border);
+              border-radius: 12px; padding: 24px 28px; }
+  .scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr);
+                   gap: 16px; margin-top: 16px; }
+  .scenario-item { background: var(--surface2); border-radius: 10px; padding: 14px 16px; }
+  .scenario-item .val { font-size: 1.3rem; font-weight: 800; }
+  .scenario-item .desc { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+  .progress-bar-wrap { margin-top: 10px; }
+  .progress-label { display: flex; justify-content: space-between;
+                    font-size: 0.7rem; color: var(--muted); margin-bottom: 4px; }
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+  /* ── Conclusion cards ── */
+  .conclusion-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .conclusion-card { background: var(--surface); border: 1px solid var(--border);
+                     border-radius: 12px; padding: 20px 22px; }
+  .conclusion-card .icon { font-size: 1.5rem; margin-bottom: 8px; }
+  .conclusion-card h3 { font-size: 0.9rem; margin-bottom: 10px; }
+  .conclusion-card ul { padding-left: 14px; }
+  .conclusion-card ul li { font-size: 0.82rem; color: var(--muted); margin-bottom: 6px; }
+  .conclusion-card ul li strong { color: var(--text); }
+  .conclusion-card.green { border-color: rgba(34,197,94,.3); }
+  .conclusion-card.yellow { border-color: rgba(245,158,11,.3); }
+  .conclusion-card.blue { border-color: rgba(59,130,246,.3); }
+
+  /* ── Improvement steps ── */
+  .steps { display: flex; flex-direction: column; gap: 12px; }
+  .step { display: flex; gap: 14px; align-items: flex-start;
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: 10px; padding: 14px 18px; }
+  .step-num { min-width: 28px; height: 28px; border-radius: 50%;
+              background: var(--cyan); color: #000; font-weight: 800;
+              font-size: 0.8rem; display: flex; align-items: center;
+              justify-content: center; flex-shrink: 0; }
+  .step-body h4 { font-size: 0.88rem; font-weight: 700; margin-bottom: 3px; }
+  .step-body p { font-size: 0.8rem; }
+  .code { font-family: 'Menlo', 'Consolas', monospace; font-size: 0.78rem;
+          background: var(--surface2); border: 1px solid var(--border);
+          border-radius: 6px; padding: 8px 12px; margin-top: 6px;
+          color: var(--cyan); white-space: pre-wrap; }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: var(--border); margin: 12px 0; }
+  .tag { display: inline-block; font-size: 0.72rem; font-weight: 700;
+         padding: 2px 8px; border-radius: 4px; margin-right: 4px; }
+  .tag.impact-hi { background: rgba(239,68,68,.2); color: var(--red); }
+  .tag.impact-md { background: rgba(245,158,11,.2); color: var(--yellow); }
+  .tag.impact-lo { background: rgba(34,197,94,.2); color: var(--green); }
+
+  @media (max-width: 720px) {
+    .stage-cards, .charts-grid, .conclusion-grid, .scenario-grid { grid-template-columns: 1fr; }
+    .chart-box.wide { grid-column: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <h1>Employee Safety Response<br><span>壓力測試分析報告</span></h1>
+    <div class="header-meta">
+      <span>📅 2026-05-29</span>
+      <span>🎯 Cloud Run · asia-east1</span>
+      <span>⏱ 各輪 2 分鐘</span>
+      <span>🔧 Locust 2.44.0</span>
+      <span>👥 51 個測試帳號</span>
+      <span>📡 3 個端點</span>
+    </div>
+  </div>
+
+  <!-- ── Stage Cards ── -->
+  <section>
+    <h2>三階段總覽</h2>
+    <div class="stage-cards">
+
+      <div class="stage-card ok">
+        <div class="stage-label">第一階段 — 低負載</div>
+        <div class="stage-users">50 <small>users</small></div>
+        <div class="stage-metrics">
+          <div class="metric"><div class="metric-val" style="color:var(--cyan)">15.7</div><div class="metric-label">RPS</div></div>
+          <div class="metric"><div class="metric-val" style="color:var(--green)">0%</div><div class="metric-label">失敗率</div></div>
+          <div class="metric"><div class="metric-val">50 ms</div><div class="metric-label">p50 延遲</div></div>
+          <div class="metric"><div class="metric-val">320 ms</div><div class="metric-label">p95 延遲</div></div>
+        </div>
+        <span class="badge ok">✓ 系統輕鬆應付</span>
+      </div>
+
+      <div class="stage-card ok">
+        <div class="stage-label">第二階段 — 中負載</div>
+        <div class="stage-users">200 <small>users</small></div>
+        <div class="stage-metrics">
+          <div class="metric"><div class="metric-val" style="color:var(--cyan)">59.9</div><div class="metric-label">RPS</div></div>
+          <div class="metric"><div class="metric-val" style="color:var(--green)">0%</div><div class="metric-label">失敗率</div></div>
+          <div class="metric"><div class="metric-val">52 ms</div><div class="metric-label">p50 延遲</div></div>
+          <div class="metric"><div class="metric-val" style="color:var(--yellow)">1,600 ms</div><div class="metric-label">p95 延遲</div></div>
+        </div>
+        <span class="badge ok">✓ 無失敗，Auto-scale 生效</span>
+      </div>
+
+      <div class="stage-card bad">
+        <div class="stage-label">第三階段 — 高負載</div>
+        <div class="stage-users">500 <small>users</small></div>
+        <div class="stage-metrics">
+          <div class="metric"><div class="metric-val" style="color:var(--cyan)">137.3</div><div class="metric-label">RPS</div></div>
+          <div class="metric"><div class="metric-val" style="color:var(--red)">5.2%</div><div class="metric-label">失敗率</div></div>
+          <div class="metric"><div class="metric-val">80 ms</div><div class="metric-label">p50 延遲</div></div>
+          <div class="metric"><div class="metric-val" style="color:var(--red)">2,300 ms</div><div class="metric-label">p95 延遲</div></div>
+        </div>
+        <span class="badge bad">⚠ 尾延遲惡化，5.2% 失敗</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Charts ── -->
+  <section>
+    <h2>時序圖表</h2>
+    <div class="charts-grid">
+
+      <div class="chart-box wide">
+        <div class="chart-title">RPS 隨時間變化（三階段對比）</div>
+        <div class="chart-wrap tall"><canvas id="rpsChart"></canvas></div>
+      </div>
+
+      <div class="chart-box">
+        <div class="chart-title">p95 延遲隨時間變化（ms）</div>
+        <div class="chart-wrap"><canvas id="p95Chart"></canvas></div>
+      </div>
+
+      <div class="chart-box">
+        <div class="chart-title">最終指標對比</div>
+        <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Per-endpoint table ── -->
+  <section>
+    <h2>各端點詳細數據</h2>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>端點</th>
+            <th>階段</th>
+            <th>請求數</th>
+            <th>失敗數</th>
+            <th>失敗率</th>
+            <th>avg</th>
+            <th>p50</th>
+            <th>p95</th>
+            <th>p99</th>
+            <th>RPS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- POST /api/reports -->
+          <tr>
+            <td><strong>POST /api/reports</strong></td>
+            <td>50 users</td>
+            <td>1,259</td><td>0</td><td class="good">0%</td>
+            <td>86ms</td><td>52ms</td><td>330ms</td><td>540ms</td><td>10.5</td>
+          </tr>
+          <tr>
+            <td><strong>POST /api/reports</strong></td>
+            <td>200 users</td>
+            <td>4,790</td><td>0</td><td class="good">0%</td>
+            <td>254ms</td><td>53ms</td><td class="warn">1,500ms</td><td class="warn">3,000ms</td><td>40.0</td>
+          </tr>
+          <tr>
+            <td><strong>POST /api/reports</strong></td>
+            <td>500 users</td>
+            <td>10,885</td><td>547</td><td class="bad">5.0%</td>
+            <td>445ms</td><td>81ms</td><td class="bad">2,100ms</td><td class="bad">5,700ms</td><td>90.8</td>
+          </tr>
+          <tr><td colspan="10"><div class="divider"></div></td></tr>
+          <!-- GET /api/reports/me -->
+          <tr>
+            <td><strong>GET /api/reports/me</strong></td>
+            <td>50 users</td>
+            <td>322</td><td>0</td><td class="good">0%</td>
+            <td>69ms</td><td>42ms</td><td>190ms</td><td>480ms</td><td>2.7</td>
+          </tr>
+          <tr>
+            <td><strong>GET /api/reports/me</strong></td>
+            <td>200 users</td>
+            <td>1,210</td><td>0</td><td class="good">0%</td>
+            <td>217ms</td><td>44ms</td><td class="warn">1,300ms</td><td class="warn">2,900ms</td><td>10.1</td>
+          </tr>
+          <tr>
+            <td><strong>GET /api/reports/me</strong></td>
+            <td>500 users</td>
+            <td>2,735</td><td>142</td><td class="bad">5.2%</td>
+            <td>384ms</td><td>66ms</td><td class="bad">1,800ms</td><td class="bad">5,100ms</td><td>22.8</td>
+          </tr>
+          <tr><td colspan="10"><div class="divider"></div></td></tr>
+          <!-- GET /dashboard/supervisor -->
+          <tr>
+            <td><strong>GET /dashboard/supervisor</strong></td>
+            <td>50 users</td>
+            <td>301</td><td>0</td><td class="good">0%</td>
+            <td>102ms</td><td>44ms</td><td>340ms</td><td>520ms</td><td>2.5</td>
+          </tr>
+          <tr>
+            <td><strong>GET /dashboard/supervisor</strong></td>
+            <td>200 users</td>
+            <td>1,174</td><td>0</td><td class="good">0%</td>
+            <td>460ms</td><td>50ms</td><td class="bad">2,500ms</td><td class="bad">5,800ms</td><td>9.8</td>
+          </tr>
+          <tr>
+            <td><strong>GET /dashboard/supervisor</strong></td>
+            <td>500 users</td>
+            <td>2,845</td><td>167</td><td class="bad">5.9%</td>
+            <td>863ms</td><td>110ms</td><td class="bad">5,200ms</td><td class="bad">8,700ms</td><td>23.7</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Disaster scenario ── -->
+  <section>
+    <h2>真實災害情境對應分析</h2>
+    <div class="scenario">
+      <h3>假設：10,000 名員工於地震後半小時內陸續回報安全狀態</h3>
+      <p>不同回報時間窗對系統造成的 RPS 壓力與對應結果：</p>
+      <div class="scenario-grid">
+        <div class="scenario-item">
+          <div class="val" style="color:var(--green)">5.6 req/s</div>
+          <div class="desc">10,000 人 ÷ 30 分鐘<br>正常分散回報</div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>對應負載</span><span style="color:var(--green)">50 users ✓</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:10%;background:var(--green)"></div></div>
+          </div>
+        </div>
+        <div class="scenario-item">
+          <div class="val" style="color:var(--green)">33 req/s</div>
+          <div class="desc">10,000 人 ÷ 5 分鐘<br>前段峰值湧入</div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>對應負載</span><span style="color:var(--green)">200 users ✓</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:55%;background:var(--green)"></div></div>
+          </div>
+        </div>
+        <div class="scenario-item">
+          <div class="val" style="color:var(--yellow)">83 req/s</div>
+          <div class="desc">10,000 人 ÷ 2 分鐘<br>極端同時湧入</div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>對應負載</span><span style="color:var(--yellow)">~300 users</span></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:80%;background:var(--yellow)"></div></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;padding:12px 16px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;">
+        <strong style="color:var(--green)">✅ 結論：</strong>
+        <span style="color:var(--muted);font-size:0.85rem">
+          即使是最極端情境（全員 2 分鐘內回報），所需 RPS 約 83 req/s，
+          介於 200-user（60 RPS, 0% 失敗）與 500-user（137 RPS, 5.2% 失敗）之間。
+          搭配 Cloud Run 動態 Auto-scale（實測擴至 9–10 個 instance），
+          系統在正常到中高壓力下均可零失敗運作。
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Conclusions ── -->
+  <section>
+    <h2>測試結論</h2>
+    <div class="conclusion-grid">
+
+      <div class="conclusion-card green">
+        <div class="icon">✅</div>
+        <h3 style="color:var(--green)">表現良好</h3>
+        <ul>
+          <li><strong>零失敗率（50 & 200 users）</strong>：覆蓋所有真實情境，完全無錯誤</li>
+          <li><strong>p50 延遲穩定</strong>：50ms → 52ms → 80ms，暖機後幾乎不隨人數增長</li>
+          <li><strong>RPS 近線性擴展</strong>：15.7 → 59.9 → 137.3，顯示 Auto-scale 有效介入</li>
+          <li><strong>GCP 實測 Auto-scale</strong>：500 users 時自動擴展至 9–10 個 instance</li>
+          <li><strong>Pub/Sub 緩衝發揮作用</strong>：高峰寫入未造成資料庫直接壓垮</li>
+        </ul>
+      </div>
+
+      <div class="conclusion-card yellow">
+        <div class="icon">⚠️</div>
+        <h3 style="color:var(--yellow)">可改善之處</h3>
+        <ul>
+          <li><strong>Cold Start 尾延遲</strong>：200 users p95 從 320ms 跳至 1,600ms，新 instance 啟動慢</li>
+          <li><strong>500 users 5.2% 失敗</strong>：擴展期間請求 timeout，非程式邏輯錯誤</li>
+          <li><strong>Dashboard 端點最慢</strong>：p95 在 500 users 達 5,200ms，需優化查詢或加 Cache</li>
+          <li><strong>Token 共用限制</strong>：51 個帳號被 500 虛擬使用者共用，比實際情境更嚴苛</li>
+        </ul>
+      </div>
+
+      <div class="conclusion-card blue">
+        <div class="icon">📊</div>
+        <h3 style="color:var(--blue)">數字解讀重點</h3>
+        <ul>
+          <li><strong>p50 vs p95 的差距</strong>代表 Cold Start 影響，不代表穩定狀態差</li>
+          <li>500 users 時 p95=2,300ms，但 p50 仍只有 80ms，表示<strong>大多數請求仍很快</strong></li>
+          <li>5.2% 失敗出現在最極端情境，且隨 instance 暖機後數字會改善</li>
+          <li>實際用戶不會 0.5~3 秒就重發一次，真實壓力更低</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Improvement steps ── -->
+  <section>
+    <h2>優化建議</h2>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h4>設定最小 Instance 數量 <span class="tag impact-hi">影響最大</span></h4>
+          <p>目前 Cloud Run 從 0 instance 開始冷啟動，造成第一批請求 p95 劇升。設定 min-instances=2 可消除 Cold Start 問題。</p>
+          <div class="code">gcloud run services update safety-response-api \
+  --min-instances=2 \
+  --region=asia-east1</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h4>Dashboard 加入 Redis Cache <span class="tag impact-hi">影響最大</span></h4>
+          <p>GET /dashboard/supervisor 在 500 users 時 p95 高達 5,200ms，是所有端點中最慢的。因為主管儀表板需要聚合大量資料，加入 5 分鐘 TTL 的 Redis Cache 可大幅降低 DB 壓力。</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h4>調整 Cloud Run Concurrency 設定 <span class="tag impact-md">中等影響</span></h4>
+          <p>目前預設每個 instance 允許 80 個並發請求。可根據實際測試調整此值，或配合 CPU 數量優化。</p>
+          <div class="code">gcloud run services update safety-response-api \
+  --concurrency=40 \
+  --cpu=2 \
+  --region=asia-east1</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h4>Connection Pool 優化 <span class="tag impact-md">中等影響</span></h4>
+          <p>多個 Cloud Run instance 同時連接 PostgreSQL 可能耗盡連線數。建議加入 PgBouncer 或使用 Cloud SQL 的連線池模式，避免高峰時 DB 連線耗盡導致 5xx 錯誤。</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h4>增加真實帳號數量進行更準確的壓測 <span class="tag impact-lo">低影響</span></h4>
+          <p>本次測試 51 個帳號被 500 個虛擬使用者共用，每個 token 被 ~10 個 user 同時使用，比真實情況更嚴苛。若測試帳號等於虛擬使用者數，失敗率預計會再降低。</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Footer ── -->
+  <div style="text-align:center;color:var(--muted);font-size:0.78rem;margin-top:40px;">
+    Employee Safety Response · 第12組 · CNAD Final Report · 2026-05-29
+  </div>
+
+</div><!-- /page -->
+
+<script>
+// ── Data ──
+const h50 = [{"sec":0,"rps":6.0,"p50":100,"p95":470,"users":25},{"sec":5,"rps":9.125,"p50":150,"p95":520,"users":50},{"sec":10,"rps":12.6,"p50":340,"p95":690,"users":50},{"sec":15,"rps":15.3,"p50":260,"p95":670,"users":50},{"sec":20,"rps":15.8,"p50":65,"p95":330,"users":50},{"sec":25,"rps":15.7,"p50":52,"p95":140,"users":50},{"sec":30,"rps":16.3,"p50":50,"p95":120,"users":50},{"sec":35,"rps":16.1,"p50":53,"p95":130,"users":50},{"sec":40,"rps":16.4,"p50":50,"p95":110,"users":50},{"sec":45,"rps":16.6,"p50":50,"p95":160,"users":50},{"sec":50,"rps":16.3,"p50":51,"p95":130,"users":50},{"sec":55,"rps":16.5,"p50":51,"p95":110,"users":50},{"sec":60,"rps":16.8,"p50":51,"p95":130,"users":50},{"sec":65,"rps":16.5,"p50":49,"p95":130,"users":50},{"sec":70,"rps":16.0,"p50":48,"p95":63,"users":50},{"sec":75,"rps":15.8,"p50":48,"p95":64,"users":50},{"sec":80,"rps":16.3,"p50":48,"p95":67,"users":50},{"sec":85,"rps":16.3,"p50":48,"p95":74,"users":50},{"sec":90,"rps":15.6,"p50":48,"p95":67,"users":50},{"sec":95,"rps":15.5,"p50":47,"p95":63,"users":50},{"sec":100,"rps":15.8,"p50":47,"p95":65,"users":50},{"sec":105,"rps":15.9,"p50":49,"p95":73,"users":50},{"sec":110,"rps":15.3,"p50":48,"p95":100,"users":50},{"sec":115,"rps":16.0,"p50":47,"p95":100,"users":0}];
+const h200 = [{"sec":0,"rps":33.3,"p50":590,"p95":2700,"users":200},{"sec":5,"rps":42.0,"p50":310,"p95":3700,"users":200},{"sec":10,"rps":48.1,"p50":94,"p95":4100,"users":200},{"sec":15,"rps":51.3,"p50":94,"p95":3000,"users":200},{"sec":20,"rps":51.3,"p50":230,"p95":2600,"users":200},{"sec":25,"rps":48.9,"p50":650,"p95":2100,"users":200},{"sec":30,"rps":52.9,"p50":390,"p95":1800,"users":200},{"sec":35,"rps":56.9,"p50":140,"p95":1200,"users":200},{"sec":40,"rps":56.4,"p50":80,"p95":1600,"users":200},{"sec":45,"rps":55.7,"p50":59,"p95":1900,"users":200},{"sec":50,"rps":60.7,"p50":56,"p95":1000,"users":200},{"sec":55,"rps":65.6,"p50":50,"p95":210,"users":200},{"sec":60,"rps":65.0,"p50":49,"p95":110,"users":200},{"sec":65,"rps":65.9,"p50":49,"p95":87,"users":200},{"sec":70,"rps":66.3,"p50":49,"p95":77,"users":200},{"sec":75,"rps":64.6,"p50":48,"p95":84,"users":200},{"sec":80,"rps":63.5,"p50":48,"p95":110,"users":200},{"sec":85,"rps":64.1,"p50":47,"p95":100,"users":200},{"sec":90,"rps":64.3,"p50":47,"p95":85,"users":200},{"sec":95,"rps":65.3,"p50":48,"p95":100,"users":200},{"sec":100,"rps":66.1,"p50":48,"p95":83,"users":200},{"sec":105,"rps":63.3,"p50":48,"p95":100,"users":200},{"sec":110,"rps":64.9,"p50":48,"p95":100,"users":200},{"sec":115,"rps":66.6,"p50":49,"p95":94,"users":0}];
+const h500 = [{"sec":0,"rps":54.0,"p50":640,"p95":2800,"users":500},{"sec":5,"rps":64.9,"p50":930,"p95":6500,"users":500},{"sec":10,"rps":89.1,"p50":1100,"p95":8500,"users":500},{"sec":15,"rps":104.4,"p50":700,"p95":8400,"users":500},{"sec":20,"rps":95.2,"p50":600,"p95":5700,"users":500},{"sec":25,"rps":102.7,"p50":400,"p95":5600,"users":500},{"sec":30,"rps":124.4,"p50":260,"p95":2600,"users":500},{"sec":35,"rps":131.7,"p50":280,"p95":1700,"users":500},{"sec":40,"rps":137.5,"p50":210,"p95":1900,"users":500},{"sec":45,"rps":139.6,"p50":150,"p95":1800,"users":500},{"sec":50,"rps":135.6,"p50":98,"p95":1900,"users":500},{"sec":55,"rps":137.5,"p50":77,"p95":2100,"users":500},{"sec":60,"rps":139.1,"p50":71,"p95":2200,"users":500},{"sec":65,"rps":139.6,"p50":78,"p95":2200,"users":500},{"sec":70,"rps":148.0,"p50":90,"p95":1800,"users":500},{"sec":75,"rps":153.0,"p50":95,"p95":1100,"users":500},{"sec":80,"rps":154.4,"p50":87,"p95":740,"users":500},{"sec":85,"rps":158.4,"p50":69,"p95":620,"users":500},{"sec":90,"rps":159.5,"p50":56,"p95":310,"users":500},{"sec":95,"rps":158.7,"p50":53,"p95":110,"users":500},{"sec":100,"rps":162.9,"p50":56,"p95":200,"users":500},{"sec":105,"rps":163.1,"p50":58,"p95":210,"users":500},{"sec":110,"rps":163.1,"p50":54,"p95":130,"users":500},{"sec":115,"rps":165.4,"p50":54,"p95":120,"users":0}];
+
+const labels = h50.slice(0,-1).map(d => d.sec + 's');
+const trimLast = arr => arr.slice(0, -1);
+
+Chart.defaults.color = '#8b90a8';
+Chart.defaults.borderColor = '#2e3250';
+Chart.defaults.font.family = "-apple-system, 'Segoe UI', sans-serif";
+Chart.defaults.font.size = 11;
+
+// ── RPS Chart ──
+new Chart(document.getElementById('rpsChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: '50 users',
+        data: trimLast(h50).map(d => d.rps),
+        borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.08)',
+        borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3,
+      },
+      {
+        label: '200 users',
+        data: trimLast(h200).map(d => d.rps),
+        borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,.08)',
+        borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3,
+      },
+      {
+        label: '500 users',
+        data: trimLast(h500).map(d => d.rps),
+        borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,.08)',
+        borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3,
+      },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { usePointStyle: true, padding: 16 } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} req/s` } }
+    },
+    scales: {
+      x: { grid: { color: '#1e2235' }, ticks: { maxTicksLimit: 12 } },
+      y: { grid: { color: '#1e2235' }, title: { display: true, text: 'req/s' } }
+    }
+  }
+});
+
+// ── p95 Chart ──
+new Chart(document.getElementById('p95Chart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: '50 users',
+        data: trimLast(h50).map(d => d.p95),
+        borderColor: '#22c55e', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false,
+      },
+      {
+        label: '200 users',
+        data: trimLast(h200).map(d => d.p95),
+        borderColor: '#06b6d4', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false,
+      },
+      {
+        label: '500 users',
+        data: trimLast(h500).map(d => d.p95),
+        borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false,
+      },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { usePointStyle: true, padding: 16 } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} ms` } }
+    },
+    scales: {
+      x: { grid: { color: '#1e2235' }, ticks: { maxTicksLimit: 12 } },
+      y: { grid: { color: '#1e2235' }, title: { display: true, text: 'ms' } }
+    }
+  }
+});
+
+// ── Bar Chart ──
+new Chart(document.getElementById('barChart'), {
+  type: 'bar',
+  data: {
+    labels: ['50 users', '200 users', '500 users'],
+    datasets: [
+      {
+        label: 'RPS',
+        data: [15.7, 59.9, 137.3],
+        backgroundColor: ['rgba(34,197,94,.7)', 'rgba(6,182,212,.7)', 'rgba(239,68,68,.7)'],
+        borderRadius: 6, yAxisID: 'y',
+      },
+      {
+        label: 'p95 (ms)',
+        data: [320, 1600, 2300],
+        backgroundColor: ['rgba(34,197,94,.25)', 'rgba(6,182,212,.25)', 'rgba(239,68,68,.25)'],
+        borderColor: ['#22c55e', '#06b6d4', '#ef4444'],
+        borderWidth: 2,
+        borderRadius: 6, type: 'bar', yAxisID: 'y2',
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top', labels: { usePointStyle: true, padding: 16 } },
+    },
+    scales: {
+      y:  { grid: { color: '#1e2235' }, title: { display: true, text: 'RPS' }, position: 'left' },
+      y2: { grid: { display: false }, title: { display: true, text: 'p95 (ms)' }, position: 'right' },
+    }
+  }
+});
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import {
   PORTAL_SURFACE_STORAGE_KEY,
 } from '../api';
 import type { AppSurface, NavKey, SafetyResponse } from '../types';
+import { nowMs, nowUtcIso } from '../lib/localTime';
 
 export const ADMIN_ONLY_NAV = new Set<NavKey>([
   'admin-dashboard',
@@ -243,7 +244,7 @@ export function newLocalId(prefix: string): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  return `${prefix}-${Date.now()}`;
+  return `${prefix}-${nowMs()}`;
 }
 
 export function mergeUserResponseList(
@@ -280,7 +281,7 @@ export function buildLocalSafetyResponse(params: {
       fields.attachment?.name ?? (keepPriorAttach ? prior?.attachmentName : undefined) ?? undefined,
     attachmentSizeBytes:
       fields.attachment?.size ?? (keepPriorAttach ? prior?.attachmentSizeBytes : undefined) ?? undefined,
-    updatedAt: new Date().toISOString(),
+    updatedAt: nowUtcIso(),
   };
 }
 
