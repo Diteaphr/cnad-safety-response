@@ -655,7 +655,7 @@ const dashZh: DashboardStrings = {
   legendPending: '未回報',
   asOf: '資料時間',
   employeeTableFootnote: (shown, total) => `顯示 ${shown} / ${total} 位`,
-  supervisorRosterFootnote: (shown, total) => `顯示 ${shown} / ${total} 位（不含未回報員工）`,
+  supervisorRosterFootnote: (shown, total) => `已回報 ${shown} / ${total} 位`,
   distributionHint:
     '色塊長度＝各狀態人數占「總人數」的比例；下方列出人數與百分比（與上方圓餅右側數字一致）。',
   distributionCompactHint: '下方為各狀態人數與占比。',
@@ -687,7 +687,7 @@ const dashZh: DashboardStrings = {
   adminDeptNeedHelpHint: (n) => `⚠ ${n} 人需協助`,
   adminDeptClearFilter: '清除篩選',
   adminViewPendingEmployees: (n) => `查看 ${n} 位未回報員工 ↗`,
-  adminRosterPriorityNote: (shown, total) => `依優先順序排列 · 顯示 ${shown} / ${total} 位（不含未回報員工）`,
+  adminRosterPriorityNote: (shown, total) => `依優先順序排列 · 已回報 ${shown} / ${total} 位`,
   adminRosterSectionTitle: '員工狀態',
   adminDeptHistogramHint: '點選部門以檢視該部門員工名單',
   adminRosterDeptScope: (deptName) => `目前名單：${deptName}`,
@@ -786,7 +786,7 @@ const dashEn: DashboardStrings = {
   legendPending: 'No response',
   asOf: 'As of',
   employeeTableFootnote: (shown, total) => `Showing ${shown} of ${total} employees`,
-  supervisorRosterFootnote: (shown, total) => `Showing ${shown} of ${total} employees (excluding employees who have not reported)`,
+  supervisorRosterFootnote: (shown, total) => `Reported ${shown} / ${total}`,
   distributionHint:
     'Bar length is each status count as a share of total people in scope; numbers below match the KPI column.',
   distributionCompactHint: 'Counts and percentages by status are listed below.',
@@ -818,8 +818,7 @@ const dashEn: DashboardStrings = {
   adminDeptNeedHelpHint: (n) => `⚠ ${n} need help`,
   adminDeptClearFilter: 'Clear filter',
   adminViewPendingEmployees: (n) => `View ${n} employees who have not reported ↗`,
-  adminRosterPriorityNote: (shown, total) =>
-    `Sorted by priority · Showing ${shown} of ${total} employees (excluding those who have not reported)`,
+  adminRosterPriorityNote: (shown, total) => `Sorted by priority · Reported ${shown} / ${total}`,
   adminRosterSectionTitle: 'Employee status',
   adminDeptHistogramHint: 'Tap a department to view its employee roster',
   adminRosterDeptScope: (deptName) => `Roster: ${deptName}`,
