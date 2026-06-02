@@ -166,6 +166,67 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ---
 
+## GCP Cloud SQL：用 Cloud Run Job 重灌（`reset_and_seed_demo`）
+
+適合：資料庫在 **Cloud SQL**，且希望從 GCP 內網執行（不需本機 Cloud SQL Proxy）。
+
+**重要：**
+
+- 會執行 `reset_and_seed_demo` → **清空業務表** 後重灌 demo（50 員工 + 1 管理員）。
+- 正式 API 服務 `safety-response-api` 的 `ENV=production` **不會**跑重灌；請用 **Cloud Run Job**，並在 Job 上設 `ENV=development`。
+- 容器映像需包含 `backend/scripts/`（`backend/Dockerfile` 已 `COPY scripts`）。
+
+### 一鍵腳本（建議）
+
+在專案根目錄、已 `gcloud auth login` 且專案為 `cnad-safety-response`：
+
+```bash
+./backend/scripts/gcp_reseed_demo_job.sh
+```
+
+僅重跑、不重建 Job 映像：
+
+```bash
+./backend/scripts/gcp_reseed_demo_job.sh --execute-only
+```
+
+### 手動 gcloud（與腳本等價）
+
+`--source` 的路徑是**相對於你執行 gcloud 時的目前目錄**。請先 `cd` 到**專案根目錄**（內含 `backend/` 資料夾的那一層），或改用絕對路徑。
+
+```bash
+cd /path/to/cnad-safety-response   # 專案根目錄，不是 backend/ 裡面
+gcloud config set project cnad-safety-response
+
+gcloud run jobs deploy demo-reseed \
+  --source "$(pwd)/backend" \
+  --region asia-east1 \
+  --service-account=safety-app-sa@cnad-safety-response.iam.gserviceaccount.com \
+  --set-cloudsql-instances=cnad-safety-response:asia-east1:employee-safety-db \
+  --network=default \
+  --subnet=default \
+  --vpc-egress=private-ranges-only \
+  --set-env-vars=ENV=development,USE_GCP=false,REDIS_ENABLED=false,PYTHONPATH=/app \
+  --set-secrets=DATABASE_URL=employee-safety-database-url:latest,JWT_SECRET=employee-safety-jwt-secret:latest \
+  --command=python \
+  --args=scripts/dev_reseed_demo.py \
+  --max-retries=0 \
+  --task-timeout=600s \
+  --quiet
+
+gcloud run jobs execute demo-reseed --region asia-east1 --wait
+```
+
+成功時 Job log 會出現：`Demo data reseeded OK (manual dev CLI).`
+
+查看最近一次執行紀錄：
+
+```bash
+gcloud run jobs executions list --job=demo-reseed --region=asia-east1 --limit=1
+```
+
+---
+
 ## 與「空庫自動種子」的差異
 
 FastAPI 啟動時若 `users` 表為空，會呼叫 **`run_if_empty`** 只做**初次**輕量種子（見 `backend/app/main.py` 與 `seed_demo.run_if_empty`）。  
