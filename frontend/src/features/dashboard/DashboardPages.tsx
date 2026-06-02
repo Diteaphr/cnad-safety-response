@@ -119,10 +119,9 @@ export function SupervisorDashboardPage({ // NOSONAR
   const eventTitle = event ? stripRedundantStatusFromTitle(event.title) : '—';
   const typeDisplay = event ? formatAdminEventTypeLabel(event.type, portalStrings) : '—';
   const eventImpactScope = event ? formatEventImpactScope(event, deptList, portalStrings) : '—';
-  const updatedLine =
-    Array.isArray(dashboardFreshAt) || !dashboardFreshAt
-      ? null
-      : formatLocaleDateTime(dashboardFreshAt, locale);
+  const updatedLine = dashboardFreshAt == null
+    ? null
+    : formatLocaleDateTime(dashboardFreshAt, locale);
   const createdSource = event?.startAt ?? event?.createdAt ?? null;
   const createdLine = formatEmployeeCardTime(createdSource, locale);
   const syncedLine = updatedLine ?? '—';

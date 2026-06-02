@@ -1,5 +1,12 @@
 import type { AppLocale } from '../locale/LocaleContext';
 
+type LocaleInstant = number | Date | string;
+
+const DEFAULT_LOCALE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: 'numeric',
+  minute: '2-digit',
+};
+
 /** BCP 47 tag used by dashboard「上次同步」and all portal time display. */
 export function localeTag(locale: AppLocale): 'en-US' | 'zh-TW' {
   return locale === 'en' ? 'en-US' : 'zh-TW';
@@ -15,7 +22,7 @@ export function nowUtcIso(): string {
   return new Date(nowMs()).toISOString();
 }
 
-function toDate(value: number | Date | string): Date {
+function toDate(value: LocaleInstant): Date {
   if (value instanceof Date) return value;
   if (typeof value === 'number') return new Date(value);
   return new Date(value);
@@ -23,7 +30,7 @@ function toDate(value: number | Date | string): Date {
 
 /** Format instant for UI — uses device timezone via `toLocaleString` (matches 上次同步). */
 export function formatLocaleDateTime(
-  value: number | Date | string,
+  value: LocaleInstant,
   locale: AppLocale,
   options?: Intl.DateTimeFormatOptions,
 ): string {
@@ -33,9 +40,9 @@ export function formatLocaleDateTime(
 }
 
 export function formatLocaleTime(
-  value: number | Date | string,
+  value: LocaleInstant,
   locale: AppLocale,
-  options: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' },
+  options: Intl.DateTimeFormatOptions = DEFAULT_LOCALE_TIME_OPTIONS,
 ): string {
   return formatLocaleDateTime(value, locale, options);
 }
